@@ -35,8 +35,10 @@ The core coexistence model is already working:
 - post CRUD
 - category and tag assignment for posts
 - page CRUD
+- form generation, management, deletion, and submission capture
 - published/draft/scheduled status fields
 - SEO title and SEO description fields
+- per-entry `noindex` and `nofollow` controls
 
 ### Publishing outputs
 
@@ -46,6 +48,8 @@ The core coexistence model is already working:
 - CMS-managed page HTML output
 - RSS output
 - sitemap output
+- robots.txt output
+- AI-oriented `llms.txt` output
 - client-side `embed.js`
 
 ### Admin and operations
@@ -53,6 +57,7 @@ The core coexistence model is already working:
 - cookie-based authentication
 - role-aware admin access checks
 - media upload and media library management
+- post and page media helpers for image, video, audio, and PDF embeds
 - audit logs for auth, publishing, media, regeneration, and snapshots
 - file snapshots for safe text-based files inside `public_html`
 - diff preview before snapshot restore
@@ -68,6 +73,7 @@ These items are the most natural next steps from the current implementation.
 - revisions for posts and pages
 - automatic snapshot creation before restore
 - snapshot restore rollback flow
+- PostgreSQL data backup and restore workflows
 - better diff visualization for long files
 - restore success and error feedback in the UI
 
@@ -90,9 +96,16 @@ These items are the most natural next steps from the current implementation.
 ### Site-building capabilities
 
 - CMS-managed menus
+- multiple embeddable forms for inquiry, lead capture, and custom input flows
 - reusable page sections or blocks
 - theme/template override model
 - configurable generated output templates
+
+### SEO and discoverability
+
+- stronger SEO optimization workflows for posts and pages beyond the current canonical, structured-data, sitemap, robots, and indexing controls
+- automated meta and structured-data assistance
+- richer sitemap, canonical, and indexing controls
 
 ### Operational depth
 

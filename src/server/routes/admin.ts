@@ -7,14 +7,32 @@ import {
   listFileSnapshots,
   restoreFileSnapshot,
 } from "../../core/fileSnapshots";
+import {
+  createForm,
+  deleteForm,
+  getFormById,
+  listForms,
+  listFormSubmissions,
+  updateForm,
+} from "../../core/forms";
 import { adminLayout } from "../../core/layout";
-import { deleteMedia, listMedia, uploadMedia } from "../../core/media";
+import {
+  deleteMedia,
+  isAudioMedia,
+  isImageMedia,
+  isPdfMedia,
+  isVideoMedia,
+  listMedia,
+  mediaEmbedSnippet,
+  uploadMedia,
+} from "../../core/media";
 import { createPage, deletePage, getPageById, listPages, updatePage } from "../../core/pages";
 import { createPost, deletePost, getPostById, listPosts, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
 import { slugify, escapeHtml } from "../../core/content";
 import { requireRole } from "../../core/auth";
 import { config } from "../../core/config";
+import type { FormFieldRecord } from "../../core/types";
 
 function splitCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
@@ -43,6 +61,8 @@ function postForm(action: string, values?: Record<string, string>) {
       <label>Tags (comma-separated slugs) <input name="tags" value="${escapeHtml(values?.tags ?? "")}" /></label>
       <label>SEO title <input name="seoTitle" value="${escapeHtml(values?.seoTitle ?? "")}" /></label>
       <label>SEO description <textarea name="seoDescription">${escapeHtml(values?.seoDescription ?? "")}</textarea></label>
+      <label><input type="checkbox" name="seoNoindex" value="true" ${values?.seoNoindex === "true" ? "checked" : ""} /> Prevent search indexing (noindex)</label>
+      <label><input type="checkbox" name="seoNofollow" value="true" ${values?.seoNofollow === "true" ? "checked" : ""} /> Prevent link following (nofollow)</label>
       <div class="row">
         <button class="button button-primary" type="submit">Save post</button>
       </div>
@@ -68,8 +88,35 @@ function pageForm(action: string, values?: Record<string, string>) {
       <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /></label>
       <label>SEO title <input name="seoTitle" value="${escapeHtml(values?.seoTitle ?? "")}" /></label>
       <label>SEO description <textarea name="seoDescription">${escapeHtml(values?.seoDescription ?? "")}</textarea></label>
+      <label><input type="checkbox" name="seoNoindex" value="true" ${values?.seoNoindex === "true" ? "checked" : ""} /> Prevent search indexing (noindex)</label>
+      <label><input type="checkbox" name="seoNofollow" value="true" ${values?.seoNofollow === "true" ? "checked" : ""} /> Prevent link following (nofollow)</label>
       <div class="row">
         <button class="button button-primary" type="submit">Save page</button>
+      </div>
+    </form>
+  `;
+}
+
+function formBuilderForm(action: string, values?: Record<string, string>) {
+  return `
+    <form method="post" action="${action}" class="form-grid">
+      <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
+      <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
+      <label>Description <textarea name="description">${escapeHtml(values?.description ?? "")}</textarea></label>
+      <label>Status
+        <select name="status">
+          <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
+          <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
+        </select>
+      </label>
+      <label>Submit button label <input name="submitLabel" value="${escapeHtml(values?.submitLabel ?? "Send")}" /></label>
+      <label>Success message <textarea name="successMessage">${escapeHtml(values?.successMessage ?? "Thank you. Your submission has been received.")}</textarea></label>
+      <label>Fields definition
+        <textarea name="fieldsSpec">${escapeHtml(values?.fieldsSpec ?? "")}</textarea>
+      </label>
+      <p class="meta">One field per line: <code>name|Label|type|required|option1,option2</code>. Types: text, email, textarea, select, checkbox.</p>
+      <div class="row">
+        <button class="button button-primary" type="submit">Save form</button>
       </div>
     </form>
   `;
@@ -112,6 +159,77 @@ function snapshotHelperCard(returnTo: string, suggestions: string[]) {
   `;
 }
 
+function mediaHelperCard(items: Awaited<ReturnType<typeof listMedia>>) {
+  const cards = items
+    .slice(0, 8)
+    .map((item) => {
+      let preview = `<span class="meta">No preview</span>`;
+      if (isImageMedia(item.mimeType)) {
+        preview = `<img src="${item.publicUrl}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:120px; max-height:88px; border-radius:12px; border:1px solid rgba(0,0,0,0.08);" />`;
+      } else if (isVideoMedia(item.mimeType)) {
+        preview = `<video src="${item.publicUrl}" style="max-width:120px; max-height:88px; border-radius:12px; border:1px solid rgba(0,0,0,0.08);" muted></video>`;
+      } else if (isAudioMedia(item.mimeType)) {
+        preview = `<span class="meta">Audio file</span>`;
+      } else if (isPdfMedia(item.mimeType)) {
+        preview = `<span class="meta">PDF file</span>`;
+      }
+
+      return `
+        <article style="padding:16px; border-radius:18px; background:rgba(255,255,255,0.78); border:1px solid rgba(31,41,51,0.12);">
+          <div style="margin-bottom:12px;">${preview}</div>
+          <h3 style="font-size:1rem; margin-bottom:8px;">${escapeHtml(item.originalName)}</h3>
+          <p class="meta" style="margin-bottom:10px;">${escapeHtml(item.mimeType)}</p>
+          <label class="meta">Embed snippet
+            <textarea readonly style="min-height:90px;">${escapeHtml(mediaEmbedSnippet(item))}</textarea>
+          </label>
+        </article>
+      `;
+    })
+    .join("");
+
+  return `
+    <div style="margin-top:20px;">
+      <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h2 style="margin-bottom:0;">Media for this content</h2>
+        <a class="button" href="${config.controlPanelPath}/media">Open media library</a>
+      </div>
+      <p class="meta">Use images, videos, audio, and PDF assets by copying an embed snippet into the HTML body field.</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));">
+        ${cards || "<p>No uploaded media yet.</p>"}
+      </div>
+    </div>
+  `;
+}
+
+function parseFieldsSpec(spec: string) {
+  return spec
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name = "", label = "", type = "text", required = "false", options = ""] = line.split("|");
+      return {
+        name: name.trim(),
+        label: label.trim(),
+        type: type.trim() as "text" | "email" | "textarea" | "select" | "checkbox",
+        required: required.trim().toLowerCase() === "true",
+        options: options
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+      };
+    });
+}
+
+function fieldsToSpec(fields: FormFieldRecord[]) {
+  return fields
+    .map((field) => {
+      const options = field.options.join(",");
+      return `${field.name}|${field.label}|${field.type}|${field.required ? "true" : "false"}|${options}`;
+    })
+    .join("\n");
+}
+
 export const adminRoutes = new Hono();
 
 adminRoutes.use("/*", requireRole("owner", "admin", "editor", "author"));
@@ -126,6 +244,7 @@ adminRoutes.get("/", async (c) => {
       <div class="stat"><p class="meta">Posts</p><h2>${stats.posts}</h2></div>
       <div class="stat"><p class="meta">Published</p><h2>${stats.published}</h2></div>
       <div class="stat"><p class="meta">Pages</p><h2>${stats.pages}</h2></div>
+      <div class="stat"><p class="meta">Forms</p><h2>${stats.forms}</h2></div>
       <div class="stat"><p class="meta">Media</p><h2>${stats.media}</h2></div>
       <div class="stat"><p class="meta">Logs</p><h2>${stats.logs}</h2></div>
       <div class="stat"><p class="meta">Snapshots</p><h2>${stats.snapshots}</h2></div>
@@ -157,6 +276,7 @@ adminRoutes.get("/", async (c) => {
           <a class="button" href="/cms/posts/latest.html">Latest fragment</a>
           <a class="button" href="/cms/posts/list.html">List page</a>
           <a class="button" href="/cms/pages/index.html">Pages output</a>
+          <a class="button" href="${config.controlPanelPath}/forms">Forms</a>
           <a class="button" href="${config.controlPanelPath}/media">Media library</a>
           <a class="button" href="${config.controlPanelPath}/snapshots">File snapshots</a>
         </div>
@@ -231,6 +351,8 @@ adminRoutes.post("/posts", async (c) => {
       tagSlugs: splitCsv(form.get("tags")),
       seoTitle: String(form.get("seoTitle") ?? ""),
       seoDescription: String(form.get("seoDescription") ?? ""),
+      seoNoindex: form.has("seoNoindex"),
+      seoNofollow: form.has("seoNofollow"),
     },
     user.id,
   );
@@ -250,6 +372,7 @@ adminRoutes.post("/posts", async (c) => {
 adminRoutes.get("/posts/:id/edit", async (c) => {
   const user = c.get("sessionUser");
   const post = await getPostById(Number(c.req.param("id")));
+  const mediaItems = await listMedia();
   if (!post) {
     return c.text("Not found", 404);
   }
@@ -270,12 +393,15 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
         tags: post.tags.join(", "),
         seoTitle: post.seoTitle ?? "",
         seoDescription: post.seoDescription ?? "",
+        seoNoindex: post.seoNoindex ? "true" : "false",
+        seoNofollow: post.seoNofollow ? "true" : "false",
       }) +
         snapshotHelperCard(`${config.controlPanelPath}/posts/${post.id}/edit`, [
           "index.html",
           "assets/site.css",
           "cms/posts/latest.html",
-        ]),
+        ]) +
+        mediaHelperCard(mediaItems),
     ),
   );
 });
@@ -294,6 +420,8 @@ adminRoutes.post("/posts/:id", async (c) => {
     tagSlugs: splitCsv(form.get("tags")),
     seoTitle: String(form.get("seoTitle") ?? ""),
     seoDescription: String(form.get("seoDescription") ?? ""),
+    seoNoindex: form.has("seoNoindex"),
+    seoNofollow: form.has("seoNofollow"),
   });
 
   await writeAuditLog({
@@ -376,6 +504,155 @@ adminRoutes.get("/pages/new", (c) => {
   return c.html(adminLayout("New Page", user, pageForm(`${config.controlPanelPath}/pages`)));
 });
 
+adminRoutes.get("/forms", async (c) => {
+  const user = c.get("sessionUser");
+  const forms = await listForms("any");
+  const body = `
+    <div class="row" style="margin-bottom:16px;">
+      <a class="button button-primary" href="${config.controlPanelPath}/forms/new">New form</a>
+    </div>
+    <table>
+      <thead><tr><th>Title</th><th>Status</th><th>Fields</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${forms
+          .map(
+            (form) => `
+              <tr>
+                <td><a href="${config.controlPanelPath}/forms/${form.id}/edit">${escapeHtml(form.title)}</a></td>
+                <td>${escapeHtml(form.status)}</td>
+                <td>${form.fields.length}</td>
+                <td>
+                  <div class="row">
+                    <a class="button" href="${config.controlPanelPath}/forms/${form.id}/edit">Edit</a>
+                    <a class="button" href="/cms/forms/${form.slug}.html">View HTML</a>
+                    <form method="post" action="${config.controlPanelPath}/forms/${form.id}/delete">
+                      <button class="button" type="submit">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+  return c.html(adminLayout("Forms", user, body));
+});
+
+adminRoutes.get("/forms/new", (c) => {
+  const user = c.get("sessionUser");
+  return c.html(adminLayout("New Form", user, formBuilderForm(`${config.controlPanelPath}/forms`)));
+});
+
+adminRoutes.post("/forms", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) {
+    return c.redirect("/login");
+  }
+  const form = await c.req.formData();
+  const created = await createForm(
+    {
+      title: String(form.get("title") ?? ""),
+      slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
+      description: String(form.get("description") ?? ""),
+      status: (String(form.get("status") ?? "draft") as "draft" | "published"),
+      submitLabel: String(form.get("submitLabel") ?? "Send"),
+      successMessage: String(form.get("successMessage") ?? "Thank you. Your submission has been received."),
+      fields: parseFieldsSpec(String(form.get("fieldsSpec") ?? "")),
+    },
+    user.id,
+  );
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "form.create",
+    targetType: "form",
+    targetId: created?.id ?? null,
+    summary: `Created form "${created?.title ?? form.get("title") ?? ""}".`,
+    ipAddress: requestIp(c),
+  });
+  await renderPublishedArtifacts();
+  return c.redirect(`${config.controlPanelPath}/forms/${created?.id ?? ""}/edit`);
+});
+
+adminRoutes.get("/forms/:id/edit", async (c) => {
+  const user = c.get("sessionUser");
+  const form = await getFormById(Number(c.req.param("id")));
+  if (!form) {
+    return c.text("Not found", 404);
+  }
+  const submissions = await listFormSubmissions(form.id);
+  const body =
+    formBuilderForm(`${config.controlPanelPath}/forms/${form.id}`, {
+      title: form.title,
+      slug: form.slug,
+      description: form.description ?? "",
+      status: form.status,
+      submitLabel: form.submitLabel,
+      successMessage: form.successMessage,
+      fieldsSpec: fieldsToSpec(form.fields),
+    }) +
+    `
+      <div style="margin-top:20px;">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <h2 style="margin-bottom:0;">Submissions</h2>
+          <a class="button" href="/cms/forms/${form.slug}.html">Open published form</a>
+        </div>
+        <table>
+          <thead><tr><th>When</th><th>Payload</th></tr></thead>
+          <tbody>
+            ${submissions
+              .map(
+                (submission) => `
+                  <tr>
+                    <td>${new Date(submission.createdAt).toLocaleString("en-US")}</td>
+                    <td><code>${escapeHtml(JSON.stringify(submission.payload))}</code></td>
+                  </tr>`,
+              )
+              .join("") || "<tr><td colspan='2'>No submissions yet.</td></tr>"}
+          </tbody>
+        </table>
+      </div>
+    `;
+  return c.html(adminLayout("Edit Form", user, body));
+});
+
+adminRoutes.post("/forms/:id", async (c) => {
+  const form = await c.req.formData();
+  await updateForm(Number(c.req.param("id")), {
+    title: String(form.get("title") ?? ""),
+    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
+    description: String(form.get("description") ?? ""),
+    status: String(form.get("status") ?? "draft") as "draft" | "published",
+    submitLabel: String(form.get("submitLabel") ?? "Send"),
+    successMessage: String(form.get("successMessage") ?? "Thank you. Your submission has been received."),
+    fields: parseFieldsSpec(String(form.get("fieldsSpec") ?? "")),
+  });
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "form.update",
+    targetType: "form",
+    targetId: c.req.param("id"),
+    summary: `Updated form #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
+  await renderPublishedArtifacts();
+  return c.redirect(`${config.controlPanelPath}/forms/${c.req.param("id")}/edit`);
+});
+
+adminRoutes.post("/forms/:id/delete", async (c) => {
+  await deleteForm(Number(c.req.param("id")));
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "form.delete",
+    targetType: "form",
+    targetId: c.req.param("id"),
+    summary: `Deleted form #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
+  await renderPublishedArtifacts();
+  return c.redirect(`${config.controlPanelPath}/forms`);
+});
+
 adminRoutes.post("/pages", async (c) => {
   const user = c.get("sessionUser");
   if (!user) {
@@ -394,6 +671,8 @@ adminRoutes.post("/pages", async (c) => {
       publishedAt: String(form.get("publishedAt") ?? "") || null,
       seoTitle: String(form.get("seoTitle") ?? ""),
       seoDescription: String(form.get("seoDescription") ?? ""),
+      seoNoindex: form.has("seoNoindex"),
+      seoNofollow: form.has("seoNofollow"),
     },
     user.id,
   );
@@ -413,6 +692,7 @@ adminRoutes.post("/pages", async (c) => {
 adminRoutes.get("/pages/:id/edit", async (c) => {
   const user = c.get("sessionUser");
   const page = await getPageById(Number(c.req.param("id")));
+  const mediaItems = await listMedia();
   if (!page) {
     return c.text("Not found", 404);
   }
@@ -431,12 +711,15 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
         publishedAt: page.publishedAt ? new Date(page.publishedAt).toISOString().slice(0, 16) : "",
         seoTitle: page.seoTitle ?? "",
         seoDescription: page.seoDescription ?? "",
+        seoNoindex: page.seoNoindex ? "true" : "false",
+        seoNofollow: page.seoNofollow ? "true" : "false",
       }) +
         snapshotHelperCard(`${config.controlPanelPath}/pages/${page.id}/edit`, [
           "index.html",
           "about.php",
           `cms/pages/${page.slug}.html`,
-        ]),
+        ]) +
+        mediaHelperCard(mediaItems),
     ),
   );
 });
@@ -453,6 +736,8 @@ adminRoutes.post("/pages/:id", async (c) => {
     publishedAt: String(form.get("publishedAt") ?? "") || null,
     seoTitle: String(form.get("seoTitle") ?? ""),
     seoDescription: String(form.get("seoDescription") ?? ""),
+    seoNoindex: form.has("seoNoindex"),
+    seoNofollow: form.has("seoNofollow"),
   });
 
   await writeAuditLog({
@@ -494,12 +779,12 @@ adminRoutes.get("/media", async (c) => {
           <div class="row">
             <button class="button button-primary" type="submit">Upload file</button>
           </div>
-          <p class="meta">Allowed types: JPG, PNG, WebP, GIF, SVG, PDF, TXT.</p>
+          <p class="meta">Allowed types: JPG, PNG, WebP, GIF, SVG, MP4, WebM, OGG video, MP3, M4A, OGG audio, WAV, PDF, TXT.</p>
         </form>
       </article>
       <aside>
         <h2>Usage</h2>
-        <p>Uploaded files are published under the <code>/cms/uploads/</code> path so existing HTML and PHP pages can reference them directly.</p>
+        <p>Uploaded files are published under the <code>/cms/uploads/</code> path so existing HTML and PHP pages can reference them directly. Posts and pages can now use image, video, audio, and PDF embed snippets from their edit screens.</p>
       </aside>
     </div>
     <div style="margin-top:20px;">

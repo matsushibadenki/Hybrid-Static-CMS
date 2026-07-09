@@ -2,30 +2,70 @@ import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { config } from "./config";
 import { escapeHtml } from "./content";
+import { renderFormArtifacts } from "./forms";
 import { listPages } from "./pages";
 import { listPosts } from "./posts";
 import type { PageRecord, PostRecord } from "./types";
 
+type SeoMeta = {
+  title: string;
+  description?: string;
+  canonicalUrl?: string;
+  jsonLd?: string;
+  robots?: string;
+};
+
+function safeJsonLd(value: string) {
+  return value.replaceAll("</script>", "<\\/script>");
+}
+
+function postPublicPath(slug: string) {
+  return `/cms/posts/${slug}.html`;
+}
+
+function pagePublicPath(slug: string) {
+  return `/cms/pages/${slug}.html`;
+}
+
 function card(post: PostRecord) {
+  const href = postPublicPath(post.slug);
   return `
     <article class="hybrid-static-cms-card">
       <div class="hybrid-static-cms-card__meta">
         <span>${escapeHtml(post.publishedAt ? new Date(post.publishedAt).toLocaleDateString("en-US") : "Draft")}</span>
         ${post.categories[0] ? `<span>${escapeHtml(post.categories[0])}</span>` : ""}
       </div>
-      <h3><a href="/${escapeHtml(post.slug)}">${escapeHtml(post.title)}</a></h3>
+      <h3><a href="${href}">${escapeHtml(post.title)}</a></h3>
       ${post.excerpt ? `<p>${escapeHtml(post.excerpt)}</p>` : ""}
     </article>
   `;
 }
 
-function pageTemplate(title: string, body: string) {
+function pageTemplate(meta: SeoMeta, body: string) {
+  const description = meta.description ? `<meta name="description" content="${escapeHtml(meta.description)}" />` : "";
+  const canonical = meta.canonicalUrl ? `<link rel="canonical" href="${escapeHtml(meta.canonicalUrl)}" />` : "";
+  const ogTitle = `<meta property="og:title" content="${escapeHtml(meta.title)}" />`;
+  const ogDescription = meta.description
+    ? `<meta property="og:description" content="${escapeHtml(meta.description)}" />`
+    : "";
+  const ogType = `<meta property="og:type" content="website" />`;
+  const ogUrl = meta.canonicalUrl ? `<meta property="og:url" content="${escapeHtml(meta.canonicalUrl)}" />` : "";
+  const jsonLd = meta.jsonLd ? `<script type="application/ld+json">${safeJsonLd(meta.jsonLd)}</script>` : "";
+  const robots = meta.robots ? `<meta name="robots" content="${escapeHtml(meta.robots)}" />` : "";
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(title)}</title>
+    <title>${escapeHtml(meta.title)}</title>
+    ${description}
+    ${canonical}
+    ${ogTitle}
+    ${ogDescription}
+    ${ogType}
+    ${ogUrl}
+    ${robots}
+    ${jsonLd}
     <style>
       body { margin: 0; font-family: Georgia, serif; background: #f7f4ea; color: #1f2933; }
       main { max-width: 960px; margin: 0 auto; padding: 40px 16px 72px; }
@@ -35,6 +75,7 @@ function pageTemplate(title: string, body: string) {
       h1, h2, h3 { margin-top: 0; }
       a { color: #b4492c; text-decoration: none; }
       .pagination { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+      .hybrid-static-cms-prose { line-height: 1.75; }
     </style>
   </head>
   <body>
@@ -54,7 +95,11 @@ function renderList(title: string, posts: PostRecord[], pagination?: { page: num
       : "";
 
   return pageTemplate(
-    title,
+    {
+      title,
+      description: `Published content list for ${config.appName}.`,
+      canonicalUrl: `${config.appUrl}/cms/posts/list.html`,
+    },
     `<h1>${escapeHtml(title)}</h1><section class="hybrid-static-cms-list">${cards || "<p>No posts published yet.</p>"}</section>${pager}`,
   );
 }
@@ -68,10 +113,25 @@ function renderFragment(posts: PostRecord[]) {
 }
 
 function renderPage(page: PageRecord) {
+  const canonicalUrl = `${config.appUrl}${pagePublicPath(page.slug)}`;
+  const robots = [page.seoNoindex ? "noindex" : "index", page.seoNofollow ? "nofollow" : "follow"].join(", ");
   return pageTemplate(
-    page.seoTitle || page.title,
+    {
+      title: page.seoTitle || page.title,
+      description: page.seoDescription || page.excerpt || undefined,
+      canonicalUrl,
+      robots,
+      jsonLd: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        name: page.title,
+        description: page.seoDescription || page.excerpt || undefined,
+        url: canonicalUrl,
+        dateModified: page.updatedAt,
+      }),
+    },
     `
-      <article class="hybrid-static-cms-page">
+      <article class="hybrid-static-cms-page hybrid-static-cms-prose">
         <p style="color:#52606d;">CMS managed page</p>
         <h1>${escapeHtml(page.title)}</h1>
         ${page.excerpt ? `<p>${escapeHtml(page.excerpt)}</p>` : ""}
@@ -89,7 +149,7 @@ function renderPageIndex(pages: PageRecord[]) {
           <div class="hybrid-static-cms-card__meta">
             <span>${escapeHtml(page.publishedAt ? new Date(page.publishedAt).toLocaleDateString("en-US") : "Draft")}</span>
           </div>
-          <h3><a href="/cms/pages/${escapeHtml(page.slug)}.html">${escapeHtml(page.title)}</a></h3>
+          <h3><a href="${pagePublicPath(page.slug)}">${escapeHtml(page.title)}</a></h3>
           ${page.excerpt ? `<p>${escapeHtml(page.excerpt)}</p>` : ""}
         </article>
       `,
@@ -97,8 +157,47 @@ function renderPageIndex(pages: PageRecord[]) {
     .join("");
 
   return pageTemplate(
-    "CMS Managed Pages",
+    {
+      title: "CMS Managed Pages",
+      description: `CMS-managed pages published by ${config.appName}.`,
+      canonicalUrl: `${config.appUrl}/cms/pages/index.html`,
+    },
     `<h1>CMS Managed Pages</h1><section class="hybrid-static-cms-list">${cards || "<p>No pages published yet.</p>"}</section>`,
+  );
+}
+
+function renderPost(post: PostRecord) {
+  const canonicalUrl = `${config.appUrl}${postPublicPath(post.slug)}`;
+  const robots = [post.seoNoindex ? "noindex" : "index", post.seoNofollow ? "nofollow" : "follow"].join(", ");
+  return pageTemplate(
+    {
+      title: post.seoTitle || post.title,
+      description: post.seoDescription || post.excerpt || undefined,
+      canonicalUrl,
+      robots,
+      jsonLd: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: post.title,
+        description: post.seoDescription || post.excerpt || undefined,
+        datePublished: post.publishedAt || undefined,
+        dateModified: post.updatedAt,
+        author: post.authorName ? { "@type": "Person", name: post.authorName } : undefined,
+        keywords: [...post.categories, ...post.tags].join(", "),
+        url: canonicalUrl,
+      }),
+    },
+    `
+      <article class="hybrid-static-cms-prose">
+        <p style="color:#52606d;">
+          ${escapeHtml(post.publishedAt ? new Date(post.publishedAt).toLocaleDateString("en-US") : "Draft")}
+          ${post.authorName ? ` · ${escapeHtml(post.authorName)}` : ""}
+        </p>
+        <h1>${escapeHtml(post.title)}</h1>
+        ${post.excerpt ? `<p>${escapeHtml(post.excerpt)}</p>` : ""}
+        <div>${post.bodyHtml}</div>
+      </article>
+    `,
   );
 }
 
@@ -128,13 +227,13 @@ function renderRss(posts: PostRecord[]) {
 }
 
 function renderSitemap(posts: PostRecord[], pages: PageRecord[]) {
-  const postItems = posts.map((post) => {
+  const postItems = posts.filter((post) => !post.seoNoindex).map((post) => {
     const lastmod = post.updatedAt ? new Date(post.updatedAt).toISOString() : new Date().toISOString();
-    return `<url><loc>${config.appUrl}/${escapeHtml(post.slug)}</loc><lastmod>${lastmod}</lastmod></url>`;
+    return `<url><loc>${escapeHtml(config.appUrl + postPublicPath(post.slug))}</loc><lastmod>${lastmod}</lastmod></url>`;
   });
-  const pageItems = pages.map((page) => {
+  const pageItems = pages.filter((page) => !page.seoNoindex).map((page) => {
     const lastmod = page.updatedAt ? new Date(page.updatedAt).toISOString() : new Date().toISOString();
-    return `<url><loc>${config.appUrl}/cms/pages/${escapeHtml(page.slug)}.html</loc><lastmod>${lastmod}</lastmod></url>`;
+    return `<url><loc>${escapeHtml(config.appUrl + pagePublicPath(page.slug))}</loc><lastmod>${lastmod}</lastmod></url>`;
   });
   const items = [...postItems, ...pageItems]
     .join("");
@@ -144,6 +243,115 @@ function renderSitemap(posts: PostRecord[], pages: PageRecord[]) {
   <url><loc>${config.appUrl}</loc></url>
   ${items}
 </urlset>`;
+}
+
+function renderRobotsTxt() {
+  return `# Hybrid-Static-CMS robots policy
+# Public site content may be crawled, indexed, and used by AI systems
+# except for explicitly restricted operational paths.
+
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /logout
+Disallow: ${config.controlPanelPath}
+Disallow: ${config.cmsApiPrefix}
+
+User-agent: GPTBot
+Allow: /
+Disallow: /login
+Disallow: /logout
+Disallow: ${config.controlPanelPath}
+Disallow: ${config.cmsApiPrefix}
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /login
+Disallow: /logout
+Disallow: ${config.controlPanelPath}
+Disallow: ${config.cmsApiPrefix}
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /login
+Disallow: /logout
+Disallow: ${config.controlPanelPath}
+Disallow: ${config.cmsApiPrefix}
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /login
+Disallow: /logout
+Disallow: ${config.controlPanelPath}
+Disallow: ${config.cmsApiPrefix}
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /login
+Disallow: /logout
+Disallow: ${config.controlPanelPath}
+Disallow: ${config.cmsApiPrefix}
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /login
+Disallow: /logout
+Disallow: ${config.controlPanelPath}
+Disallow: ${config.cmsApiPrefix}
+
+Sitemap: ${config.appUrl}/sitemap.xml
+`;
+}
+
+function renderLlmsTxt(posts: PostRecord[], pages: PageRecord[]) {
+  const visiblePosts = posts.filter((post) => !post.seoNoindex).slice(0, 20);
+  const visiblePages = pages.filter((page) => !page.seoNoindex).slice(0, 20);
+
+  const postLinks = visiblePosts.map((post) => `- ${post.title}: ${config.appUrl}${postPublicPath(post.slug)}`).join("\n");
+  const pageLinks = visiblePages.map((page) => `- ${page.title}: ${config.appUrl}${pagePublicPath(page.slug)}`).join("\n");
+
+  return `# ${config.appName}
+
+> ${config.appName} is a public_html coexistence CMS. Public content may be read, summarized, indexed, and used for AI training unless it is explicitly restricted.
+
+## AI access policy
+
+- Public site pages and generated CMS pages may be accessed and used for AI retrieval, summarization, and training.
+- Administrative, authenticated, and operational paths must not be used for indexing or training.
+- Respect per-page noindex and nofollow directives emitted in generated HTML.
+- Prefer canonical URLs and sitemap entries when selecting source pages.
+
+## Preferred public starting points
+
+- Home: ${config.appUrl}/
+- Sitemap: ${config.appUrl}/sitemap.xml
+- Robots: ${config.appUrl}/robots.txt
+- Latest posts fragment: ${config.appUrl}/cms/posts/latest.html
+- Post index: ${config.appUrl}/cms/posts/list.html
+- CMS pages index: ${config.appUrl}/cms/pages/index.html
+- RSS feed: ${config.appUrl}/cms/posts/rss.xml
+
+## Public post URLs
+
+${postLinks || "- No published post URLs are currently available."}
+
+## Public page URLs
+
+${pageLinks || "- No published page URLs are currently available."}
+
+## Restricted URLs
+
+- ${config.appUrl}/login
+- ${config.appUrl}/logout
+- ${config.appUrl}${config.controlPanelPath}
+- ${config.appUrl}${config.cmsApiPrefix}
+
+## Notes for agents
+
+- This project intentionally keeps legacy public_html content and CMS-generated content side by side.
+- Generated outputs under /cms/ are the safest machine-readable entry points.
+- Do not attempt authenticated crawling or interaction with the control panel.
+`;
 }
 
 function renderEmbedScript() {
@@ -167,7 +375,7 @@ function renderEmbedScript() {
     node.innerHTML = data.items.map((post) => {
       const excerpt = post.excerpt ? "<p>" + post.excerpt + "</p>" : "";
       return '<article class="hybrid-static-cms-embed-card">' +
-        '<h3><a href="/' + post.slug + '">' + post.title + '</a></h3>' +
+        '<h3><a href="/cms/posts/' + post.slug + '.html">' + post.title + '</a></h3>' +
         excerpt +
       '</article>';
     }).join("");
@@ -203,10 +411,16 @@ export async function renderPublishedArtifacts() {
   }
 
   await writeFile(path.join(config.cmsOutputDir, "posts", "rss.xml"), renderRss(full.items), "utf8");
+  for (const post of full.items) {
+    await writeFile(path.join(config.cmsOutputDir, "posts", `${post.slug}.html`), renderPost(post), "utf8");
+  }
   await writeFile(path.join(cmsPageDir, "index.html"), renderPageIndex(pages.items), "utf8");
   for (const page of pages.items) {
     await writeFile(path.join(cmsPageDir, `${page.slug}.html`), renderPage(page), "utf8");
   }
   await writeFile(path.join(config.publicHtmlDir, "sitemap.xml"), renderSitemap(full.items, pages.items), "utf8");
+  await writeFile(path.join(config.publicHtmlDir, "robots.txt"), renderRobotsTxt(), "utf8");
+  await writeFile(path.join(config.publicHtmlDir, "llms.txt"), renderLlmsTxt(full.items, pages.items), "utf8");
   await writeFile(path.join(config.cmsOutputDir, "embed.js"), renderEmbedScript(), "utf8");
+  await renderFormArtifacts();
 }

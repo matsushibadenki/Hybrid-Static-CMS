@@ -22,9 +22,55 @@ const allowedMimeTypes = new Set([
   "image/webp",
   "image/gif",
   "image/svg+xml",
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
   "application/pdf",
   "text/plain",
 ]);
+
+export function isImageMedia(mimeType: string) {
+  return mimeType.startsWith("image/");
+}
+
+export function isVideoMedia(mimeType: string) {
+  return mimeType.startsWith("video/");
+}
+
+export function isAudioMedia(mimeType: string) {
+  return mimeType.startsWith("audio/");
+}
+
+export function isPdfMedia(mimeType: string) {
+  return mimeType === "application/pdf";
+}
+
+export function mediaEmbedSnippet(media: MediaRecord) {
+  const alt = media.altText ?? media.originalName;
+
+  if (isImageMedia(media.mimeType)) {
+    return `<img src="${media.publicUrl}" alt="${alt}" />`;
+  }
+
+  if (isVideoMedia(media.mimeType)) {
+    return `<video controls src="${media.publicUrl}"></video>`;
+  }
+
+  if (isAudioMedia(media.mimeType)) {
+    return `<audio controls src="${media.publicUrl}"></audio>`;
+  }
+
+  if (isPdfMedia(media.mimeType)) {
+    return `<a href="${media.publicUrl}" target="_blank" rel="noopener noreferrer">${media.originalName}</a>`;
+  }
+
+  return media.publicUrl;
+}
 
 function normalizeMedia(row: Record<string, unknown>): MediaRecord {
   return {

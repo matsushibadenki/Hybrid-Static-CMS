@@ -13,6 +13,8 @@ function normalizePost(row: Record<string, unknown>): PostRecord {
     status: row.status as PostRecord["status"],
     seoTitle: (row.seo_title as string | null) ?? null,
     seoDescription: (row.seo_description as string | null) ?? null,
+    seoNoindex: Boolean(row.seo_noindex),
+    seoNofollow: Boolean(row.seo_nofollow),
     publishedAt: row.published_at ? String(row.published_at) : null,
     updatedAt: String(row.updated_at),
     authorId: row.author_id ? Number(row.author_id) : null,
@@ -77,6 +79,8 @@ const basePostQuery = sql`
     p.status,
     p.seo_title,
     p.seo_description,
+    p.seo_noindex,
+    p.seo_nofollow,
     p.published_at,
     p.updated_at,
     p.author_id,
@@ -202,7 +206,9 @@ export async function createPost(input: PostInput, authorId: number) {
         author_id,
         published_at,
         seo_title,
-        seo_description
+        seo_description,
+        seo_noindex,
+        seo_nofollow
       ) values (
         ${input.title},
         ${input.slug},
@@ -213,7 +219,9 @@ export async function createPost(input: PostInput, authorId: number) {
         ${authorId},
         ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
         ${input.seoTitle ?? null},
-        ${input.seoDescription ?? null}
+        ${input.seoDescription ?? null},
+        ${input.seoNoindex ?? false},
+        ${input.seoNofollow ?? false}
       )
       returning id
     `;
@@ -244,6 +252,8 @@ export async function updatePost(id: number, input: PostInput) {
         published_at = ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
         seo_title = ${input.seoTitle ?? null},
         seo_description = ${input.seoDescription ?? null},
+        seo_noindex = ${input.seoNoindex ?? false},
+        seo_nofollow = ${input.seoNofollow ?? false},
         updated_at = now()
       where id = ${id}
     `;

@@ -41,7 +41,7 @@ When a post is created, updated, or deleted:
 
 1. PostgreSQL content is updated
 2. Published artifact generation runs
-3. Static HTML, RSS, sitemap, and embed outputs are refreshed
+3. Static HTML, RSS, sitemap, robots, llms, and embed outputs are refreshed
 
 This means installation users should know:
 
@@ -49,6 +49,7 @@ This means installation users should know:
 - `CMS_OUTPUT_DIR` must be writable
 - `CMS_UPLOAD_DIR` must be writable
 - artifact collisions should be avoided by reserving the `/cms` namespace
+- review generated `robots.txt` and `llms.txt` whenever public access policy changes
 
 ## Recommended production checklist
 
@@ -60,6 +61,7 @@ This means installation users should know:
 - Monitor app logs and database health
 - Back up PostgreSQL and generated uploads
 - Confirm `/cms` does not conflict with existing site paths
+- Verify `robots.txt` and `llms.txt` match the intended AI access policy
 
 ## Suggested next docs to add as the project grows
 

@@ -52,12 +52,26 @@ Generated outputs currently include:
 - post list fragments
 - paginated list pages
 - CMS-managed page HTML files
+- CMS-managed form HTML files
 - media files under `/cms/uploads/`
 - RSS
 - sitemap
+- robots.txt
+- llms.txt
 - embed script
 
 Operational data also includes database-backed file snapshots for selected `public_html` files.
+
+## SEO output notes
+
+Operators should understand these generated SEO files and controls:
+
+- `public_html/sitemap.xml` includes published posts and pages except entries marked `noindex`
+- `public_html/robots.txt` is generated automatically and points crawlers at the sitemap
+- `/control-panel` and `/cms-api` are disallowed in the generated `robots.txt`
+- Per-entry `noindex` and `nofollow` flags are emitted as `<meta name="robots">` on generated post and page HTML
+- `public_html/llms.txt` is generated automatically for AI agents and lists public entry points plus restricted paths
+- The default AI policy is permissive for public content and restrictive only for authenticated or operational routes
 
 ## Coexistence rules
 

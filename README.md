@@ -25,6 +25,7 @@ Operator-facing notes now live under `docs/README.md`.
 ## MVP included in this repository
 
 - Bun + Hono server
+- TypeScript 7-compatible project configuration
 - PostgreSQL-backed posts, pages, media, users, sessions, and settings
 - Cookie-based admin authentication
 - Audit log tracking for sign-in, publishing, media, and regeneration events
@@ -35,15 +36,22 @@ Operator-facing notes now live under `docs/README.md`.
 - Server-rendered admin panel under `/control-panel`
 - Post CRUD with publish/draft status
 - Page CRUD with CMS-managed static page output
+- Multiple form generation, management, deletion, and submission capture
 - Media upload and library management under `/cms/uploads/*`
+- Post and page media helpers for image, video, audio, and PDF embeds
+- SEO-aware static output with canonical URLs, meta descriptions, structured data, robots controls, and AI-friendly `llms.txt`
 - Manual snapshot creation and restore for `public_html` files
 - Static renderer for:
   - `public_html/cms/posts/latest.html`
   - `public_html/cms/posts/list.html`
+  - `public_html/cms/posts/{slug}.html`
   - `public_html/cms/posts/page/{n}.html`
   - `public_html/cms/pages/{slug}.html`
+  - `public_html/cms/forms/{slug}.html`
   - `public_html/cms/posts/rss.xml`
   - `public_html/sitemap.xml`
+  - `public_html/robots.txt`
+  - `public_html/llms.txt`
 - Embeddable client script at `public_html/cms/embed.js`
 - JSON API at `/cms-api/posts`, `/cms-api/posts/:slug`, `/cms-api/search`
 - Media API at `/cms-api/media`
@@ -106,6 +114,10 @@ bun run dev
 
 Reverse proxy and deployment notes are documented in `docs/deployment.md`.
 
+After running new migrations, posts and pages can also be marked with `noindex` and `nofollow` from the admin UI or API. Those flags are reflected in generated HTML, and `noindex` items are excluded from the generated sitemap.
+
+The generated `robots.txt` allows broad crawling, including AI-facing crawlers, while excluding operational paths such as `/login`, `/control-panel`, and `/cms-api`. The generated `llms.txt` provides a machine-readable summary of public entry points and restricted paths for AI agents.
+
 ## Embedding content
 
 ### Static include
@@ -128,6 +140,7 @@ GET /cms-api/posts
 GET /cms-api/posts/my-first-post
 GET /cms-api/pages
 GET /cms-api/pages/about-this-site
+GET /cms-api/forms
 GET /cms-api/media
 GET /cms-api/search?q=hello
 ```

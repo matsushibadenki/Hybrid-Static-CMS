@@ -1,5 +1,6 @@
 import { sql } from "../core/db";
 import { createUser } from "../core/auth";
+import { createForm } from "../core/forms";
 import { createPage } from "../core/pages";
 import { renderPublishedArtifacts } from "../core/renderer";
 import { createPost } from "../core/posts";
@@ -55,6 +56,26 @@ You can link to it from existing HTML or PHP pages without handing the whole sit
       status: "published",
       seoTitle: "About This Site",
       seoDescription: "Starter page for Hybrid-Static-CMS.",
+    },
+    userId,
+  );
+}
+
+const forms = await sql`select count(*)::int as total from forms`;
+if (Number(forms[0]?.total ?? 0) === 0) {
+  await createForm(
+    {
+      title: "Contact Form",
+      slug: "contact-form",
+      description: "A starter contact form for your existing public_html site.",
+      status: "published",
+      submitLabel: "Send message",
+      successMessage: "Thank you. We received your message.",
+      fields: [
+        { name: "name", label: "Name", type: "text", required: true },
+        { name: "email", label: "Email", type: "email", required: true },
+        { name: "message", label: "Message", type: "textarea", required: true },
+      ],
     },
     userId,
   );

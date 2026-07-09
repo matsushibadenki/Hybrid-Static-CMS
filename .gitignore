@@ -38,11 +38,13 @@ temp/
 *.pid
 
 # Database dumps and local backups
-*.sql
 *.sqlite
 *.sqlite3
 *.db
 *.bak
+*.dump
+storage/backups/*.sql
+storage/backups/*.sql.gz
 
 # Sensitive or operator-private project directories
 private/
@@ -64,10 +66,15 @@ public_html/cms/embed.js
 public_html/cms/posts/latest.html
 public_html/cms/posts/list.html
 public_html/cms/posts/rss.xml
+public_html/cms/posts/*.html
 public_html/cms/posts/page/*
 !public_html/cms/posts/page/.gitkeep
 public_html/cms/pages/*
 !public_html/cms/pages/.gitkeep
+public_html/cms/forms/*
+!public_html/cms/forms/.gitkeep
 public_html/cms/uploads/*
 !public_html/cms/uploads/.gitkeep
 public_html/sitemap.xml
+public_html/robots.txt
+public_html/llms.txt

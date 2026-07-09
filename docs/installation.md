@@ -5,6 +5,7 @@
 Before installing Hybrid-Static-CMS, the operator should understand these prerequisites:
 
 - Bun runtime is required for the application server
+- TypeScript 7-compatible tooling is expected for local development
 - PostgreSQL is required for persistence and full-text search
 - A reverse proxy such as Nginx or Apache is recommended
 - The host should allow a long-running Bun process or a containerized equivalent
@@ -75,6 +76,7 @@ The seed also creates:
 
 - one sample published post
 - one sample published CMS-managed page
+- one sample published contact form
 
 Uploads are not seeded, but the media library becomes available after migration under the control panel.
 

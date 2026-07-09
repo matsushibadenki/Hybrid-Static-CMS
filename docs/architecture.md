@@ -60,9 +60,12 @@ Generated files include:
 
 - `public_html/cms/posts/latest.html`
 - `public_html/cms/posts/list.html`
+- `public_html/cms/posts/{slug}.html`
 - `public_html/cms/posts/page/{n}.html`
 - `public_html/cms/posts/rss.xml`
 - `public_html/sitemap.xml`
+- `public_html/robots.txt`
+- `public_html/llms.txt`
 
 ### 2. JavaScript embedding
 
@@ -93,8 +96,12 @@ Included now:
 - Server-rendered control panel
 - Post CRUD
 - Page CRUD
+- Form CRUD and submission capture
 - Media uploads
 - File snapshots
+- SEO-aware static post and page output
+- Per-entry `noindex` and `nofollow` SEO controls
+- AI-oriented discovery files via `robots.txt` and `llms.txt`
 - Static fragment generation
 - Embed script generation
 
