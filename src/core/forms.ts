@@ -246,12 +246,61 @@ function renderField(field: FormFieldRecord) {
 
 export function renderFormHtml(form: FormRecord) {
   const fields = form.fields.map(renderField).join("");
+  const recaptchaEnabled = Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey);
+  const recaptchaAction = `form_submit_${form.slug.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const recaptchaMarkup = recaptchaEnabled
+    ? `
+    <input type="hidden" name="recaptchaToken" value="" />
+    <script src="https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(config.recaptchaSiteKey ?? "")}"></script>
+    <script>
+      (() => {
+        const form = document.currentScript?.closest(".hybrid-static-cms-form-fragment")?.querySelector("form");
+        if (!form || !window.grecaptcha) return;
+        const tokenField = form.querySelector('input[name="recaptchaToken"]');
+        const action = ${JSON.stringify(recaptchaAction)};
+        const siteKey = ${JSON.stringify(config.recaptchaSiteKey ?? "")};
+        const submitButton = form.querySelector('button[type="submit"]');
+        let isSubmitting = false;
+
+        const run = () => new Promise((resolve, reject) => {
+          window.grecaptcha.ready(() => {
+            window.grecaptcha.execute(siteKey, { action })
+              .then((token) => {
+                if (tokenField) tokenField.value = token;
+                resolve(token);
+              })
+              .catch(reject);
+          });
+        });
+
+        form.addEventListener("submit", async (event) => {
+          if (isSubmitting) return;
+          event.preventDefault();
+          isSubmitting = true;
+          if (submitButton) submitButton.disabled = true;
+          try {
+            await run();
+            form.submit();
+          } catch {
+            isSubmitting = false;
+            if (submitButton) submitButton.disabled = false;
+            const target = form.querySelector(".hybrid-static-cms-form__status");
+            if (target) {
+              target.textContent = "Spam protection could not be verified. Please try again.";
+            }
+          }
+        });
+      })();
+    </script>`
+    : "";
   return `
 <section class="hybrid-static-cms-form-fragment">
   <form method="post" action="${config.cmsApiPrefix}/forms/${escapeHtml(form.slug)}/submit" class="hybrid-static-cms-form">
     ${form.description ? `<p>${escapeHtml(form.description)}</p>` : ""}
     ${fields}
+    ${recaptchaMarkup}
     <button type="submit">${escapeHtml(form.submitLabel)}</button>
+    <p class="hybrid-static-cms-form__status" aria-live="polite"></p>
   </form>
 </section>`;
 }

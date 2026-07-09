@@ -6,6 +6,9 @@ export type AppConfig = {
   appName: string;
   sessionSecret: string;
   databaseUrl: string;
+  recaptchaSiteKey: string | null;
+  recaptchaSecretKey: string | null;
+  recaptchaMinScore: number;
   publicHtmlDir: string;
   controlPanelPath: string;
   cmsApiPrefix: string;
@@ -28,6 +31,9 @@ export const config: AppConfig = {
   appName: requireEnv("APP_NAME", "Hybrid-Static-CMS"),
   sessionSecret: requireEnv("SESSION_SECRET", "change-me"),
   databaseUrl: requireEnv("DATABASE_URL"),
+  recaptchaSiteKey: process.env.RECAPTCHA_SITE_KEY?.trim() || null,
+  recaptchaSecretKey: process.env.RECAPTCHA_SECRET_KEY?.trim() || null,
+  recaptchaMinScore: Number(process.env.RECAPTCHA_MIN_SCORE ?? 0.5),
   publicHtmlDir: path.resolve(requireEnv("PUBLIC_HTML_DIR", path.join(process.cwd(), "public_html"))),
   controlPanelPath: requireEnv("CONTROL_PANEL_PATH", "/control-panel"),
   cmsApiPrefix: requireEnv("CMS_API_PREFIX", "/cms-api"),

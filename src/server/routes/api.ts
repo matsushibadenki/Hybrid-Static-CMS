@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { requestIp, writeAuditLog } from "../../core/audit";
 import { slugify } from "../../core/content";
+import { verifyRecaptchaToken } from "../../core/security";
 import {
   createForm,
   createFormSubmission,
@@ -382,6 +383,20 @@ apiRoutes.post("/forms/:slug/submit", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
   const formData = await c.req.formData();
+  const recaptchaToken = String(formData.get("recaptchaToken") ?? "");
+  const recaptchaAction = `form_submit_${form.slug.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const verification = await verifyRecaptchaToken(recaptchaToken, recaptchaAction, requestIp(c));
+  if (!verification.ok) {
+    await writeAuditLog({
+      actorUserId: null,
+      action: "form.submit.blocked",
+      targetType: "form",
+      targetId: form.id,
+      summary: `Blocked submission for form "${form.title}" due to failed reCAPTCHA verification.`,
+      ipAddress: requestIp(c),
+    });
+    return c.html("<p>Spam protection could not verify your submission. Please try again.</p>", 400);
+  }
   const payload: Record<string, string> = {};
   for (const field of form.fields) {
     const raw = formData.get(field.name);

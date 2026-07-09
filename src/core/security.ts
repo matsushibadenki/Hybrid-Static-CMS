@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { config } from "./config";
 
 const encoder = new TextEncoder();
 
@@ -56,4 +57,64 @@ export async function verifyPassword(password: string, stored: string) {
 
 export function randomToken(size = 32) {
   return toBase64Url(crypto.getRandomValues(new Uint8Array(size)));
+}
+
+type RecaptchaVerificationResult = {
+  ok: boolean;
+  score: number | null;
+  reasons: string[];
+};
+
+export function isRecaptchaEnabled() {
+  return Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey);
+}
+
+export async function verifyRecaptchaToken(token: string, action: string, remoteIp?: string | null): Promise<RecaptchaVerificationResult> {
+  if (!isRecaptchaEnabled()) {
+    return { ok: true, score: null, reasons: [] };
+  }
+
+  if (!token.trim()) {
+    return { ok: false, score: null, reasons: ["missing-input-response"] };
+  }
+
+  const body = new URLSearchParams({
+    secret: config.recaptchaSecretKey ?? "",
+    response: token,
+  });
+
+  if (remoteIp) {
+    body.set("remoteip", remoteIp);
+  }
+
+  const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    return { ok: false, score: null, reasons: [`http-${response.status}`] };
+  }
+
+  const payload = (await response.json()) as {
+    success?: boolean;
+    score?: number;
+    action?: string;
+    hostname?: string;
+    ["error-codes"]?: string[];
+  };
+
+  const score = typeof payload.score === "number" ? payload.score : null;
+  const reasons = payload["error-codes"] ?? [];
+  const actionMatches = payload.action === action;
+  const scorePasses = score === null ? false : score >= config.recaptchaMinScore;
+
+  return {
+    ok: Boolean(payload.success) && actionMatches && scorePasses,
+    score,
+    reasons: actionMatches ? reasons : [...reasons, "action-mismatch"],
+  };
 }

@@ -32,6 +32,9 @@ Important settings:
 - `APP_URL`: canonical external URL
 - `SESSION_SECRET`: cookie/session secret, must be changed
 - `DATABASE_URL`: PostgreSQL connection string
+- `RECAPTCHA_SITE_KEY`: Google reCAPTCHA v3 site key for public forms
+- `RECAPTCHA_SECRET_KEY`: Google reCAPTCHA v3 secret key for server-side verification
+- `RECAPTCHA_MIN_SCORE`: minimum accepted v3 score, default `0.5`
 - `PUBLIC_HTML_DIR`: document root used for generated artifacts
 - `CONTROL_PANEL_PATH`: admin route prefix
 - `CMS_API_PREFIX`: API route prefix
@@ -85,6 +88,22 @@ Uploads are not seeded, but the media library becomes available after migration 
 ```bash
 bun run dev
 ```
+
+## reCAPTCHA v3 for forms
+
+If you want spam protection on published forms, configure these values in `.env`:
+
+```txt
+RECAPTCHA_SITE_KEY=your_site_key
+RECAPTCHA_SECRET_KEY=your_secret_key
+RECAPTCHA_MIN_SCORE=0.5
+```
+
+Behavior:
+
+- when both keys are set, published form HTML includes the reCAPTCHA v3 client flow
+- form submissions are verified server-side before they are stored
+- when keys are not set, form submission continues without reCAPTCHA verification
 
 ## Docker setup
 

@@ -39,6 +39,7 @@ Operator-facing notes now live under `docs/README.md`.
 - Multiple form generation, management, deletion, and submission capture
 - Media upload and library management under `/cms/uploads/*`
 - Post and page media helpers for image, video, audio, and PDF embeds
+- Google reCAPTCHA v3 support for public form submissions via `.env` keys
 - SEO-aware static output with canonical URLs, meta descriptions, structured data, robots controls, and AI-friendly `llms.txt`
 - Manual snapshot creation and restore for `public_html` files
 - Static renderer for:

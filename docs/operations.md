@@ -24,6 +24,7 @@ The current codebase includes:
 - Diff preview before restoring a snapshot
 - Quick snapshot creation from page and post edit screens
 - Explicit confirmation step before snapshot restore
+- Optional Google reCAPTCHA v3 verification for public form submissions
 
 The current codebase does not yet include:
 
@@ -55,6 +56,7 @@ This means installation users should know:
 
 - Change the seeded admin password immediately
 - Use a strong `SESSION_SECRET`
+- Configure `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` before exposing public forms
 - Restrict direct server access
 - Put the app behind HTTPS
 - Limit database access to the app host
