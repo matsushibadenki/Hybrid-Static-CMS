@@ -1,6 +1,6 @@
-# BunPress Core
+# Hybrid-Static-CMS
 
-BunPress Core is a Bun-powered CMS designed to coexist with an existing `public_html` site instead of replacing it. It lets teams keep legacy HTML/PHP pages, then layer in CMS-driven posts, static fragments, embeddable widgets, and an admin panel under a reverse-proxied control path.
+Hybrid-Static-CMS is a Bun-powered CMS designed to coexist with an existing `public_html` site instead of replacing it. It lets teams keep legacy HTML/PHP pages, then layer in CMS-driven posts, static fragments, embeddable widgets, and an admin panel under a reverse-proxied control path.
 
 ## Why this project exists
 
@@ -24,11 +24,16 @@ Operator-facing notes now live under `docs/README.md`.
 ## MVP included in this repository
 
 - Bun + Hono server
-- PostgreSQL-backed posts, categories, tags, users, sessions, and settings
+- PostgreSQL-backed posts, pages, media, users, sessions, and settings
 - Cookie-based admin authentication
+- Audit log tracking for sign-in, publishing, media, and regeneration events
+- File snapshots for safe text-based files under `public_html`
+- Diff preview before snapshot restore
 - Server-rendered admin panel under `/control-panel`
 - Post CRUD with publish/draft status
 - Page CRUD with CMS-managed static page output
+- Media upload and library management under `/cms/uploads/*`
+- Manual snapshot creation and restore for `public_html` files
 - Static renderer for:
   - `public_html/cms/posts/latest.html`
   - `public_html/cms/posts/list.html`
@@ -38,6 +43,7 @@ Operator-facing notes now live under `docs/README.md`.
   - `public_html/sitemap.xml`
 - Embeddable client script at `public_html/cms/embed.js`
 - JSON API at `/cms-api/posts`, `/cms-api/posts/:slug`, `/cms-api/search`
+- Media API at `/cms-api/media`
 
 ## Directory layout
 
@@ -108,7 +114,7 @@ Reverse proxy and deployment notes are documented in `docs/deployment.md`.
 ### JavaScript embedding
 
 ```html
-<div data-bunpress-posts data-limit="5" data-category="news"></div>
+<div data-hybrid-static-cms-posts data-limit="5" data-category="news"></div>
 <script src="/cms/embed.js"></script>
 ```
 
@@ -119,6 +125,7 @@ GET /cms-api/posts
 GET /cms-api/posts/my-first-post
 GET /cms-api/pages
 GET /cms-api/pages/about-this-site
+GET /cms-api/media
 GET /cms-api/search?q=hello
 ```
 

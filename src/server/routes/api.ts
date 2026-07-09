@@ -1,5 +1,7 @@
 import { Hono } from "hono";
+import { requestIp, writeAuditLog } from "../../core/audit";
 import { slugify } from "../../core/content";
+import { deleteMedia, listMedia, uploadMedia } from "../../core/media";
 import { createPage, deletePage, getPageBySlug, listPages, updatePage } from "../../core/pages";
 import { createPost, deletePost, getPostBySlug, listPosts, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
@@ -49,6 +51,11 @@ apiRoutes.get("/search", async (c) => {
   return c.json(data);
 });
 
+apiRoutes.get("/media", async (c) => {
+  const items = await listMedia();
+  return c.json({ items });
+});
+
 apiRoutes.post("/posts", async (c) => {
   const user = c.get("sessionUser");
   if (!user) {
@@ -73,6 +80,14 @@ apiRoutes.post("/posts", async (c) => {
     user.id,
   );
 
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "post.create",
+    targetType: "post",
+    targetId: post?.id ?? null,
+    summary: `Created post "${post?.title ?? payload.title}".`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.json(post, 201);
 });
@@ -98,6 +113,14 @@ apiRoutes.put("/posts/:id", async (c) => {
     tagSlugs: payload.tagSlugs ?? [],
   });
 
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "post.update",
+    targetType: "post",
+    targetId: c.req.param("id"),
+    summary: `Updated post "${post?.title ?? payload.title}".`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.json(post);
 });
@@ -109,6 +132,14 @@ apiRoutes.delete("/posts/:id", async (c) => {
   }
 
   await deletePost(Number(c.req.param("id")));
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "post.delete",
+    targetType: "post",
+    targetId: c.req.param("id"),
+    summary: `Deleted post #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.json({ ok: true });
 });
@@ -135,6 +166,14 @@ apiRoutes.post("/pages", async (c) => {
     user.id,
   );
 
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "page.create",
+    targetType: "page",
+    targetId: page?.id ?? null,
+    summary: `Created page "${page?.title ?? payload.title}".`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.json(page, 201);
 });
@@ -158,6 +197,14 @@ apiRoutes.put("/pages/:id", async (c) => {
     publishedAt: payload.publishedAt ?? null,
   });
 
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "page.update",
+    targetType: "page",
+    targetId: c.req.param("id"),
+    summary: `Updated page "${page?.title ?? payload.title}".`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.json(page);
 });
@@ -169,6 +216,57 @@ apiRoutes.delete("/pages/:id", async (c) => {
   }
 
   await deletePage(Number(c.req.param("id")));
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "page.delete",
+    targetType: "page",
+    targetId: c.req.param("id"),
+    summary: `Deleted page #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
+  return c.json({ ok: true });
+});
+
+apiRoutes.post("/media", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  const form = await c.req.formData();
+  const file = form.get("file");
+  const altText = String(form.get("altText") ?? "");
+  if (!(file instanceof File)) {
+    return c.json({ error: "File is required" }, 400);
+  }
+
+  const media = await uploadMedia(file, altText, user.id);
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "media.upload",
+    targetType: "media",
+    targetId: media?.id ?? null,
+    summary: `Uploaded media "${media?.originalName ?? file.name}".`,
+    ipAddress: requestIp(c),
+  });
+  return c.json(media, 201);
+});
+
+apiRoutes.delete("/media/:id", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  await deleteMedia(Number(c.req.param("id")));
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "media.delete",
+    targetType: "media",
+    targetId: c.req.param("id"),
+    summary: `Deleted media #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
   return c.json({ ok: true });
 });

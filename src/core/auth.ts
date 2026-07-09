@@ -1,10 +1,11 @@
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { Context, MiddlewareHandler } from "hono";
+import { requestIp, writeAuditLog } from "./audit";
 import { sql } from "./db";
 import { hashPassword, randomToken, verifyPassword } from "./security";
 import type { SessionUser, UserRole } from "./types";
 
-const SESSION_COOKIE = "bunpress_session";
+const SESSION_COOKIE = "hybrid_static_cms_session";
 
 declare module "hono" {
   interface ContextVariableMap {
@@ -88,6 +89,15 @@ export async function attemptLogin(c: Context, email: string, password: string) 
     values (${row.id}, ${token}, ${expiresAt.toISOString()})
   `;
 
+  await writeAuditLog({
+    actorUserId: Number(row.id),
+    action: "auth.login",
+    targetType: "session",
+    targetId: token,
+    summary: `User ${row.display_name} signed in.`,
+    ipAddress: requestIp(c),
+  });
+
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     path: "/",
@@ -101,8 +111,20 @@ export async function attemptLogin(c: Context, email: string, password: string) 
 
 export async function logout(c: Context) {
   const token = getCookie(c, SESSION_COOKIE);
+  const user = c.get("sessionUser");
   if (token) {
     await sql`delete from sessions where token = ${token}`;
+  }
+
+  if (user) {
+    await writeAuditLog({
+      actorUserId: user.id,
+      action: "auth.logout",
+      targetType: "session",
+      targetId: token ?? null,
+      summary: `User ${user.displayName} signed out.`,
+      ipAddress: requestIp(c),
+    });
   }
 
   deleteCookie(c, SESSION_COOKIE, {

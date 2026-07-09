@@ -1,5 +1,5 @@
 {
-  "name": "bunpress-core",
+  "name": "hybrid-static-cms",
   "version": "0.1.0",
   "private": false,
   "description": "A Bun-powered coexistence CMS for existing public_html sites.",

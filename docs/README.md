@@ -1,6 +1,6 @@
 # Docs Index
 
-This directory collects the design, installation, deployment, and operations notes that people adopting BunPress Core should read before setup.
+This directory collects the design, installation, deployment, and operations notes that people adopting Hybrid-Static-CMS should read before setup.
 
 ## Recommended reading order
 
@@ -11,6 +11,6 @@ This directory collects the design, installation, deployment, and operations not
 
 ## Audience
 
-- Site owners deciding whether BunPress Core fits their current `public_html` workflow
+- Site owners deciding whether Hybrid-Static-CMS fits their current `public_html` workflow
 - Engineers preparing Bun + PostgreSQL infrastructure
 - Agencies and OSS adopters who need a generic deployment baseline

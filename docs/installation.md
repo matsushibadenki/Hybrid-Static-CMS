@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Before installing BunPress Core, the operator should understand these prerequisites:
+Before installing Hybrid-Static-CMS, the operator should understand these prerequisites:
 
 - Bun runtime is required for the application server
 - PostgreSQL is required for persistence and full-text search
@@ -49,7 +49,7 @@ bun install
 Example database name:
 
 ```txt
-bunpress
+hybrid_static_cms
 ```
 
 3. Run migrations.
@@ -75,6 +75,8 @@ The seed also creates:
 
 - one sample published post
 - one sample published CMS-managed page
+
+Uploads are not seeded, but the media library becomes available after migration under the control panel.
 
 5. Start the application.
 

@@ -2,7 +2,7 @@
 
 ## What installers should know
 
-BunPress Core is intended to be generic and open-source friendly, but the operator still needs to make several decisions before going live.
+Hybrid-Static-CMS is intended to be generic and open-source friendly, but the operator still needs to make several decisions before going live.
 
 ## Current operational expectations
 
@@ -19,13 +19,15 @@ The current codebase includes:
 - Password hashing
 - Role records in the database
 - A narrow admin surface under a configurable path
+- Audit log UI for key admin and API actions
+- File snapshot create/restore UI for safe text files inside `public_html`
+- Diff preview before restoring a snapshot
 
 The current codebase does not yet include:
 
 - CSRF protection
 - 2FA
 - brute-force login throttling
-- audit log UI
 - encrypted API key storage
 - file snapshot rollback
 
@@ -43,6 +45,7 @@ This means installation users should know:
 
 - publish operations trigger file writes
 - `CMS_OUTPUT_DIR` must be writable
+- `CMS_UPLOAD_DIR` must be writable
 - artifact collisions should be avoided by reserving the `/cms` namespace
 
 ## Recommended production checklist

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "bunpress-core",
+      "name": "hybrid-static-cms",
       "dependencies": {
         "@hono/node-server": "^1.13.7",
         "hono": "^4.6.10",

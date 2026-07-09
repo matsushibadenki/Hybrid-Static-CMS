@@ -68,4 +68,6 @@ public_html/cms/posts/page/*
 !public_html/cms/posts/page/.gitkeep
 public_html/cms/pages/*
 !public_html/cms/pages/.gitkeep
+public_html/cms/uploads/*
+!public_html/cms/uploads/.gitkeep
 public_html/sitemap.xml

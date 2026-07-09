@@ -5,7 +5,7 @@
 The main production recommendation is:
 
 - Keep the public site in the normal `public_html`
-- Run BunPress Core as a separate Bun service
+- Run Hybrid-Static-CMS as a separate Bun service
 - Reverse proxy only the control panel and API routes
 - Allow the Bun app to write generated artifacts into the CMS output area
 
@@ -17,7 +17,7 @@ Example target layout:
     index.html
     about.php
     cms/
-  bunpress/
+  hybrid-static-cms/
     src/
     storage/
     migrations/
@@ -52,15 +52,18 @@ Generated outputs currently include:
 - post list fragments
 - paginated list pages
 - CMS-managed page HTML files
+- media files under `/cms/uploads/`
 - RSS
 - sitemap
 - embed script
+
+Operational data also includes database-backed file snapshots for selected `public_html` files.
 
 ## Coexistence rules
 
 These are important for adopters:
 
-- BunPress Core should not take ownership of the entire website unless you intentionally build it that way
+- Hybrid-Static-CMS should not take ownership of the entire website unless you intentionally build it that way
 - Existing `public_html` pages should keep working even if the CMS is temporarily unavailable
 - Static fragments are the safest default for high-compatibility installations
 - Use API or embed modes only where dynamic behavior is worth the dependency
@@ -88,7 +91,7 @@ Good for teams and OSS adopters.
 Possible only as a hybrid arrangement.
 
 - `public_html` remains on a PHP-capable shared host
-- BunPress Core runs on a separate Bun-capable server
+- Hybrid-Static-CMS runs on a separate Bun-capable server
 - Content is pulled in via generated artifacts, embeds, or API responses
 
 This model needs more operational care and is not the simplest first deployment.

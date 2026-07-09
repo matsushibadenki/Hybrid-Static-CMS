@@ -9,6 +9,9 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         <a href="${config.controlPanelPath}">Dashboard</a>
         <a href="${config.controlPanelPath}/posts">Posts</a>
         <a href="${config.controlPanelPath}/pages">Pages</a>
+        <a href="${config.controlPanelPath}/media">Media</a>
+        <a href="${config.controlPanelPath}/logs">Logs</a>
+        <a href="${config.controlPanelPath}/snapshots">Snapshots</a>
         <a href="${config.controlPanelPath}/posts/new">New post</a>
         <a href="${config.controlPanelPath}/pages/new">New page</a>
         <a href="${config.cmsApiPrefix}/posts">API</a>
@@ -146,7 +149,7 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
           grid-template-columns: 1.5fr 0.9fr;
         }
         .stats {
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(7, 1fr);
         }
       }
     </style>

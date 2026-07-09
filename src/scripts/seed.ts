@@ -20,12 +20,12 @@ const posts = await sql`select count(*)::int as total from posts`;
 if (Number(posts[0]?.total ?? 0) === 0) {
   await createPost(
     {
-      title: "Welcome to BunPress Core",
-      slug: "welcome-to-bunpress-core",
+      title: "Welcome to Hybrid-Static-CMS",
+      slug: "welcome-to-hybrid-static-cms",
       excerpt: "A starter post proving static fragments, API output, and admin publishing all work together.",
       bodyMd: `# Welcome
 
-BunPress Core is built for existing public_html sites.
+Hybrid-Static-CMS is built for existing public_html sites.
 
 ## Publishing flow
 
@@ -33,8 +33,8 @@ Write in the control panel, publish to PostgreSQL, then regenerate HTML fragment
       status: "published",
       categorySlugs: ["news"],
       tagSlugs: ["welcome", "cms"],
-      seoTitle: "Welcome to BunPress Core",
-      seoDescription: "Starter article for the Bun-powered coexistence CMS.",
+      seoTitle: "Welcome to Hybrid-Static-CMS",
+      seoDescription: "Starter article for the Hybrid-Static-CMS coexistence CMS.",
     },
     userId,
   );
@@ -49,12 +49,12 @@ if (Number(pages[0]?.total ?? 0) === 0) {
       excerpt: "A CMS-managed page that can coexist with the rest of the public site.",
       bodyMd: `# About This Site
 
-This page is managed inside BunPress Core.
+This page is managed inside Hybrid-Static-CMS.
 
 You can link to it from existing HTML or PHP pages without handing the whole site to the CMS.`,
       status: "published",
       seoTitle: "About This Site",
-      seoDescription: "Starter page for BunPress Core.",
+      seoDescription: "Starter page for Hybrid-Static-CMS.",
     },
     userId,
   );

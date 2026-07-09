@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: bunpress
+      POSTGRES_DB: hybrid_static_cms
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -17,13 +17,14 @@ services:
     environment:
       PORT: 3000
       APP_URL: http://localhost:3000
-      APP_NAME: BunPress Core
+      APP_NAME: Hybrid-Static-CMS
       SESSION_SECRET: change-me
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/bunpress
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/hybrid_static_cms
       PUBLIC_HTML_DIR: /app/public_html
       CONTROL_PANEL_PATH: /control-panel
       CMS_API_PREFIX: /cms-api
       CMS_OUTPUT_DIR: /app/public_html/cms
+      CMS_UPLOAD_DIR: /app/public_html/cms/uploads
       DEFAULT_PAGE_SIZE: 10
     ports:
       - "3000:3000"

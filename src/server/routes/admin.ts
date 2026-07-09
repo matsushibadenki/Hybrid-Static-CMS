@@ -1,6 +1,14 @@
 import { Hono } from "hono";
+import { listAuditLogs, requestIp, writeAuditLog } from "../../core/audit";
 import { getDashboardStats } from "../../core/dashboard";
+import {
+  createFileSnapshot,
+  getFileSnapshotDiff,
+  listFileSnapshots,
+  restoreFileSnapshot,
+} from "../../core/fileSnapshots";
 import { adminLayout } from "../../core/layout";
+import { deleteMedia, listMedia, uploadMedia } from "../../core/media";
 import { createPage, deletePage, getPageById, listPages, updatePage } from "../../core/pages";
 import { createPost, deletePost, getPostById, listPosts, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
@@ -81,6 +89,9 @@ adminRoutes.get("/", async (c) => {
       <div class="stat"><p class="meta">Posts</p><h2>${stats.posts}</h2></div>
       <div class="stat"><p class="meta">Published</p><h2>${stats.published}</h2></div>
       <div class="stat"><p class="meta">Pages</p><h2>${stats.pages}</h2></div>
+      <div class="stat"><p class="meta">Media</p><h2>${stats.media}</h2></div>
+      <div class="stat"><p class="meta">Logs</p><h2>${stats.logs}</h2></div>
+      <div class="stat"><p class="meta">Snapshots</p><h2>${stats.snapshots}</h2></div>
       <div class="stat"><p class="meta">Users</p><h2>${stats.users}</h2></div>
     </section>
     <div class="grid" style="margin-top:20px;">
@@ -109,6 +120,8 @@ adminRoutes.get("/", async (c) => {
           <a class="button" href="/cms/posts/latest.html">Latest fragment</a>
           <a class="button" href="/cms/posts/list.html">List page</a>
           <a class="button" href="/cms/pages/index.html">Pages output</a>
+          <a class="button" href="${config.controlPanelPath}/media">Media library</a>
+          <a class="button" href="${config.controlPanelPath}/snapshots">File snapshots</a>
         </div>
       </aside>
     </div>
@@ -185,6 +198,14 @@ adminRoutes.post("/posts", async (c) => {
     user.id,
   );
 
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "post.create",
+    targetType: "post",
+    targetId: post?.id ?? null,
+    summary: `Created post "${post?.title ?? form.get("title") ?? ""}".`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/posts/${post?.id ?? ""}/edit`);
 });
@@ -233,18 +254,42 @@ adminRoutes.post("/posts/:id", async (c) => {
     seoDescription: String(form.get("seoDescription") ?? ""),
   });
 
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "post.update",
+    targetType: "post",
+    targetId: c.req.param("id"),
+    summary: `Updated post #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit`);
 });
 
 adminRoutes.post("/posts/:id/delete", async (c) => {
   await deletePost(Number(c.req.param("id")));
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "post.delete",
+    targetType: "post",
+    targetId: c.req.param("id"),
+    summary: `Deleted post #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/posts`);
 });
 
 adminRoutes.post("/render", async (c) => {
   await renderPublishedArtifacts();
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "renderer.regenerate",
+    targetType: "system",
+    targetId: "cms",
+    summary: "Regenerated published CMS artifacts.",
+    ipAddress: requestIp(c),
+  });
   return c.redirect(`${config.controlPanelPath}/posts`);
 });
 
@@ -311,6 +356,14 @@ adminRoutes.post("/pages", async (c) => {
     user.id,
   );
 
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "page.create",
+    targetType: "page",
+    targetId: page?.id ?? null,
+    summary: `Created page "${page?.title ?? form.get("title") ?? ""}".`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/pages/${page?.id ?? ""}/edit`);
 });
@@ -355,12 +408,296 @@ adminRoutes.post("/pages/:id", async (c) => {
     seoDescription: String(form.get("seoDescription") ?? ""),
   });
 
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "page.update",
+    targetType: "page",
+    targetId: c.req.param("id"),
+    summary: `Updated page #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit`);
 });
 
 adminRoutes.post("/pages/:id/delete", async (c) => {
   await deletePage(Number(c.req.param("id")));
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "page.delete",
+    targetType: "page",
+    targetId: c.req.param("id"),
+    summary: `Deleted page #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
   await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/pages`);
+});
+
+adminRoutes.get("/media", async (c) => {
+  const user = c.get("sessionUser");
+  const items = await listMedia();
+  const body = `
+    <div class="grid">
+      <article>
+        <h2>Upload media</h2>
+        <form method="post" action="${config.controlPanelPath}/media" enctype="multipart/form-data" class="form-grid">
+          <label>File <input type="file" name="file" required /></label>
+          <label>Alt text <input name="altText" placeholder="Helpful for images and embeds" /></label>
+          <div class="row">
+            <button class="button button-primary" type="submit">Upload file</button>
+          </div>
+          <p class="meta">Allowed types: JPG, PNG, WebP, GIF, SVG, PDF, TXT.</p>
+        </form>
+      </article>
+      <aside>
+        <h2>Usage</h2>
+        <p>Uploaded files are published under the <code>/cms/uploads/</code> path so existing HTML and PHP pages can reference them directly.</p>
+      </aside>
+    </div>
+    <div style="margin-top:20px;">
+      <h2>Media library</h2>
+      <table>
+        <thead><tr><th>Preview</th><th>Name</th><th>Type</th><th>URL</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${items
+            .map((item) => {
+              const preview = item.mimeType.startsWith("image/")
+                ? `<img src="${item.publicUrl}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:96px; max-height:72px; border-radius:12px; border:1px solid rgba(0,0,0,0.08);" />`
+                : `<span class="meta">No preview</span>`;
+              return `
+                <tr>
+                  <td>${preview}</td>
+                  <td>
+                    <strong>${escapeHtml(item.originalName)}</strong>
+                    <div class="meta">${item.sizeBytes} bytes</div>
+                  </td>
+                  <td>${escapeHtml(item.mimeType)}</td>
+                  <td><a href="${item.publicUrl}">${escapeHtml(item.publicUrl)}</a></td>
+                  <td>
+                    <div class="row">
+                      <a class="button" href="${item.publicUrl}">Open</a>
+                      <form method="post" action="${config.controlPanelPath}/media/${item.id}/delete">
+                        <button class="button" type="submit">Delete</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>`;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  return c.html(adminLayout("Media", user, body));
+});
+
+adminRoutes.post("/media", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) {
+    return c.redirect("/login");
+  }
+
+  const form = await c.req.formData();
+  const file = form.get("file");
+  const altText = String(form.get("altText") ?? "");
+  if (!(file instanceof File)) {
+    return c.text("File is required", 400);
+  }
+
+  await uploadMedia(file, altText, user.id);
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "media.upload",
+    targetType: "media",
+    targetId: file.name,
+    summary: `Uploaded media "${file.name}".`,
+    ipAddress: requestIp(c),
+  });
+  return c.redirect(`${config.controlPanelPath}/media`);
+});
+
+adminRoutes.post("/media/:id/delete", async (c) => {
+  await deleteMedia(Number(c.req.param("id")));
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "media.delete",
+    targetType: "media",
+    targetId: c.req.param("id"),
+    summary: `Deleted media #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
+  return c.redirect(`${config.controlPanelPath}/media`);
+});
+
+adminRoutes.get("/logs", async (c) => {
+  const user = c.get("sessionUser");
+  const items = await listAuditLogs(150);
+  const body = `
+    <h2>Audit logs</h2>
+    <p class="meta">Recent authentication, publishing, media, and regeneration events.</p>
+    <table>
+      <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Summary</th><th>IP</th></tr></thead>
+      <tbody>
+        ${items
+          .map(
+            (item) => `
+              <tr>
+                <td>${new Date(item.createdAt).toLocaleString("en-US")}</td>
+                <td>${escapeHtml(item.actorDisplayName ?? "System")}</td>
+                <td>${escapeHtml(item.action)}</td>
+                <td>${escapeHtml(item.targetType)}${item.targetId ? `:${escapeHtml(item.targetId)}` : ""}</td>
+                <td>${escapeHtml(item.summary)}</td>
+                <td>${escapeHtml(item.ipAddress ?? "-")}</td>
+              </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+
+  return c.html(adminLayout("Audit Logs", user, body));
+});
+
+adminRoutes.get("/snapshots", async (c) => {
+  const user = c.get("sessionUser");
+  const items = await listFileSnapshots(150);
+  const body = `
+    <div class="grid">
+      <article>
+        <h2>Create snapshot</h2>
+        <form method="post" action="${config.controlPanelPath}/snapshots" class="form-grid">
+          <label>Relative path inside public_html
+            <input name="relativePath" placeholder="index.html or assets/site.css" required />
+          </label>
+          <label>Reason
+            <input name="reason" placeholder="Before manual homepage update" />
+          </label>
+          <div class="row">
+            <button class="button button-primary" type="submit">Create snapshot</button>
+          </div>
+          <p class="meta">Allowed file types: .html, .css, .js, .php, .txt, .xml, .md</p>
+        </form>
+      </article>
+      <aside>
+        <h2>How it works</h2>
+        <p>Snapshots store the current contents of safe text-based files from <code>public_html</code>. Restoring a snapshot writes that saved content back to the same path.</p>
+      </aside>
+    </div>
+    <div style="margin-top:20px;">
+      <h2>Snapshot history</h2>
+      <table>
+        <thead><tr><th>When</th><th>Path</th><th>Reason</th><th>Preview</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${items
+            .map(
+              (item) => `
+                <tr>
+                  <td>${new Date(item.createdAt).toLocaleString("en-US")}</td>
+                  <td><code>${escapeHtml(item.relativePath)}</code></td>
+                  <td>${escapeHtml(item.reason ?? "-")}</td>
+                  <td><code>${escapeHtml(item.contentPreview)}</code></td>
+                  <td>
+                    <div class="row">
+                      <a class="button" href="${config.controlPanelPath}/snapshots/${item.id}/preview">Preview diff</a>
+                      <form method="post" action="${config.controlPanelPath}/snapshots/${item.id}/restore">
+                        <button class="button" type="submit">Restore</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  return c.html(adminLayout("File Snapshots", user, body));
+});
+
+adminRoutes.post("/snapshots", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) {
+    return c.redirect("/login");
+  }
+
+  const form = await c.req.formData();
+  const relativePath = String(form.get("relativePath") ?? "");
+  const reason = String(form.get("reason") ?? "");
+  const snapshot = await createFileSnapshot(relativePath, user.id, reason);
+
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "snapshot.create",
+    targetType: "file_snapshot",
+    targetId: snapshot?.id ?? null,
+    summary: `Created file snapshot for "${relativePath}".`,
+    ipAddress: requestIp(c),
+  });
+
+  return c.redirect(`${config.controlPanelPath}/snapshots`);
+});
+
+adminRoutes.get("/snapshots/:id/preview", async (c) => {
+  const user = c.get("sessionUser");
+  const diff = await getFileSnapshotDiff(Number(c.req.param("id")));
+  const body = `
+    <div class="row" style="margin-bottom:16px;">
+      <a class="button" href="${config.controlPanelPath}/snapshots">Back to snapshots</a>
+      <form method="post" action="${config.controlPanelPath}/snapshots/${c.req.param("id")}/restore">
+        <button class="button button-primary" type="submit">Restore this snapshot</button>
+      </form>
+    </div>
+    <h2>Diff preview</h2>
+    <p class="meta">Path: <code>${escapeHtml(diff.relativePath)}</code></p>
+    <p class="meta">Reason: ${escapeHtml(diff.reason ?? "-")}</p>
+    <p class="meta">Current file exists: ${diff.currentExists ? "yes" : "no"}</p>
+    <table>
+      <thead><tr><th>Line</th><th>Status</th><th>Snapshot</th><th>Current file</th></tr></thead>
+      <tbody>
+        ${diff.lines
+          .map((line) => {
+            const background =
+              line.status === "same"
+                ? "transparent"
+                : line.status === "changed"
+                  ? "rgba(180, 73, 44, 0.12)"
+                  : line.status === "added"
+                    ? "rgba(20, 99, 86, 0.12)"
+                    : "rgba(176, 92, 0, 0.12)";
+            return `
+              <tr style="background:${background};">
+                <td>${line.lineNumber}</td>
+                <td>${escapeHtml(line.status)}</td>
+                <td><code>${escapeHtml(line.snapshotLine)}</code></td>
+                <td><code>${escapeHtml(line.currentLine)}</code></td>
+              </tr>`;
+          })
+          .join("")}
+      </tbody>
+    </table>
+  `;
+
+  return c.html(adminLayout("Snapshot Diff", user, body));
+});
+
+adminRoutes.post("/snapshots/:id/restore", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) {
+    return c.redirect("/login");
+  }
+
+  const restored = await restoreFileSnapshot(Number(c.req.param("id")));
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "snapshot.restore",
+    targetType: "file_snapshot",
+    targetId: c.req.param("id"),
+    summary: `Restored snapshot to "${restored.relativePath}".`,
+    ipAddress: requestIp(c),
+  });
+
+  return c.redirect(`${config.controlPanelPath}/snapshots`);
 });

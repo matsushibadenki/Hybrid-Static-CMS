@@ -2,7 +2,7 @@
 
 ## Core idea
 
-BunPress Core is not designed as a full-site replacement CMS like WordPress. Its primary model is a **public_html coexistence CMS**:
+Hybrid-Static-CMS is not designed as a full-site replacement CMS like WordPress. Its primary model is a **public_html coexistence CMS**:
 
 - Existing HTML/PHP files remain in the main document root
 - The Bun application can live outside `public_html`
@@ -24,7 +24,7 @@ BunPress Core is not designed as a full-site replacement CMS like WordPress. Its
         page/
       embed.js
       posts/rss.xml
-  bunpress/
+  hybrid-static-cms/
     src/
     storage/
     config/
@@ -69,7 +69,7 @@ Generated files include:
 Use when the host site cannot include server-side fragments.
 
 ```html
-<div data-bunpress-posts data-limit="5" data-category="news"></div>
+<div data-hybrid-static-cms-posts data-limit="5" data-category="news"></div>
 <script src="/cms/embed.js"></script>
 ```
 
@@ -88,11 +88,13 @@ GET /cms-api/search?q=...
 Included now:
 
 - Bun + Hono server
-- PostgreSQL-backed posts, categories, tags, users, sessions, settings
+- PostgreSQL-backed posts, pages, media, users, sessions, settings
 - Cookie login for admin
 - Server-rendered control panel
 - Post CRUD
 - Page CRUD
+- Media uploads
+- File snapshots
 - Static fragment generation
 - Embed script generation
 
@@ -100,6 +102,5 @@ Planned next:
 
 - Page revisions and post revisions
 - Media library
-- Audit logs and file snapshots
 - AI proposal workflow with approval gates
 - Plugin hooks
