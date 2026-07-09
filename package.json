@@ -1,0 +1,25 @@
+{
+  "name": "bunpress-core",
+  "version": "0.1.0",
+  "private": false,
+  "description": "A Bun-powered coexistence CMS for existing public_html sites.",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/server/index.ts",
+    "start": "bun src/server/index.ts",
+    "check": "bunx tsc --noEmit",
+    "migrate": "bun src/scripts/migrate.ts",
+    "seed": "bun src/scripts/seed.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.10",
+    "postgres": "^3.4.5",
+    "sanitize-html": "^2.13.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/sanitize-html": "^2.13.0",
+    "typescript": "^5.6.3"
+  }
+}

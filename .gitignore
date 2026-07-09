@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Package manager and runtime logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# Build output and coverage
+dist/
+build/
+coverage/
+.turbo/
+.cache/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Private local agent / tooling state
+.agents/
+.codex/
+
+# Local temp and debug artifacts
+tmp/
+temp/
+*.tmp
+*.pid
+
+# Database dumps and local backups
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+
+# Sensitive or operator-private project directories
+private/
+secrets/
+backups/
+
+# Application storage: keep directory structure, ignore contents
+storage/cache/*
+!storage/cache/.gitkeep
+storage/backups/*
+!storage/backups/.gitkeep
+storage/logs/*
+!storage/logs/.gitkeep
+storage/uploads/*
+!storage/uploads/.gitkeep
+
+# Generated CMS artifacts: keep folders, ignore publish output
+public_html/cms/embed.js
+public_html/cms/posts/latest.html
+public_html/cms/posts/list.html
+public_html/cms/posts/rss.xml
+public_html/cms/posts/page/*
+!public_html/cms/posts/page/.gitkeep
+public_html/cms/pages/*
+!public_html/cms/pages/.gitkeep
+public_html/sitemap.xml

@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: bunpress
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      - postgres
+    environment:
+      PORT: 3000
+      APP_URL: http://localhost:3000
+      APP_NAME: BunPress Core
+      SESSION_SECRET: change-me
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/bunpress
+      PUBLIC_HTML_DIR: /app/public_html
+      CONTROL_PANEL_PATH: /control-panel
+      CMS_API_PREFIX: /cms-api
+      CMS_OUTPUT_DIR: /app/public_html/cms
+      DEFAULT_PAGE_SIZE: 10
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./public_html:/app/public_html
+      - ./storage:/app/storage
+    command: >
+      sh -lc "bun run migrate && bun run seed && bun run start"
+
+volumes:
+  postgres-data:

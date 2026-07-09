@@ -1,0 +1,65 @@
+# Operations and Security Notes
+
+## What installers should know
+
+BunPress Core is intended to be generic and open-source friendly, but the operator still needs to make several decisions before going live.
+
+## Current operational expectations
+
+- Operators manage Bun process uptime themselves
+- Operators manage PostgreSQL backups themselves
+- Operators are responsible for reverse proxy TLS and access logs
+- Generated CMS artifacts are overwritten during publish/render flows
+
+## Security notes for the current MVP
+
+The current codebase includes:
+
+- HttpOnly cookie sessions
+- Password hashing
+- Role records in the database
+- A narrow admin surface under a configurable path
+
+The current codebase does not yet include:
+
+- CSRF protection
+- 2FA
+- brute-force login throttling
+- audit log UI
+- encrypted API key storage
+- file snapshot rollback
+
+For any public deployment, treat the current repository as an MVP foundation rather than a finished hardened CMS.
+
+## Publishing behavior
+
+When a post is created, updated, or deleted:
+
+1. PostgreSQL content is updated
+2. Published artifact generation runs
+3. Static HTML, RSS, sitemap, and embed outputs are refreshed
+
+This means installation users should know:
+
+- publish operations trigger file writes
+- `CMS_OUTPUT_DIR` must be writable
+- artifact collisions should be avoided by reserving the `/cms` namespace
+
+## Recommended production checklist
+
+- Change the seeded admin password immediately
+- Use a strong `SESSION_SECRET`
+- Restrict direct server access
+- Put the app behind HTTPS
+- Limit database access to the app host
+- Monitor app logs and database health
+- Back up PostgreSQL and generated uploads
+- Confirm `/cms` does not conflict with existing site paths
+
+## Suggested next docs to add as the project grows
+
+- upgrade guide
+- backup and restore guide
+- plugin authoring guide
+- theme and template guide
+- AI workflow safety guide
