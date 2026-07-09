@@ -8,6 +8,7 @@ This directory collects the design, installation, deployment, and operations not
 2. [Installation guide](./installation.md)
 3. [Deployment and coexistence model](./deployment.md)
 4. [Operations and security notes](./operations.md)
+5. [Roadmap](./roadmap.md)
 
 ## Audience
 

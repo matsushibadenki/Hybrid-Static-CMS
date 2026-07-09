@@ -22,6 +22,8 @@ The current codebase includes:
 - Audit log UI for key admin and API actions
 - File snapshot create/restore UI for safe text files inside `public_html`
 - Diff preview before restoring a snapshot
+- Quick snapshot creation from page and post edit screens
+- Explicit confirmation step before snapshot restore
 
 The current codebase does not yet include:
 

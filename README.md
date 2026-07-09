@@ -20,6 +20,7 @@ Operator-facing notes now live under `docs/README.md`.
 - Installation: `docs/installation.md`
 - Deployment: `docs/deployment.md`
 - Operations and security: `docs/operations.md`
+- Roadmap: `docs/roadmap.md`
 
 ## MVP included in this repository
 
@@ -29,6 +30,8 @@ Operator-facing notes now live under `docs/README.md`.
 - Audit log tracking for sign-in, publishing, media, and regeneration events
 - File snapshots for safe text-based files under `public_html`
 - Diff preview before snapshot restore
+- Explicit restore confirmation step for snapshots
+- Quick snapshot creation from post and page edit screens
 - Server-rendered admin panel under `/control-panel`
 - Post CRUD with publish/draft status
 - Page CRUD with CMS-managed static page output

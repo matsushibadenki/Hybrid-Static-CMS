@@ -75,6 +75,43 @@ function pageForm(action: string, values?: Record<string, string>) {
   `;
 }
 
+function snapshotHelperCard(returnTo: string, suggestions: string[]) {
+  const suggestionButtons = suggestions
+    .map(
+      (item) => `
+        <button
+          class="button"
+          type="button"
+          onclick="this.closest('form').querySelector('[name=relativePath]').value='${escapeHtml(item)}'"
+        >
+          ${escapeHtml(item)}
+        </button>
+      `,
+    )
+    .join("");
+
+  return `
+    <div style="margin-top:20px; padding:18px; border-radius:22px; background:rgba(255,255,255,0.72); border:1px solid rgba(31,41,51,0.12);">
+      <h2>Protect a public_html file</h2>
+      <p class="meta">Create a quick snapshot before changing surrounding templates or hand-edited site files.</p>
+      <form method="post" action="${config.controlPanelPath}/snapshots" class="form-grid">
+        <input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}" />
+        <label>Relative path inside public_html
+          <input name="relativePath" placeholder="index.html or assets/site.css" required />
+        </label>
+        <label>Reason
+          <input name="reason" value="Before editing related site template" />
+        </label>
+        <div class="row">${suggestionButtons}</div>
+        <div class="row">
+          <button class="button" type="submit">Create snapshot</button>
+          <a class="button" href="${config.controlPanelPath}/snapshots">Open snapshot history</a>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
 export const adminRoutes = new Hono();
 
 adminRoutes.use("/*", requireRole("owner", "admin", "editor", "author"));
@@ -233,7 +270,12 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
         tags: post.tags.join(", "),
         seoTitle: post.seoTitle ?? "",
         seoDescription: post.seoDescription ?? "",
-      }),
+      }) +
+        snapshotHelperCard(`${config.controlPanelPath}/posts/${post.id}/edit`, [
+          "index.html",
+          "assets/site.css",
+          "cms/posts/latest.html",
+        ]),
     ),
   );
 });
@@ -389,7 +431,12 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
         publishedAt: page.publishedAt ? new Date(page.publishedAt).toISOString().slice(0, 16) : "",
         seoTitle: page.seoTitle ?? "",
         seoDescription: page.seoDescription ?? "",
-      }),
+      }) +
+        snapshotHelperCard(`${config.controlPanelPath}/pages/${page.id}/edit`, [
+          "index.html",
+          "about.php",
+          `cms/pages/${page.slug}.html`,
+        ]),
     ),
   );
 });
@@ -601,9 +648,7 @@ adminRoutes.get("/snapshots", async (c) => {
                   <td>
                     <div class="row">
                       <a class="button" href="${config.controlPanelPath}/snapshots/${item.id}/preview">Preview diff</a>
-                      <form method="post" action="${config.controlPanelPath}/snapshots/${item.id}/restore">
-                        <button class="button" type="submit">Restore</button>
-                      </form>
+                      <a class="button" href="${config.controlPanelPath}/snapshots/${item.id}/confirm-restore">Restore</a>
                     </div>
                   </td>
                 </tr>`,
@@ -626,6 +671,7 @@ adminRoutes.post("/snapshots", async (c) => {
   const form = await c.req.formData();
   const relativePath = String(form.get("relativePath") ?? "");
   const reason = String(form.get("reason") ?? "");
+  const returnTo = String(form.get("returnTo") ?? "");
   const snapshot = await createFileSnapshot(relativePath, user.id, reason);
 
   await writeAuditLog({
@@ -637,7 +683,7 @@ adminRoutes.post("/snapshots", async (c) => {
     ipAddress: requestIp(c),
   });
 
-  return c.redirect(`${config.controlPanelPath}/snapshots`);
+  return c.redirect(returnTo || `${config.controlPanelPath}/snapshots`);
 });
 
 adminRoutes.get("/snapshots/:id/preview", async (c) => {
@@ -646,9 +692,7 @@ adminRoutes.get("/snapshots/:id/preview", async (c) => {
   const body = `
     <div class="row" style="margin-bottom:16px;">
       <a class="button" href="${config.controlPanelPath}/snapshots">Back to snapshots</a>
-      <form method="post" action="${config.controlPanelPath}/snapshots/${c.req.param("id")}/restore">
-        <button class="button button-primary" type="submit">Restore this snapshot</button>
-      </form>
+      <a class="button button-primary" href="${config.controlPanelPath}/snapshots/${c.req.param("id")}/confirm-restore">Continue to restore</a>
     </div>
     <h2>Diff preview</h2>
     <p class="meta">Path: <code>${escapeHtml(diff.relativePath)}</code></p>
@@ -683,10 +727,42 @@ adminRoutes.get("/snapshots/:id/preview", async (c) => {
   return c.html(adminLayout("Snapshot Diff", user, body));
 });
 
+adminRoutes.get("/snapshots/:id/confirm-restore", async (c) => {
+  const user = c.get("sessionUser");
+  const diff = await getFileSnapshotDiff(Number(c.req.param("id")));
+  const changedCount = diff.lines.filter((line) => line.status !== "same").length;
+  const body = `
+    <div class="row" style="margin-bottom:16px;">
+      <a class="button" href="${config.controlPanelPath}/snapshots/${c.req.param("id")}/preview">Back to diff</a>
+      <a class="button" href="${config.controlPanelPath}/snapshots">Back to snapshots</a>
+    </div>
+    <h2>Confirm restore</h2>
+    <p>This will overwrite the current file at <code>${escapeHtml(diff.relativePath)}</code> with the contents stored in snapshot #${c.req.param("id")}.</p>
+    <p class="meta">Changed lines detected: ${changedCount}</p>
+    <p class="meta">Current file exists: ${diff.currentExists ? "yes" : "no"}</p>
+    <form method="post" action="${config.controlPanelPath}/snapshots/${c.req.param("id")}/restore" class="form-grid" style="max-width:560px;">
+      <label>Type RESTORE to confirm
+        <input name="confirmText" placeholder="RESTORE" required />
+      </label>
+      <div class="row">
+        <button class="button button-primary" type="submit">Restore snapshot now</button>
+      </div>
+    </form>
+  `;
+
+  return c.html(adminLayout("Confirm Restore", user, body));
+});
+
 adminRoutes.post("/snapshots/:id/restore", async (c) => {
   const user = c.get("sessionUser");
   if (!user) {
     return c.redirect("/login");
+  }
+
+  const form = await c.req.formData();
+  const confirmText = String(form.get("confirmText") ?? "");
+  if (confirmText !== "RESTORE") {
+    return c.text("Confirmation text did not match.", 400);
   }
 
   const restored = await restoreFileSnapshot(Number(c.req.param("id")));
