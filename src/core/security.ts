@@ -87,34 +87,38 @@ export async function verifyRecaptchaToken(token: string, action: string, remote
     body.set("remoteip", remoteIp);
   }
 
-  const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
+  try {
+    const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body,
+    });
 
-  if (!response.ok) {
-    return { ok: false, score: null, reasons: [`http-${response.status}`] };
+    if (!response.ok) {
+      return { ok: false, score: null, reasons: [`http-${response.status}`] };
+    }
+
+    const payload = (await response.json()) as {
+      success?: boolean;
+      score?: number;
+      action?: string;
+      hostname?: string;
+      ["error-codes"]?: string[];
+    };
+
+    const score = typeof payload.score === "number" ? payload.score : null;
+    const reasons = payload["error-codes"] ?? [];
+    const actionMatches = payload.action === action;
+    const scorePasses = score === null ? false : score >= config.recaptchaMinScore;
+
+    return {
+      ok: Boolean(payload.success) && actionMatches && scorePasses,
+      score,
+      reasons: actionMatches ? reasons : [...reasons, "action-mismatch"],
+    };
+  } catch {
+    return { ok: false, score: null, reasons: ["verification-request-failed"] };
   }
-
-  const payload = (await response.json()) as {
-    success?: boolean;
-    score?: number;
-    action?: string;
-    hostname?: string;
-    ["error-codes"]?: string[];
-  };
-
-  const score = typeof payload.score === "number" ? payload.score : null;
-  const reasons = payload["error-codes"] ?? [];
-  const actionMatches = payload.action === action;
-  const scorePasses = score === null ? false : score >= config.recaptchaMinScore;
-
-  return {
-    ok: Boolean(payload.success) && actionMatches && scorePasses,
-    score,
-    reasons: actionMatches ? reasons : [...reasons, "action-mismatch"],
-  };
 }

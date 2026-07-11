@@ -62,6 +62,15 @@ Generated outputs currently include:
 
 Operational data also includes database-backed file snapshots for selected `public_html` files.
 
+## Form spam protection notes
+
+If you enable Google reCAPTCHA v3 for published forms:
+
+- set `RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY`, and optionally `RECAPTCHA_MIN_SCORE`
+- allow the application server to make outbound HTTPS requests to `www.google.com`
+- remember that forms stay usable without reCAPTCHA if those keys are left unset
+- when verification fails, the submission is rejected before it is stored
+
 ## SEO output notes
 
 Operators should understand these generated SEO files and controls:

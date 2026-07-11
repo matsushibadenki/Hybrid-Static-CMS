@@ -392,7 +392,7 @@ apiRoutes.post("/forms/:slug/submit", async (c) => {
       action: "form.submit.blocked",
       targetType: "form",
       targetId: form.id,
-      summary: `Blocked submission for form "${form.title}" due to failed reCAPTCHA verification.`,
+      summary: `Blocked submission for form "${form.title}" due to failed reCAPTCHA verification (${verification.reasons.join(", ") || "unknown"}).`,
       ipAddress: requestIp(c),
     });
     return c.html("<p>Spam protection could not verify your submission. Please try again.</p>", 400);

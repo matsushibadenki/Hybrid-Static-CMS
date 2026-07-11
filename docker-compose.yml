@@ -20,6 +20,9 @@ services:
       APP_NAME: Hybrid-Static-CMS
       SESSION_SECRET: change-me
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/hybrid_static_cms
+      RECAPTCHA_SITE_KEY: ${RECAPTCHA_SITE_KEY:-}
+      RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY:-}
+      RECAPTCHA_MIN_SCORE: ${RECAPTCHA_MIN_SCORE:-0.5}
       PUBLIC_HTML_DIR: /app/public_html
       CONTROL_PANEL_PATH: /control-panel
       CMS_API_PREFIX: /cms-api

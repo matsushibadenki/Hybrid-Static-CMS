@@ -507,10 +507,15 @@ adminRoutes.get("/pages/new", (c) => {
 adminRoutes.get("/forms", async (c) => {
   const user = c.get("sessionUser");
   const forms = await listForms("any");
+  const recaptchaEnabled = Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey);
   const body = `
     <div class="row" style="margin-bottom:16px;">
       <a class="button button-primary" href="${config.controlPanelPath}/forms/new">New form</a>
     </div>
+    <p class="meta" style="margin-bottom:16px;">
+      reCAPTCHA v3: ${recaptchaEnabled ? "enabled" : "disabled"}.
+      ${recaptchaEnabled ? "Published forms will request and verify tokens on submission." : "Set RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY in .env to enable spam protection."}
+    </p>
     <table>
       <thead><tr><th>Title</th><th>Status</th><th>Fields</th><th>Actions</th></tr></thead>
       <tbody>
@@ -580,6 +585,7 @@ adminRoutes.get("/forms/:id/edit", async (c) => {
   if (!form) {
     return c.text("Not found", 404);
   }
+  const recaptchaEnabled = Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey);
   const submissions = await listFormSubmissions(form.id);
   const body =
     formBuilderForm(`${config.controlPanelPath}/forms/${form.id}`, {
@@ -593,6 +599,7 @@ adminRoutes.get("/forms/:id/edit", async (c) => {
     }) +
     `
       <div style="margin-top:20px;">
+        <p class="meta">reCAPTCHA v3 is currently ${recaptchaEnabled ? "enabled" : "disabled"} for published forms.</p>
         <div class="row" style="justify-content:space-between; align-items:center;">
           <h2 style="margin-bottom:0;">Submissions</h2>
           <a class="button" href="/cms/forms/${form.slug}.html">Open published form</a>
