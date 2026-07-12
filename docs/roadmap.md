@@ -1,140 +1,147 @@
 # Roadmap
 
-This roadmap tracks what Hybrid-Static-CMS already supports and what is planned next.
+This roadmap tracks what Hybrid-Static-CMS already supports and what is still ahead.
+
+## Status legend
+
+- `[Done]` implemented in the current codebase
+- `[Next]` high-priority unfinished work
+- `[Later]` planned, but not the closest next step
 
 ## Current status
 
-Hybrid-Static-CMS is currently in an MVP stage.
+Hybrid-Static-CMS is in an MVP-to-operations expansion phase.
 
 The core coexistence model is already working:
 
 - existing `public_html` pages can remain in place
 - CMS content can be exposed through static fragments, JSON APIs, and `embed.js`
-- operators can manage posts, pages, media, logs, and file snapshots from the control panel
+- operators can manage posts, pages, forms, media, logs, and file snapshots from the control panel
 
-## Implemented
+## Completed
 
 ### Platform foundation
 
-- Bun + Hono application server
-- PostgreSQL-backed persistence layer
-- Docker baseline for local and team setup
-- environment-based configuration
-- migration and seed scripts
+- `[Done]` Bun + Hono application server
+- `[Done]` TypeScript 7-compatible project configuration
+- `[Done]` PostgreSQL-backed persistence layer
+- `[Done]` Docker baseline for local and team setup
+- `[Done]` environment-based configuration
+- `[Done]` migration and seed scripts
 
 ### Coexistence CMS model
 
-- `public_html` coexistence architecture
-- reverse-proxy-ready control panel under `/control-panel`
-- JSON API under `/cms-api/*`
-- generated output under `/cms/*`
-- static publishing flow that regenerates fragments on content changes
+- `[Done]` `public_html` coexistence architecture
+- `[Done]` reverse-proxy-ready control panel under `/control-panel`
+- `[Done]` JSON API under `/cms-api/*`
+- `[Done]` generated output under `/cms/*`
+- `[Done]` static publishing flow that regenerates fragments on content changes
 
 ### Content management
 
-- post CRUD
-- category and tag assignment for posts
-- page CRUD
-- form generation, management, deletion, and submission capture
-- published/draft/scheduled status fields
-- SEO title and SEO description fields
-- per-entry `noindex` and `nofollow` controls
+- `[Done]` post CRUD
+- `[Done]` category and tag assignment for posts
+- `[Done]` page CRUD
+- `[Done]` multiple form generation, management, deletion, and submission capture
+- `[Done]` published/draft/scheduled status fields
+- `[Done]` media upload and media library management
+- `[Done]` post and page media helpers for image, video, audio, and PDF embeds
+- `[Done]` SEO title and SEO description fields
+- `[Done]` per-entry `noindex` and `nofollow` controls
+- `[Done]` Google reCAPTCHA v3 support for public form submissions via `.env`
 
 ### Publishing outputs
 
-- latest posts fragment
-- full post list fragment
-- paginated post list pages
-- CMS-managed page HTML output
-- RSS output
-- sitemap output
-- robots.txt output
-- AI-oriented `llms.txt` output
-- client-side `embed.js`
+- `[Done]` latest posts fragment
+- `[Done]` full post list fragment
+- `[Done]` per-post static HTML pages
+- `[Done]` paginated post list pages
+- `[Done]` CMS-managed page HTML output
+- `[Done]` CMS-managed form HTML output
+- `[Done]` RSS output
+- `[Done]` sitemap output
+- `[Done]` robots.txt output
+- `[Done]` AI-oriented `llms.txt` output
+- `[Done]` client-side `embed.js`
 
 ### Admin and operations
 
-- cookie-based authentication
-- role-aware admin access checks
-- media upload and media library management
-- post and page media helpers for image, video, audio, and PDF embeds
-- audit logs for auth, publishing, media, regeneration, and snapshots
-- file snapshots for safe text-based files inside `public_html`
-- diff preview before snapshot restore
-- explicit confirmation step before snapshot restore
-- quick snapshot creation from post and page edit screens
+- `[Done]` cookie-based authentication
+- `[Done]` role-aware admin access checks
+- `[Done]` audit logs for auth, publishing, media, regeneration, form blocking, and snapshots
+- `[Done]` file snapshots for safe text-based files inside `public_html`
+- `[Done]` diff preview before snapshot restore
+- `[Done]` explicit confirmation step before snapshot restore
+- `[Done]` quick snapshot creation from post and page edit screens
+- `[Done]` hidden-dot-path blocking for public static file serving
 
-## Short-term roadmap
+## Unfinished
 
-These items are the most natural next steps from the current implementation.
+### Next priority
 
-### Content safety and workflow
+#### Content safety and workflow
 
-- revisions for posts and pages
-- automatic snapshot creation before restore
-- snapshot restore rollback flow
-- PostgreSQL data backup and restore workflows
-- better diff visualization for long files
-- restore success and error feedback in the UI
+- `[Next]` revisions for posts and pages
+- `[Next]` automatic snapshot creation before restore
+- `[Next]` snapshot restore rollback flow
+- `[Next]` PostgreSQL data backup and restore workflows
+- `[Next]` better diff visualization for long files
+- `[Next]` restore success and error feedback in the UI
 
-### Editor usability
+#### Editor usability
 
-- media picker inside post and page editing
-- richer content editing experience
-- better search and filtering in admin lists
-- validation feedback for slugs, publish state, and duplicate content
+- `[Next]` media picker inside post and page editing
+- `[Next]` richer content editing experience
+- `[Next]` better search and filtering in admin lists
+- `[Next]` validation feedback for slugs, publish state, and duplicate content
 
-### Security hardening
+#### Security hardening
 
-- CSRF protection
-- login throttling
-- optional two-factor authentication
-- stronger cookie and proxy-aware security defaults
+- `[Next]` CSRF protection
+- `[Next]` login throttling
+- `[Next]` optional two-factor authentication
+- `[Next]` stronger cookie and proxy-aware security defaults
 
-## Mid-term roadmap
+### Later roadmap
 
-### Site-building capabilities
+#### Site-building capabilities
 
-- CMS-managed menus
-- multiple embeddable forms for inquiry, lead capture, and custom input flows
-- reusable page sections or blocks
-- theme/template override model
-- configurable generated output templates
+- `[Later]` CMS-managed menus
+- `[Later]` reusable page sections or blocks
+- `[Later]` theme/template override model
+- `[Later]` configurable generated output templates
 
-### SEO and discoverability
+#### SEO and discoverability
 
-- stronger SEO optimization workflows for posts and pages beyond the current canonical, structured-data, sitemap, robots, and indexing controls
-- automated meta and structured-data assistance
-- richer sitemap, canonical, and indexing controls
+- `[Later]` stronger SEO optimization workflows for posts and pages beyond the current canonical, structured-data, sitemap, robots, indexing, and AI discovery controls
+- `[Later]` automated meta and structured-data assistance
+- `[Later]` richer sitemap, canonical, and indexing controls
 
-### Operational depth
+#### Operational depth
 
-- backup and restore workflows
-- audit log filtering
-- operator notifications for important actions
-- background jobs for scheduled publishing and housekeeping
+- `[Later]` audit log filtering
+- `[Later]` operator notifications for important actions
+- `[Later]` background jobs for scheduled publishing and housekeeping
 
-### Extensibility
+#### Extensibility
 
-- plugin hook system
-- custom API extension points
-- admin menu extension support
+- `[Later]` plugin hook system
+- `[Later]` custom API extension points
+- `[Later]` admin menu extension support
 
-## Long-term roadmap
+#### AI-assisted workflows
 
-### AI-assisted workflows
+- `[Later]` proposal-based AI edits for `public_html`
+- `[Later]` diff review before AI changes are applied
+- `[Later]` protected path rules for AI actions
+- `[Later]` AI action logging linked to snapshots and audit logs
 
-- proposal-based AI edits for `public_html`
-- diff review before AI changes are applied
-- protected path rules for AI actions
-- AI action logging linked to snapshots and audit logs
+#### Open-source distribution maturity
 
-### Open-source distribution maturity
-
-- polished VPS deployment guide
-- production-ready Docker deployment profile
-- upgrade guide between schema versions
-- contributor guide and architectural decision records
+- `[Later]` polished VPS deployment guide
+- `[Later]` production-ready Docker deployment profile
+- `[Later]` upgrade guide between schema versions
+- `[Later]` contributor guide and architectural decision records
 
 ## Notes for contributors
 
