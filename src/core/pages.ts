@@ -1,5 +1,12 @@
 import { renderMarkdownLike, sanitizeRichHtml } from "./content";
 import { sql } from "./db";
+import {
+  AppValidationError,
+  isUniqueConstraintError,
+  requireNonEmpty,
+  validateScheduledState,
+  validateSlug,
+} from "./validation";
 import type { PageInput, PageRecord } from "./types";
 
 function normalizePage(row: Record<string, unknown>): PageRecord {
@@ -27,6 +34,12 @@ function deriveBodyHtml(input: PageInput) {
     return sanitizeRichHtml(input.bodyHtml);
   }
   return renderMarkdownLike(input.bodyMd ?? "");
+}
+
+function validatePageInput(input: PageInput) {
+  requireNonEmpty(input.title, "Title");
+  validateSlug(input.slug);
+  validateScheduledState(input.status, input.publishedAt);
 }
 
 const basePageQuery = `
@@ -107,60 +120,77 @@ export async function getPageBySlug(slug: string, status = "published") {
 }
 
 export async function createPage(input: PageInput, authorId: number) {
+  validatePageInput(input);
   const bodyHtml = deriveBodyHtml(input);
-  const rows = await sql`
-    insert into pages (
-      title,
-      slug,
-      excerpt,
-      body_md,
-      body_html,
-      status,
-      author_id,
-      published_at,
-      seo_title,
-      seo_description,
-      seo_noindex,
-      seo_nofollow
-    ) values (
-      ${input.title},
-      ${input.slug},
-      ${input.excerpt ?? null},
-      ${input.bodyMd ?? null},
-      ${bodyHtml},
-      ${input.status},
-      ${authorId},
-      ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
-      ${input.seoTitle ?? null},
-      ${input.seoDescription ?? null},
-      ${input.seoNoindex ?? false},
-      ${input.seoNofollow ?? false}
-    )
-    returning id
-  `;
+  let rows;
+  try {
+    rows = await sql`
+      insert into pages (
+        title,
+        slug,
+        excerpt,
+        body_md,
+        body_html,
+        status,
+        author_id,
+        published_at,
+        seo_title,
+        seo_description,
+        seo_noindex,
+        seo_nofollow
+      ) values (
+        ${input.title},
+        ${input.slug},
+        ${input.excerpt ?? null},
+        ${input.bodyMd ?? null},
+        ${bodyHtml},
+        ${input.status},
+        ${authorId},
+        ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
+        ${input.seoTitle ?? null},
+        ${input.seoDescription ?? null},
+        ${input.seoNoindex ?? false},
+        ${input.seoNofollow ?? false}
+      )
+      returning id
+    `;
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppValidationError(`Slug "${input.slug}" is already in use.`);
+    }
+    throw error;
+  }
 
   return getPageById(Number(rows[0].id));
 }
 
 export async function updatePage(id: number, input: PageInput) {
+  validatePageInput(input);
   const bodyHtml = deriveBodyHtml(input);
-  await sql`
-    update pages
-    set
-      title = ${input.title},
-      slug = ${input.slug},
-      excerpt = ${input.excerpt ?? null},
-      body_md = ${input.bodyMd ?? null},
-      body_html = ${bodyHtml},
-      status = ${input.status},
-      published_at = ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
-      seo_title = ${input.seoTitle ?? null},
-      seo_description = ${input.seoDescription ?? null},
-      seo_noindex = ${input.seoNoindex ?? false},
-      seo_nofollow = ${input.seoNofollow ?? false},
-      updated_at = now()
-    where id = ${id}
-  `;
+  try {
+    await sql`
+      update pages
+      set
+        title = ${input.title},
+        slug = ${input.slug},
+        excerpt = ${input.excerpt ?? null},
+        body_md = ${input.bodyMd ?? null},
+        body_html = ${bodyHtml},
+        status = ${input.status},
+        published_at = ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
+        seo_title = ${input.seoTitle ?? null},
+        seo_description = ${input.seoDescription ?? null},
+        seo_noindex = ${input.seoNoindex ?? false},
+        seo_nofollow = ${input.seoNofollow ?? false},
+        updated_at = now()
+      where id = ${id}
+    `;
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppValidationError(`Slug "${input.slug}" is already in use.`);
+    }
+    throw error;
+  }
 
   return getPageById(id);
 }

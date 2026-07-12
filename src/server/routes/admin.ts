@@ -32,6 +32,7 @@ import { renderPublishedArtifacts } from "../../core/renderer";
 import { slugify, escapeHtml } from "../../core/content";
 import { requireRole } from "../../core/auth";
 import { config } from "../../core/config";
+import { AppValidationError } from "../../core/validation";
 import type { FormFieldRecord } from "../../core/types";
 
 function splitCsv(value: FormDataEntryValue | null) {
@@ -39,6 +40,74 @@ function splitCsv(value: FormDataEntryValue | null) {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function noticeCard(message: string, tone: "success" | "error" = "success") {
+  const background = tone === "success" ? "rgba(20, 99, 86, 0.12)" : "rgba(180, 73, 44, 0.12)";
+  const border = tone === "success" ? "rgba(20, 99, 86, 0.28)" : "rgba(180, 73, 44, 0.28)";
+  return `
+    <div style="margin-bottom:16px; padding:14px 16px; border-radius:18px; background:${background}; border:1px solid ${border};">
+      ${escapeHtml(message)}
+    </div>
+  `;
+}
+
+function queryNotice(c: { req: { query: (key: string) => string | undefined } }) {
+  const success = c.req.query("success");
+  const error = c.req.query("error");
+  if (error) {
+    return noticeCard(error, "error");
+  }
+  if (success) {
+    return noticeCard(success, "success");
+  }
+  return "";
+}
+
+function postValuesFromForm(form: FormData) {
+  return {
+    title: String(form.get("title") ?? ""),
+    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
+    excerpt: String(form.get("excerpt") ?? ""),
+    bodyMd: String(form.get("bodyMd") ?? ""),
+    bodyHtml: String(form.get("bodyHtml") ?? ""),
+    status: String(form.get("status") ?? "draft"),
+    publishedAt: String(form.get("publishedAt") ?? ""),
+    categories: String(form.get("categories") ?? ""),
+    tags: String(form.get("tags") ?? ""),
+    seoTitle: String(form.get("seoTitle") ?? ""),
+    seoDescription: String(form.get("seoDescription") ?? ""),
+    seoNoindex: form.has("seoNoindex") ? "true" : "false",
+    seoNofollow: form.has("seoNofollow") ? "true" : "false",
+  };
+}
+
+function pageValuesFromForm(form: FormData) {
+  return {
+    title: String(form.get("title") ?? ""),
+    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
+    excerpt: String(form.get("excerpt") ?? ""),
+    bodyMd: String(form.get("bodyMd") ?? ""),
+    bodyHtml: String(form.get("bodyHtml") ?? ""),
+    status: String(form.get("status") ?? "draft"),
+    publishedAt: String(form.get("publishedAt") ?? ""),
+    seoTitle: String(form.get("seoTitle") ?? ""),
+    seoDescription: String(form.get("seoDescription") ?? ""),
+    seoNoindex: form.has("seoNoindex") ? "true" : "false",
+    seoNofollow: form.has("seoNofollow") ? "true" : "false",
+  };
+}
+
+function formValuesFromForm(form: FormData) {
+  return {
+    title: String(form.get("title") ?? ""),
+    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
+    description: String(form.get("description") ?? ""),
+    status: String(form.get("status") ?? "draft"),
+    submitLabel: String(form.get("submitLabel") ?? "Send"),
+    successMessage: String(form.get("successMessage") ?? "Thank you. Your submission has been received."),
+    fieldsSpec: String(form.get("fieldsSpec") ?? ""),
+  };
 }
 
 function postForm(action: string, values?: Record<string, string>) {
@@ -289,14 +358,31 @@ adminRoutes.get("/", async (c) => {
 
 adminRoutes.get("/posts", async (c) => {
   const user = c.get("sessionUser");
-  const posts = await listPosts({ page: 1, limit: 50, status: "any" });
+  const q = c.req.query("q") ?? "";
+  const status = c.req.query("status") ?? "any";
+  const category = c.req.query("category") ?? "";
+  const posts = await listPosts({ page: 1, limit: 50, status, category: category || undefined, search: q || undefined });
   const body = `
+    ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;">
       <a class="button button-primary" href="${config.controlPanelPath}/posts/new">New post</a>
       <form method="post" action="${config.controlPanelPath}/render">
         <button class="button" type="submit">Regenerate fragments</button>
       </form>
     </div>
+    <form method="get" action="${config.controlPanelPath}/posts" class="form-grid" style="margin-bottom:16px;">
+      <div class="row">
+        <input name="q" value="${escapeHtml(q)}" placeholder="Search title, excerpt, or body" />
+        <select name="status">
+          <option value="any" ${status === "any" ? "selected" : ""}>Any status</option>
+          <option value="draft" ${status === "draft" ? "selected" : ""}>Draft</option>
+          <option value="published" ${status === "published" ? "selected" : ""}>Published</option>
+          <option value="scheduled" ${status === "scheduled" ? "selected" : ""}>Scheduled</option>
+        </select>
+        <input name="category" value="${escapeHtml(category)}" placeholder="Category slug" />
+        <button class="button" type="submit">Filter</button>
+      </div>
+    </form>
     <table>
       <thead><tr><th>Title</th><th>Status</th><th>Categories</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
@@ -328,7 +414,7 @@ adminRoutes.get("/posts", async (c) => {
 
 adminRoutes.get("/posts/new", (c) => {
   const user = c.get("sessionUser");
-  return c.html(adminLayout("New Post", user, postForm(`${config.controlPanelPath}/posts`)));
+  return c.html(adminLayout("New Post", user, queryNotice(c) + postForm(`${config.controlPanelPath}/posts`)));
 });
 
 adminRoutes.post("/posts", async (c) => {
@@ -338,24 +424,33 @@ adminRoutes.post("/posts", async (c) => {
   }
 
   const form = await c.req.formData();
-  const post = await createPost(
-    {
-      title: String(form.get("title") ?? ""),
-      slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
-      excerpt: String(form.get("excerpt") ?? ""),
-      bodyMd: String(form.get("bodyMd") ?? ""),
-      bodyHtml: String(form.get("bodyHtml") ?? ""),
-      status: (String(form.get("status") ?? "draft") as "draft" | "published" | "scheduled"),
-      publishedAt: String(form.get("publishedAt") ?? "") || null,
-      categorySlugs: splitCsv(form.get("categories")),
-      tagSlugs: splitCsv(form.get("tags")),
-      seoTitle: String(form.get("seoTitle") ?? ""),
-      seoDescription: String(form.get("seoDescription") ?? ""),
-      seoNoindex: form.has("seoNoindex"),
-      seoNofollow: form.has("seoNofollow"),
-    },
-    user.id,
-  );
+  const values = postValuesFromForm(form);
+  let post;
+  try {
+    post = await createPost(
+      {
+        title: values.title,
+        slug: values.slug,
+        excerpt: values.excerpt,
+        bodyMd: values.bodyMd,
+        bodyHtml: values.bodyHtml,
+        status: values.status as "draft" | "published" | "scheduled",
+        publishedAt: values.publishedAt || null,
+        categorySlugs: splitCsv(form.get("categories")),
+        tagSlugs: splitCsv(form.get("tags")),
+        seoTitle: values.seoTitle,
+        seoDescription: values.seoDescription,
+        seoNoindex: values.seoNoindex === "true",
+        seoNofollow: values.seoNofollow === "true",
+      },
+      user.id,
+    );
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.html(adminLayout("New Post", user, noticeCard(error.message, "error") + postForm(`${config.controlPanelPath}/posts`, values)), 400);
+    }
+    throw error;
+  }
 
   await writeAuditLog({
     actorUserId: user.id,
@@ -366,7 +461,7 @@ adminRoutes.post("/posts", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/posts/${post?.id ?? ""}/edit`);
+  return c.redirect(`${config.controlPanelPath}/posts/${post?.id ?? ""}/edit?success=${encodeURIComponent("Post saved.")}`);
 });
 
 adminRoutes.get("/posts/:id/edit", async (c) => {
@@ -381,7 +476,7 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
     adminLayout(
       "Edit Post",
       user,
-      postForm(`${config.controlPanelPath}/posts/${post.id}`, {
+      queryNotice(c) + postForm(`${config.controlPanelPath}/posts/${post.id}`, {
         title: post.title,
         slug: post.slug,
         excerpt: post.excerpt ?? "",
@@ -408,21 +503,45 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
 
 adminRoutes.post("/posts/:id", async (c) => {
   const form = await c.req.formData();
-  await updatePost(Number(c.req.param("id")), {
-    title: String(form.get("title") ?? ""),
-    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
-    excerpt: String(form.get("excerpt") ?? ""),
-    bodyMd: String(form.get("bodyMd") ?? ""),
-    bodyHtml: String(form.get("bodyHtml") ?? ""),
-    status: (String(form.get("status") ?? "draft") as "draft" | "published" | "scheduled"),
-    publishedAt: String(form.get("publishedAt") ?? "") || null,
-    categorySlugs: splitCsv(form.get("categories")),
-    tagSlugs: splitCsv(form.get("tags")),
-    seoTitle: String(form.get("seoTitle") ?? ""),
-    seoDescription: String(form.get("seoDescription") ?? ""),
-    seoNoindex: form.has("seoNoindex"),
-    seoNofollow: form.has("seoNofollow"),
-  });
+  const user = c.get("sessionUser");
+  const mediaItems = await listMedia();
+  const values = postValuesFromForm(form);
+  try {
+    await updatePost(Number(c.req.param("id")), {
+      title: values.title,
+      slug: values.slug,
+      excerpt: values.excerpt,
+      bodyMd: values.bodyMd,
+      bodyHtml: values.bodyHtml,
+      status: values.status as "draft" | "published" | "scheduled",
+      publishedAt: values.publishedAt || null,
+      categorySlugs: splitCsv(form.get("categories")),
+      tagSlugs: splitCsv(form.get("tags")),
+      seoTitle: values.seoTitle,
+      seoDescription: values.seoDescription,
+      seoNoindex: values.seoNoindex === "true",
+      seoNofollow: values.seoNofollow === "true",
+    });
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.html(
+        adminLayout(
+          "Edit Post",
+          user,
+          noticeCard(error.message, "error") +
+            postForm(`${config.controlPanelPath}/posts/${c.req.param("id")}`, values) +
+            snapshotHelperCard(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit`, [
+              "index.html",
+              "assets/site.css",
+              "cms/posts/latest.html",
+            ]) +
+            mediaHelperCard(mediaItems),
+        ),
+        400,
+      );
+    }
+    throw error;
+  }
 
   await writeAuditLog({
     actorUserId: c.get("sessionUser")?.id ?? null,
@@ -433,7 +552,7 @@ adminRoutes.post("/posts/:id", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit`);
+  return c.redirect(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit?success=${encodeURIComponent("Post updated.")}`);
 });
 
 adminRoutes.post("/posts/:id/delete", async (c) => {
@@ -465,11 +584,26 @@ adminRoutes.post("/render", async (c) => {
 
 adminRoutes.get("/pages", async (c) => {
   const user = c.get("sessionUser");
-  const pages = await listPages({ page: 1, limit: 50, status: "any" });
+  const q = c.req.query("q") ?? "";
+  const status = c.req.query("status") ?? "any";
+  const pages = await listPages({ page: 1, limit: 50, status, search: q || undefined });
   const body = `
+    ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;">
       <a class="button button-primary" href="${config.controlPanelPath}/pages/new">New page</a>
     </div>
+    <form method="get" action="${config.controlPanelPath}/pages" class="form-grid" style="margin-bottom:16px;">
+      <div class="row">
+        <input name="q" value="${escapeHtml(q)}" placeholder="Search title, excerpt, or body" />
+        <select name="status">
+          <option value="any" ${status === "any" ? "selected" : ""}>Any status</option>
+          <option value="draft" ${status === "draft" ? "selected" : ""}>Draft</option>
+          <option value="published" ${status === "published" ? "selected" : ""}>Published</option>
+          <option value="scheduled" ${status === "scheduled" ? "selected" : ""}>Scheduled</option>
+        </select>
+        <button class="button" type="submit">Filter</button>
+      </div>
+    </form>
     <table>
       <thead><tr><th>Title</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
@@ -501,14 +635,17 @@ adminRoutes.get("/pages", async (c) => {
 
 adminRoutes.get("/pages/new", (c) => {
   const user = c.get("sessionUser");
-  return c.html(adminLayout("New Page", user, pageForm(`${config.controlPanelPath}/pages`)));
+  return c.html(adminLayout("New Page", user, queryNotice(c) + pageForm(`${config.controlPanelPath}/pages`)));
 });
 
 adminRoutes.get("/forms", async (c) => {
   const user = c.get("sessionUser");
-  const forms = await listForms("any");
+  const q = c.req.query("q") ?? "";
+  const status = (c.req.query("status") ?? "any") as "draft" | "published" | "any";
+  const forms = await listForms(status, q || undefined);
   const recaptchaEnabled = Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey);
   const body = `
+    ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;">
       <a class="button button-primary" href="${config.controlPanelPath}/forms/new">New form</a>
     </div>
@@ -516,6 +653,17 @@ adminRoutes.get("/forms", async (c) => {
       reCAPTCHA v3: ${recaptchaEnabled ? "enabled" : "disabled"}.
       ${recaptchaEnabled ? "Published forms will request and verify tokens on submission." : "Set RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY in .env to enable spam protection."}
     </p>
+    <form method="get" action="${config.controlPanelPath}/forms" class="form-grid" style="margin-bottom:16px;">
+      <div class="row">
+        <input name="q" value="${escapeHtml(q)}" placeholder="Search title or slug" />
+        <select name="status">
+          <option value="any" ${status === "any" ? "selected" : ""}>Any status</option>
+          <option value="draft" ${status === "draft" ? "selected" : ""}>Draft</option>
+          <option value="published" ${status === "published" ? "selected" : ""}>Published</option>
+        </select>
+        <button class="button" type="submit">Filter</button>
+      </div>
+    </form>
     <table>
       <thead><tr><th>Title</th><th>Status</th><th>Fields</th><th>Actions</th></tr></thead>
       <tbody>
@@ -546,7 +694,7 @@ adminRoutes.get("/forms", async (c) => {
 
 adminRoutes.get("/forms/new", (c) => {
   const user = c.get("sessionUser");
-  return c.html(adminLayout("New Form", user, formBuilderForm(`${config.controlPanelPath}/forms`)));
+  return c.html(adminLayout("New Form", user, queryNotice(c) + formBuilderForm(`${config.controlPanelPath}/forms`)));
 });
 
 adminRoutes.post("/forms", async (c) => {
@@ -555,18 +703,27 @@ adminRoutes.post("/forms", async (c) => {
     return c.redirect("/login");
   }
   const form = await c.req.formData();
-  const created = await createForm(
-    {
-      title: String(form.get("title") ?? ""),
-      slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
-      description: String(form.get("description") ?? ""),
-      status: (String(form.get("status") ?? "draft") as "draft" | "published"),
-      submitLabel: String(form.get("submitLabel") ?? "Send"),
-      successMessage: String(form.get("successMessage") ?? "Thank you. Your submission has been received."),
-      fields: parseFieldsSpec(String(form.get("fieldsSpec") ?? "")),
-    },
-    user.id,
-  );
+  const values = formValuesFromForm(form);
+  let created;
+  try {
+    created = await createForm(
+      {
+        title: values.title,
+        slug: values.slug,
+        description: values.description,
+        status: values.status as "draft" | "published",
+        submitLabel: values.submitLabel,
+        successMessage: values.successMessage,
+        fields: parseFieldsSpec(values.fieldsSpec),
+      },
+      user.id,
+    );
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.html(adminLayout("New Form", user, noticeCard(error.message, "error") + formBuilderForm(`${config.controlPanelPath}/forms`, values)), 400);
+    }
+    throw error;
+  }
   await writeAuditLog({
     actorUserId: user.id,
     action: "form.create",
@@ -576,7 +733,7 @@ adminRoutes.post("/forms", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/forms/${created?.id ?? ""}/edit`);
+  return c.redirect(`${config.controlPanelPath}/forms/${created?.id ?? ""}/edit?success=${encodeURIComponent("Form saved.")}`);
 });
 
 adminRoutes.get("/forms/:id/edit", async (c) => {
@@ -588,7 +745,7 @@ adminRoutes.get("/forms/:id/edit", async (c) => {
   const recaptchaEnabled = Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey);
   const submissions = await listFormSubmissions(form.id);
   const body =
-    formBuilderForm(`${config.controlPanelPath}/forms/${form.id}`, {
+    queryNotice(c) + formBuilderForm(`${config.controlPanelPath}/forms/${form.id}`, {
       title: form.title,
       slug: form.slug,
       description: form.description ?? "",
@@ -625,15 +782,49 @@ adminRoutes.get("/forms/:id/edit", async (c) => {
 
 adminRoutes.post("/forms/:id", async (c) => {
   const form = await c.req.formData();
-  await updateForm(Number(c.req.param("id")), {
-    title: String(form.get("title") ?? ""),
-    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
-    description: String(form.get("description") ?? ""),
-    status: String(form.get("status") ?? "draft") as "draft" | "published",
-    submitLabel: String(form.get("submitLabel") ?? "Send"),
-    successMessage: String(form.get("successMessage") ?? "Thank you. Your submission has been received."),
-    fields: parseFieldsSpec(String(form.get("fieldsSpec") ?? "")),
-  });
+  const user = c.get("sessionUser");
+  const existing = await getFormById(Number(c.req.param("id")));
+  const submissions = existing ? await listFormSubmissions(existing.id) : [];
+  const values = formValuesFromForm(form);
+  try {
+    await updateForm(Number(c.req.param("id")), {
+      title: values.title,
+      slug: values.slug,
+      description: values.description,
+      status: values.status as "draft" | "published",
+      submitLabel: values.submitLabel,
+      successMessage: values.successMessage,
+      fields: parseFieldsSpec(values.fieldsSpec),
+    });
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      const submissionsTable = `
+        <div style="margin-top:20px;">
+          <p class="meta">reCAPTCHA v3 is currently ${Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey) ? "enabled" : "disabled"} for published forms.</p>
+          <div class="row" style="justify-content:space-between; align-items:center;">
+            <h2 style="margin-bottom:0;">Submissions</h2>
+            <a class="button" href="/cms/forms/${values.slug}.html">Open published form</a>
+          </div>
+          <table>
+            <thead><tr><th>When</th><th>Payload</th></tr></thead>
+            <tbody>
+              ${submissions
+                .map(
+                  (submission) => `
+                    <tr>
+                      <td>${new Date(submission.createdAt).toLocaleString("en-US")}</td>
+                      <td><code>${escapeHtml(JSON.stringify(submission.payload))}</code></td>
+                    </tr>`,
+                )
+                .join("") || "<tr><td colspan='2'>No submissions yet.</td></tr>"}
+            </tbody>
+          </table>
+        </div>
+      `;
+      return c.html(adminLayout("Edit Form", user, noticeCard(error.message, "error") + formBuilderForm(`${config.controlPanelPath}/forms/${c.req.param("id")}`, values) + submissionsTable), 400);
+    }
+    throw error;
+  }
   await writeAuditLog({
     actorUserId: c.get("sessionUser")?.id ?? null,
     action: "form.update",
@@ -643,7 +834,7 @@ adminRoutes.post("/forms/:id", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/forms/${c.req.param("id")}/edit`);
+  return c.redirect(`${config.controlPanelPath}/forms/${c.req.param("id")}/edit?success=${encodeURIComponent("Form updated.")}`);
 });
 
 adminRoutes.post("/forms/:id/delete", async (c) => {
@@ -667,22 +858,31 @@ adminRoutes.post("/pages", async (c) => {
   }
 
   const form = await c.req.formData();
-  const page = await createPage(
-    {
-      title: String(form.get("title") ?? ""),
-      slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
-      excerpt: String(form.get("excerpt") ?? ""),
-      bodyMd: String(form.get("bodyMd") ?? ""),
-      bodyHtml: String(form.get("bodyHtml") ?? ""),
-      status: String(form.get("status") ?? "draft") as "draft" | "published" | "scheduled",
-      publishedAt: String(form.get("publishedAt") ?? "") || null,
-      seoTitle: String(form.get("seoTitle") ?? ""),
-      seoDescription: String(form.get("seoDescription") ?? ""),
-      seoNoindex: form.has("seoNoindex"),
-      seoNofollow: form.has("seoNofollow"),
-    },
-    user.id,
-  );
+  const values = pageValuesFromForm(form);
+  let page;
+  try {
+    page = await createPage(
+      {
+        title: values.title,
+        slug: values.slug,
+        excerpt: values.excerpt,
+        bodyMd: values.bodyMd,
+        bodyHtml: values.bodyHtml,
+        status: values.status as "draft" | "published" | "scheduled",
+        publishedAt: values.publishedAt || null,
+        seoTitle: values.seoTitle,
+        seoDescription: values.seoDescription,
+        seoNoindex: values.seoNoindex === "true",
+        seoNofollow: values.seoNofollow === "true",
+      },
+      user.id,
+    );
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.html(adminLayout("New Page", user, noticeCard(error.message, "error") + pageForm(`${config.controlPanelPath}/pages`, values)), 400);
+    }
+    throw error;
+  }
 
   await writeAuditLog({
     actorUserId: user.id,
@@ -693,7 +893,7 @@ adminRoutes.post("/pages", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/pages/${page?.id ?? ""}/edit`);
+  return c.redirect(`${config.controlPanelPath}/pages/${page?.id ?? ""}/edit?success=${encodeURIComponent("Page saved.")}`);
 });
 
 adminRoutes.get("/pages/:id/edit", async (c) => {
@@ -708,7 +908,7 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
     adminLayout(
       "Edit Page",
       user,
-      pageForm(`${config.controlPanelPath}/pages/${page.id}`, {
+      queryNotice(c) + pageForm(`${config.controlPanelPath}/pages/${page.id}`, {
         title: page.title,
         slug: page.slug,
         excerpt: page.excerpt ?? "",
@@ -733,19 +933,43 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
 
 adminRoutes.post("/pages/:id", async (c) => {
   const form = await c.req.formData();
-  await updatePage(Number(c.req.param("id")), {
-    title: String(form.get("title") ?? ""),
-    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
-    excerpt: String(form.get("excerpt") ?? ""),
-    bodyMd: String(form.get("bodyMd") ?? ""),
-    bodyHtml: String(form.get("bodyHtml") ?? ""),
-    status: String(form.get("status") ?? "draft") as "draft" | "published" | "scheduled",
-    publishedAt: String(form.get("publishedAt") ?? "") || null,
-    seoTitle: String(form.get("seoTitle") ?? ""),
-    seoDescription: String(form.get("seoDescription") ?? ""),
-    seoNoindex: form.has("seoNoindex"),
-    seoNofollow: form.has("seoNofollow"),
-  });
+  const user = c.get("sessionUser");
+  const mediaItems = await listMedia();
+  const values = pageValuesFromForm(form);
+  try {
+    await updatePage(Number(c.req.param("id")), {
+      title: values.title,
+      slug: values.slug,
+      excerpt: values.excerpt,
+      bodyMd: values.bodyMd,
+      bodyHtml: values.bodyHtml,
+      status: values.status as "draft" | "published" | "scheduled",
+      publishedAt: values.publishedAt || null,
+      seoTitle: values.seoTitle,
+      seoDescription: values.seoDescription,
+      seoNoindex: values.seoNoindex === "true",
+      seoNofollow: values.seoNofollow === "true",
+    });
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.html(
+        adminLayout(
+          "Edit Page",
+          user,
+          noticeCard(error.message, "error") +
+            pageForm(`${config.controlPanelPath}/pages/${c.req.param("id")}`, values) +
+            snapshotHelperCard(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit`, [
+              "index.html",
+              "about.php",
+              `cms/pages/${values.slug || "page"}.html`,
+            ]) +
+            mediaHelperCard(mediaItems),
+        ),
+        400,
+      );
+    }
+    throw error;
+  }
 
   await writeAuditLog({
     actorUserId: c.get("sessionUser")?.id ?? null,
@@ -756,7 +980,7 @@ adminRoutes.post("/pages/:id", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit`);
+  return c.redirect(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit?success=${encodeURIComponent("Page updated.")}`);
 });
 
 adminRoutes.post("/pages/:id/delete", async (c) => {
@@ -903,6 +1127,7 @@ adminRoutes.get("/snapshots", async (c) => {
   const user = c.get("sessionUser");
   const items = await listFileSnapshots(150);
   const body = `
+    ${queryNotice(c)}
     <div class="grid">
       <article>
         <h2>Create snapshot</h2>
@@ -964,7 +1189,13 @@ adminRoutes.post("/snapshots", async (c) => {
   const relativePath = String(form.get("relativePath") ?? "");
   const reason = String(form.get("reason") ?? "");
   const returnTo = String(form.get("returnTo") ?? "");
-  const snapshot = await createFileSnapshot(relativePath, user.id, reason);
+  let snapshot;
+  try {
+    snapshot = await createFileSnapshot(relativePath, user.id, reason);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to create snapshot.";
+    return c.redirect(`${config.controlPanelPath}/snapshots?error=${encodeURIComponent(message)}`);
+  }
 
   await writeAuditLog({
     actorUserId: user.id,
@@ -975,7 +1206,9 @@ adminRoutes.post("/snapshots", async (c) => {
     ipAddress: requestIp(c),
   });
 
-  return c.redirect(returnTo || `${config.controlPanelPath}/snapshots`);
+  const target = returnTo || `${config.controlPanelPath}/snapshots`;
+  const separator = target.includes("?") ? "&" : "?";
+  return c.redirect(`${target}${separator}success=${encodeURIComponent("Snapshot created.")}`);
 });
 
 adminRoutes.get("/snapshots/:id/preview", async (c) => {
@@ -1054,10 +1287,16 @@ adminRoutes.post("/snapshots/:id/restore", async (c) => {
   const form = await c.req.formData();
   const confirmText = String(form.get("confirmText") ?? "");
   if (confirmText !== "RESTORE") {
-    return c.text("Confirmation text did not match.", 400);
+    return c.redirect(`${config.controlPanelPath}/snapshots?error=${encodeURIComponent("Confirmation text did not match.")}`);
   }
 
-  const restored = await restoreFileSnapshot(Number(c.req.param("id")));
+  let restored;
+  try {
+    restored = await restoreFileSnapshot(Number(c.req.param("id")));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to restore snapshot.";
+    return c.redirect(`${config.controlPanelPath}/snapshots?error=${encodeURIComponent(message)}`);
+  }
   await writeAuditLog({
     actorUserId: user.id,
     action: "snapshot.restore",
@@ -1067,5 +1306,5 @@ adminRoutes.post("/snapshots/:id/restore", async (c) => {
     ipAddress: requestIp(c),
   });
 
-  return c.redirect(`${config.controlPanelPath}/snapshots`);
+  return c.redirect(`${config.controlPanelPath}/snapshots?success=${encodeURIComponent(`Restored ${restored.relativePath}.`)}`);
 });

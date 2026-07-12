@@ -1,5 +1,12 @@
 import { sql, withTransaction } from "./db";
 import { renderMarkdownLike, sanitizeRichHtml } from "./content";
+import {
+  AppValidationError,
+  isUniqueConstraintError,
+  requireNonEmpty,
+  validateScheduledState,
+  validateSlug,
+} from "./validation";
 import type { PostInput, PostRecord } from "./types";
 
 function normalizePost(row: Record<string, unknown>): PostRecord {
@@ -29,6 +36,12 @@ function deriveBodyHtml(input: PostInput) {
     return sanitizeRichHtml(input.bodyHtml);
   }
   return renderMarkdownLike(input.bodyMd ?? "");
+}
+
+function validatePostInput(input: PostInput) {
+  requireNonEmpty(input.title, "Title");
+  validateSlug(input.slug);
+  validateScheduledState(input.status, input.publishedAt);
 }
 
 async function ensureTerms(type: "category" | "tag", slugs: string[]) {
@@ -190,76 +203,93 @@ export async function getPostById(id: number) {
 }
 
 export async function createPost(input: PostInput, authorId: number) {
+  validatePostInput(input);
   const bodyHtml = deriveBodyHtml(input);
   const categorySlugs = (input.categorySlugs ?? []).filter(Boolean);
   const tagSlugs = (input.tagSlugs ?? []).filter(Boolean);
 
-  const result = await withTransaction(async (trx) => {
-    const rows = await trx`
-      insert into posts (
-        title,
-        slug,
-        excerpt,
-        body_md,
-        body_html,
-        status,
-        author_id,
-        published_at,
-        seo_title,
-        seo_description,
-        seo_noindex,
-        seo_nofollow
-      ) values (
-        ${input.title},
-        ${input.slug},
-        ${input.excerpt ?? null},
-        ${input.bodyMd ?? null},
-        ${bodyHtml},
-        ${input.status},
-        ${authorId},
-        ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
-        ${input.seoTitle ?? null},
-        ${input.seoDescription ?? null},
-        ${input.seoNoindex ?? false},
-        ${input.seoNofollow ?? false}
-      )
-      returning id
-    `;
+  let result: number;
+  try {
+    result = await withTransaction(async (trx) => {
+      const rows = await trx`
+        insert into posts (
+          title,
+          slug,
+          excerpt,
+          body_md,
+          body_html,
+          status,
+          author_id,
+          published_at,
+          seo_title,
+          seo_description,
+          seo_noindex,
+          seo_nofollow
+        ) values (
+          ${input.title},
+          ${input.slug},
+          ${input.excerpt ?? null},
+          ${input.bodyMd ?? null},
+          ${bodyHtml},
+          ${input.status},
+          ${authorId},
+          ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
+          ${input.seoTitle ?? null},
+          ${input.seoDescription ?? null},
+          ${input.seoNoindex ?? false},
+          ${input.seoNofollow ?? false}
+        )
+        returning id
+      `;
 
-    const postId = Number(rows[0].id);
-    await syncTerms(postId, categorySlugs, tagSlugs, trx as typeof sql);
-    return postId;
-  });
+      const postId = Number(rows[0].id);
+      await syncTerms(postId, categorySlugs, tagSlugs, trx as typeof sql);
+      return postId;
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppValidationError(`Slug "${input.slug}" is already in use.`);
+    }
+    throw error;
+  }
 
   return getPostById(result);
 }
 
 export async function updatePost(id: number, input: PostInput) {
+  validatePostInput(input);
   const bodyHtml = deriveBodyHtml(input);
   const categorySlugs = (input.categorySlugs ?? []).filter(Boolean);
   const tagSlugs = (input.tagSlugs ?? []).filter(Boolean);
 
-  await withTransaction(async (trx) => {
-    await trx`
-      update posts
-      set
-        title = ${input.title},
-        slug = ${input.slug},
-        excerpt = ${input.excerpt ?? null},
-        body_md = ${input.bodyMd ?? null},
-        body_html = ${bodyHtml},
-        status = ${input.status},
-        published_at = ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
-        seo_title = ${input.seoTitle ?? null},
-        seo_description = ${input.seoDescription ?? null},
-        seo_noindex = ${input.seoNoindex ?? false},
-        seo_nofollow = ${input.seoNofollow ?? false},
-        updated_at = now()
-      where id = ${id}
-    `;
+  try {
+    await withTransaction(async (trx) => {
+      await trx`
+        update posts
+        set
+          title = ${input.title},
+          slug = ${input.slug},
+          excerpt = ${input.excerpt ?? null},
+          body_md = ${input.bodyMd ?? null},
+          body_html = ${bodyHtml},
+          status = ${input.status},
+          published_at = ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
+          seo_title = ${input.seoTitle ?? null},
+          seo_description = ${input.seoDescription ?? null},
+          seo_noindex = ${input.seoNoindex ?? false},
+          seo_nofollow = ${input.seoNofollow ?? false},
+          updated_at = now()
+        where id = ${id}
+      `;
 
-    await syncTerms(id, categorySlugs, tagSlugs, trx as typeof sql);
-  });
+      await syncTerms(id, categorySlugs, tagSlugs, trx as typeof sql);
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppValidationError(`Slug "${input.slug}" is already in use.`);
+    }
+    throw error;
+  }
 
   return getPostById(id);
 }

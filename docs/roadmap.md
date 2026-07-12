@@ -69,10 +69,13 @@ The core coexistence model is already working:
 - `[Done]` cookie-based authentication
 - `[Done]` role-aware admin access checks
 - `[Done]` audit logs for auth, publishing, media, regeneration, form blocking, and snapshots
+- `[Done]` admin search and filtering for posts, pages, and forms
+- `[Done]` validation feedback for slugs, publish state, and duplicate content in the admin UI
 - `[Done]` file snapshots for safe text-based files inside `public_html`
 - `[Done]` diff preview before snapshot restore
 - `[Done]` explicit confirmation step before snapshot restore
 - `[Done]` quick snapshot creation from post and page edit screens
+- `[Done]` restore success and error feedback in the UI
 - `[Done]` hidden-dot-path blocking for public static file serving
 
 ## Unfinished
@@ -86,14 +89,11 @@ The core coexistence model is already working:
 - `[Next]` snapshot restore rollback flow
 - `[Next]` PostgreSQL data backup and restore workflows
 - `[Next]` better diff visualization for long files
-- `[Next]` restore success and error feedback in the UI
 
 #### Editor usability
 
 - `[Next]` media picker inside post and page editing
 - `[Next]` richer content editing experience
-- `[Next]` better search and filtering in admin lists
-- `[Next]` validation feedback for slugs, publish state, and duplicate content
 
 #### Security hardening
 

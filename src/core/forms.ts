@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { config } from "./config";
 import { escapeHtml } from "./content";
 import { sql, withTransaction } from "./db";
+import { AppValidationError, isUniqueConstraintError, requireNonEmpty, validateSlug } from "./validation";
 import type { FormFieldRecord, FormInput, FormRecord, FormFieldType } from "./types";
 
 type RawFormRow = Record<string, unknown>;
@@ -39,16 +40,22 @@ function normalizeForm(row: RawFormRow, fields: FormFieldRecord[]): FormRecord {
 
 function validateFields(fields: FormInput["fields"]) {
   if (fields.length === 0) {
-    throw new Error("At least one field is required.");
+    throw new AppValidationError("At least one field is required.");
   }
   for (const field of fields) {
     if (!field.name.trim() || !field.label.trim()) {
-      throw new Error("Each field needs a name and label.");
+      throw new AppValidationError("Each field needs a name and label.");
     }
     if (field.type === "select" && (!field.options || field.options.length === 0)) {
-      throw new Error(`Select field "${field.name}" needs at least one option.`);
+      throw new AppValidationError(`Select field "${field.name}" needs at least one option.`);
     }
   }
+}
+
+function validateFormInput(input: FormInput) {
+  requireNonEmpty(input.title, "Title");
+  validateSlug(input.slug);
+  validateFields(input.fields);
 }
 
 async function getFormFields(formId: number) {
@@ -87,22 +94,31 @@ async function syncFields(formId: number, fields: FormInput["fields"], trx: type
   }
 }
 
-export async function listForms(status: "draft" | "published" | "any" = "any") {
-  const rows =
-    status === "any"
-      ? await sql`
-          select f.*, u.display_name as author_name
-          from forms f
-          left join users u on u.id = f.author_id
-          order by f.updated_at desc, f.id desc
-        `
-      : await sql`
-          select f.*, u.display_name as author_name
-          from forms f
-          left join users u on u.id = f.author_id
-          where f.status = ${status}
-          order by f.updated_at desc, f.id desc
-        `;
+export async function listForms(status: "draft" | "published" | "any" = "any", search?: string) {
+  const filters: string[] = [];
+  const params: string[] = [];
+
+  if (status !== "any") {
+    params.push(status);
+    filters.push(`f.status = $${params.length}`);
+  }
+
+  if (search?.trim()) {
+    params.push(`%${search.trim().toLowerCase()}%`);
+    filters.push(`(lower(f.title) like $${params.length} or lower(f.slug) like $${params.length})`);
+  }
+
+  const whereSql = filters.length > 0 ? `where ${filters.join(" and ")}` : "";
+  const rows = await sql.unsafe(
+    `
+      select f.*, u.display_name as author_name
+      from forms f
+      left join users u on u.id = f.author_id
+      ${whereSql}
+      order by f.updated_at desc, f.id desc
+    `,
+    params as any[],
+  );
 
   const items: FormRecord[] = [];
   for (const row of rows) {
@@ -153,52 +169,67 @@ export async function getFormBySlug(slug: string, status: "draft" | "published" 
 }
 
 export async function createForm(input: FormInput, authorId: number) {
-  validateFields(input.fields);
-  const formId = await withTransaction(async (trx) => {
-    const rows = await trx`
-      insert into forms (
-        title,
-        slug,
-        description,
-        status,
-        submit_label,
-        success_message,
-        author_id
-      ) values (
-        ${input.title},
-        ${input.slug},
-        ${input.description ?? null},
-        ${input.status},
-        ${input.submitLabel ?? "Send"},
-        ${input.successMessage ?? "Thank you. Your submission has been received."},
-        ${authorId}
-      )
-      returning id
-    `;
-    const id = Number(rows[0].id);
-    await syncFields(id, input.fields, trx as unknown as typeof sql);
-    return id;
-  });
+  validateFormInput(input);
+  let formId: number;
+  try {
+    formId = await withTransaction(async (trx) => {
+      const rows = await trx`
+        insert into forms (
+          title,
+          slug,
+          description,
+          status,
+          submit_label,
+          success_message,
+          author_id
+        ) values (
+          ${input.title},
+          ${input.slug},
+          ${input.description ?? null},
+          ${input.status},
+          ${input.submitLabel ?? "Send"},
+          ${input.successMessage ?? "Thank you. Your submission has been received."},
+          ${authorId}
+        )
+        returning id
+      `;
+      const id = Number(rows[0].id);
+      await syncFields(id, input.fields, trx as unknown as typeof sql);
+      return id;
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppValidationError(`Slug "${input.slug}" is already in use.`);
+    }
+    throw error;
+  }
   return getFormById(formId);
 }
 
 export async function updateForm(id: number, input: FormInput) {
-  validateFields(input.fields);
-  await withTransaction(async (trx) => {
-    await trx`
-      update forms
-      set
-        title = ${input.title},
-        slug = ${input.slug},
-        description = ${input.description ?? null},
-        status = ${input.status},
-        submit_label = ${input.submitLabel ?? "Send"},
-        success_message = ${input.successMessage ?? "Thank you. Your submission has been received."},
-        updated_at = now()
-      where id = ${id}
-    `;
-    await syncFields(id, input.fields, trx as unknown as typeof sql);
-  });
+  validateFormInput(input);
+  try {
+    await withTransaction(async (trx) => {
+      await trx`
+        update forms
+        set
+          title = ${input.title},
+          slug = ${input.slug},
+          description = ${input.description ?? null},
+          status = ${input.status},
+          submit_label = ${input.submitLabel ?? "Send"},
+          success_message = ${input.successMessage ?? "Thank you. Your submission has been received."},
+          updated_at = now()
+        where id = ${id}
+      `;
+      await syncFields(id, input.fields, trx as unknown as typeof sql);
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppValidationError(`Slug "${input.slug}" is already in use.`);
+    }
+    throw error;
+  }
   return getFormById(id);
 }
 
