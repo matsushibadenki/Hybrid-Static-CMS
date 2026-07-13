@@ -4,6 +4,7 @@ import { config } from "../core/config";
 import { ensureDefaultSettings } from "../core/settings";
 import { renderPublishedArtifacts } from "../core/renderer";
 import { sessionMiddleware } from "../core/auth";
+import { csrfMiddleware } from "../core/csrf";
 import { authRoutes } from "./routes/auth";
 import { apiRoutes } from "./routes/api";
 import { adminRoutes } from "./routes/admin";
@@ -12,6 +13,7 @@ import { publicRoutes } from "./routes/public";
 const app = new Hono();
 
 app.use("*", sessionMiddleware);
+app.use("*", csrfMiddleware);
 app.route("/", authRoutes);
 app.route(config.cmsApiPrefix, apiRoutes);
 app.route(config.controlPanelPath, adminRoutes);

@@ -25,10 +25,16 @@ The current codebase includes:
 - Quick snapshot creation from page and post edit screens
 - Explicit confirmation step before snapshot restore
 - Optional Google reCAPTCHA v3 verification for public form submissions
+- CSRF protection for authenticated admin and API mutations
+
+### CSRF behavior
+
+Browser requests from the control panel are protected by same-origin checks. The control panel also exposes the per-session token in its forms for integrations and progressive enhancement, so operators do not need to configure an additional value.
+
+For authenticated JSON API mutations, send the token from the current session in the `X-CSRF-Token` header. Public form submissions under `/cms-api/forms/:slug/submit` remain available to visitors and use the optional reCAPTCHA v3 protection instead.
 
 The current codebase does not yet include:
 
-- CSRF protection
 - 2FA
 - brute-force login throttling
 - encrypted API key storage

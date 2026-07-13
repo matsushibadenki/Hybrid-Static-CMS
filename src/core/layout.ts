@@ -3,6 +3,9 @@ import { escapeHtml } from "./content";
 import type { SessionUser } from "./types";
 
 export function adminLayout(title: string, user: SessionUser | null, body: string) {
+  const csrfField = user?.csrfToken
+    ? `<input type="hidden" name="_csrf" value="${escapeHtml(user.csrfToken)}" />`
+    : "";
   const nav = user
     ? `
       <nav class="shell-nav">
@@ -16,10 +19,13 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         <a href="${config.controlPanelPath}/posts/new">New post</a>
         <a href="${config.controlPanelPath}/pages/new">New page</a>
         <a href="${config.cmsApiPrefix}/posts">API</a>
-        <form method="post" action="/logout"><button type="submit">Logout</button></form>
+        <form method="post" action="/logout">${csrfField}<button type="submit">Logout</button></form>
       </nav>
     `
     : "";
+  const protectedBody = user
+    ? body.replace(/<form method="post"([^>]*)>/g, `<form method="post"$1>${csrfField}`)
+    : body;
 
   return `<!doctype html>
 <html lang="en">
@@ -163,7 +169,7 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         ${user ? `<p>Signed in as ${escapeHtml(user.displayName)}.</p>` : "<p>Sign in to manage posts and generated fragments.</p>"}
         ${nav}
       </header>
-      <section class="shell-card">${body}</section>
+      <section class="shell-card">${protectedBody}</section>
     </main>
   </body>
 </html>`;

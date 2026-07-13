@@ -32,6 +32,7 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
   const rows = await sql`
     select
       s.token,
+      s.csrf_token,
       s.expires_at,
       u.id,
       u.email,
@@ -43,7 +44,7 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
     left join roles r on r.id = ur.role_id
     where s.token = ${token}
       and s.expires_at > now()
-    group by s.token, s.expires_at, u.id
+    group by s.token, s.csrf_token, s.expires_at, u.id
     limit 1
   `;
 
@@ -58,6 +59,7 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
     email: String(rows[0].email),
     displayName: String(rows[0].display_name),
     roles: normalizeRoles(rows[0].roles),
+    csrfToken: String(rows[0].csrf_token),
   });
 
   await next();
@@ -82,11 +84,12 @@ export async function attemptLogin(c: Context, email: string, password: string) 
   }
 
   const token = randomToken();
+  const csrfToken = randomToken();
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14);
 
   await sql`
-    insert into sessions (user_id, token, expires_at)
-    values (${row.id}, ${token}, ${expiresAt.toISOString()})
+    insert into sessions (user_id, token, csrf_token, expires_at)
+    values (${row.id}, ${token}, ${csrfToken}, ${expiresAt.toISOString()})
   `;
 
   await writeAuditLog({

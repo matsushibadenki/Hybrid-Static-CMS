@@ -97,7 +97,7 @@ The core coexistence model is already working:
 
 #### Security hardening
 
-- `[Next]` CSRF protection
+- `[Done]` CSRF protection for authenticated admin and API mutations
 - `[Next]` login throttling
 - `[Next]` optional two-factor authentication
 - `[Next]` stronger cookie and proxy-aware security defaults

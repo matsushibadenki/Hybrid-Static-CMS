@@ -5,6 +5,7 @@ export type SessionUser = {
   email: string;
   displayName: string;
   roles: UserRole[];
+  csrfToken: string;
 };
 
 export type PostRecord = {
