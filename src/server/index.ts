@@ -12,12 +12,14 @@ import { publicRoutes } from "./routes/public";
 import { runScheduledJobs } from "../core/scheduler";
 import { loadPlugins } from "../core/hooks";
 import { customApiRoutes } from "../core/extensions";
+import { healthRoutes } from "./routes/health";
 
 const app = new Hono();
 
 app.use("*", sessionMiddleware);
 app.use("*", csrfMiddleware);
 app.route("/", authRoutes);
+app.route("/", healthRoutes);
 app.route(config.cmsApiPrefix, apiRoutes);
 app.route(config.controlPanelPath, adminRoutes);
 app.route("/", publicRoutes);

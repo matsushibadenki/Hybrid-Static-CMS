@@ -64,8 +64,8 @@ export const config: AppConfig = {
   googleFontsCssUrls: (process.env.GOOGLE_FONTS_CSS_URLS ?? [
     "https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&family=Noto+Sans+JP:wght@100..900&family=Noto+Sans+Mono:wght@100..900&family=Noto+Serif+JP:wght@200..900&family=Roboto:ital,wght@0,100..900;1,100..900&family=Zen+Maru+Gothic&display=swap",
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=search",
-  ].join(","))
-    .split(",")
+  ].join("|"))
+    .split("|")
     .map((url) => url.trim())
     .filter(Boolean),
 };

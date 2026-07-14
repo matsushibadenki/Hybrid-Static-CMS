@@ -9,7 +9,7 @@ Hybrid-Static-CMS is intended to be generic and open-source friendly, but the op
 - Operators manage Bun process uptime themselves
 - Operators can create PostgreSQL backups with the included CLI, but must choose and verify their own retention and off-site storage policy
 - Operators are responsible for reverse proxy TLS and access logs
-- Generated CMS artifacts are overwritten during publish/render flows
+- Generated CMS artifacts are refreshed during publish/render flows with temporary files and atomic rename-on-success
 
 ## Security notes for the current MVP
 

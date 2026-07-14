@@ -60,6 +60,15 @@ Generated outputs currently include:
 - llms.txt
 - embed script
 
+## Health checks
+
+The application exposes two unauthenticated operational endpoints:
+
+- `/healthz` returns HTTP 200 when the Bun process is responding.
+- `/readyz` checks the PostgreSQL connection, `PUBLIC_HTML_DIR`, and `CMS_OUTPUT_DIR`. It returns HTTP 200 when ready and HTTP 503 when a dependency is unavailable.
+
+Use `/healthz` for liveness checks and `/readyz` for load balancer, container, or supervisor readiness checks. The response does not include database credentials or connection details.
+
 Operational data also includes database-backed file snapshots for selected `public_html` files.
 
 ## Form spam protection notes

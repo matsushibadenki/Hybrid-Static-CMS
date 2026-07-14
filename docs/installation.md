@@ -47,7 +47,7 @@ Important settings:
 - `CMS_API_PREFIX`: API route prefix
 - `CMS_OUTPUT_DIR`: generated CMS output directory
 - `TEMPLATE_DIR`: optional template override directory, default `./templates`
-- `GOOGLE_FONTS_CSS_URLS`: comma-separated Google Fonts CSS URLs for generated static pages; the bundled default includes Google Sans Flex, Noto Sans JP, Noto Sans Mono, Noto Serif JP, Roboto, Zen Maru Gothic, and Material Symbols Outlined
+- `GOOGLE_FONTS_CSS_URLS`: pipe-separated (`|`) Google Fonts CSS URLs for generated static pages; the bundled default includes Google Sans Flex, Noto Sans JP, Noto Sans Mono, Noto Serif JP, Roboto, Zen Maru Gothic, and Material Symbols Outlined
 
 ## Local setup
 
@@ -122,7 +122,7 @@ Copy `templates/page.html.example` to `templates/page.html` to override the gene
 
 The built-in template uses an editorial magazine layout: a paper-texture background, masthead, fine rules, oversized headlines, and a responsive asymmetric index. It is applied to generated posts and CMS-managed pages when no `templates/page.html` override exists. Copy the example template when the site needs a different visual system; custom templates remain responsible for their own CSS and shell markup.
 
-The built-in template automatically loads the Google Fonts URLs from `GOOGLE_FONTS_CSS_URLS`. Add another Google Fonts CSS2 URL separated by a comma to make a font available, then use its family name in a template or plugin stylesheet. For privacy-sensitive or offline deployments, set the variable to an empty value and provide local font files in the custom template instead. Only `fonts.googleapis.com` and `fonts.gstatic.com` URLs are accepted.
+The built-in template automatically loads the Google Fonts URLs from `GOOGLE_FONTS_CSS_URLS`. Add another Google Fonts CSS2 URL separated by `|` to make a font available. A pipe is used because Google Fonts CSS URLs commonly contain commas in their axis definitions. If you previously used comma-separated values, change the separator to `|`. For privacy-sensitive or offline deployments, set the variable to an empty value and provide local font files in the custom template instead. Only `fonts.googleapis.com` and `fonts.gstatic.com` URLs are accepted.
 
 SEO fields include optional canonical URL, OG image URL, and comma-separated keywords. Empty fields use safe title, excerpt, canonical, and structured-data fallbacks. Canonical URLs are also used in the generated sitemap unless an entry is marked `noindex`.
 

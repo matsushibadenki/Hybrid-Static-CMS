@@ -73,6 +73,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` File snapshots for safe text files inside `public_html`
 - `[Done]` Diff preview, explicit restore confirmation, and automatic rollback snapshots
 - `[Done]` PostgreSQL backup and restore workflows
+- `[Done]` Health and readiness endpoints for PostgreSQL and generated output paths
 - `[Done]` Scheduled publishing and housekeeping jobs
 - `[Done]` Plugin hooks for rendering and audit events
 - `[Done]` Custom API extension points
@@ -85,9 +86,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 - `[Next]` Automated unit and integration tests for authentication, permissions, publishing, sanitization, forms, media, backup, and restore
 - `[Next]` GitHub Actions CI for TypeScript, tests, migration checks, and security checks
-- `[Next]` Atomic static artifact publishing with temporary files and rename-on-success
+- `[Done]` Atomic static artifact publishing with temporary files and rename-on-success
 - `[Next]` Publish preview URLs, scheduled-publishing timezone support, failure notifications, and retry handling
-- `[Next]` Health and readiness endpoints for PostgreSQL, rendering, storage, and backup status
 - `[Next]` Structured application logs and operator alert integrations
 
 ### Security and media hardening

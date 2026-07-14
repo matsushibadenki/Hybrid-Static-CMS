@@ -1,6 +1,7 @@
 import path from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { config } from "./config";
 import { escapeHtml } from "./content";
 import { renderFormArtifacts } from "./forms";
@@ -48,6 +49,17 @@ function postPublicPath(slug: string) {
 
 function pagePublicPath(slug: string) {
   return `/cms/pages/${slug}.html`;
+}
+
+async function writeArtifact(filePath: string, content: string) {
+  const temporaryPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(temporaryPath, content, "utf8");
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
 }
 
 function card(post: PostRecord, variant: "lead" | "compact" = "compact") {
@@ -569,27 +581,27 @@ export async function renderPublishedArtifacts() {
   await mkdir(pageDir, { recursive: true });
   await mkdir(cmsPageDir, { recursive: true });
 
-  await writeFile(path.join(config.cmsOutputDir, "posts", "latest.html"), renderFragment(latest.items), "utf8");
-  await writeFile(path.join(config.cmsOutputDir, "posts", "list.html"), renderList("All Posts", full.items), "utf8");
+  await writeArtifact(path.join(config.cmsOutputDir, "posts", "latest.html"), renderFragment(latest.items));
+  await writeArtifact(path.join(config.cmsOutputDir, "posts", "list.html"), renderList("All Posts", full.items));
 
   for (let page = 1; page <= totalPages; page += 1) {
     const paged = await listPosts({ page, limit: config.defaultPageSize, status: "published" });
     const html = renderList("Published Posts", paged.items, { page, totalPages });
-    await writeFile(path.join(pageDir, `${page}.html`), html, "utf8");
+    await writeArtifact(path.join(pageDir, `${page}.html`), html);
   }
 
-  await writeFile(path.join(config.cmsOutputDir, "posts", "rss.xml"), renderRss(full.items), "utf8");
+  await writeArtifact(path.join(config.cmsOutputDir, "posts", "rss.xml"), renderRss(full.items));
   for (const post of full.items) {
-    await writeFile(path.join(config.cmsOutputDir, "posts", `${post.slug}.html`), renderPost(post), "utf8");
+    await writeArtifact(path.join(config.cmsOutputDir, "posts", `${post.slug}.html`), renderPost(post));
   }
-  await writeFile(path.join(cmsPageDir, "index.html"), renderPageIndex(pages.items), "utf8");
+  await writeArtifact(path.join(cmsPageDir, "index.html"), renderPageIndex(pages.items));
   for (const page of pages.items) {
-    await writeFile(path.join(cmsPageDir, `${page.slug}.html`), await renderPage(page), "utf8");
+    await writeArtifact(path.join(cmsPageDir, `${page.slug}.html`), await renderPage(page));
   }
-  await writeFile(path.join(config.publicHtmlDir, "sitemap.xml"), renderSitemap(full.items, pages.items), "utf8");
-  await writeFile(path.join(config.publicHtmlDir, "robots.txt"), renderRobotsTxt(), "utf8");
-  await writeFile(path.join(config.publicHtmlDir, "llms.txt"), renderLlmsTxt(full.items, pages.items), "utf8");
-  await writeFile(path.join(config.cmsOutputDir, "embed.js"), renderEmbedScript(), "utf8");
+  await writeArtifact(path.join(config.publicHtmlDir, "sitemap.xml"), renderSitemap(full.items, pages.items));
+  await writeArtifact(path.join(config.publicHtmlDir, "robots.txt"), renderRobotsTxt());
+  await writeArtifact(path.join(config.publicHtmlDir, "llms.txt"), renderLlmsTxt(full.items, pages.items));
+  await writeArtifact(path.join(config.cmsOutputDir, "embed.js"), renderEmbedScript());
   await renderFormArtifacts();
   await renderMenuArtifacts();
   await emitHook("afterRender", { outputDir: config.cmsOutputDir });
