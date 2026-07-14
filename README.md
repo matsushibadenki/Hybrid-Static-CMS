@@ -26,7 +26,7 @@ Operator-facing notes now live under `docs/README.md`.
 
 - Bun + Hono server
 - TypeScript 7-compatible project configuration
-- PostgreSQL-backed posts, pages, media, users, sessions, and settings
+- PostgreSQL 18-backed posts, pages, media, users, sessions, and settings
 - Cookie-based admin authentication
 - Audit log tracking for sign-in, publishing, media, and regeneration events
 - File snapshots for safe text-based files under `public_html`

@@ -6,7 +6,7 @@ Before installing Hybrid-Static-CMS, the operator should understand these prereq
 
 - Bun runtime is required for the application server
 - TypeScript 7-compatible tooling is expected for local development
-- PostgreSQL is required for persistence and full-text search
+- PostgreSQL 18 is required for persistence and full-text search
 - PostgreSQL client tools (`pg_dump` and `psql`) are required for the optional backup and restore commands
 - A reverse proxy such as Nginx or Apache is recommended
 - The host should allow a long-running Bun process or a containerized equivalent
@@ -71,7 +71,7 @@ hybrid_static_cms
 bun run migrate
 ```
 
-Alternatively, start the app and open `/setup`. The setup wizard can run pending migrations, create the first administrator, write the main environment settings, and lock itself after an administrator exists. PostgreSQL and the database named by `DATABASE_URL` must already be available.
+Alternatively, start the app and open `/setup`. The setup wizard can run pending migrations, create the first administrator, write the main environment settings, and lock itself after an administrator exists. PostgreSQL 18 and the database named by `DATABASE_URL` must already be available.
 
 4. Seed the initial admin user and sample content.
 

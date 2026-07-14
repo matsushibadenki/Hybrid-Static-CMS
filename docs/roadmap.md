@@ -18,7 +18,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 - `[Done]` Bun + Hono application server
 - `[Done]` TypeScript 7-compatible project configuration
-- `[Done]` PostgreSQL persistence, migrations, and seed scripts
+- `[Done]` PostgreSQL 18 persistence, migrations, and seed scripts
 - `[Done]` Docker baseline for local and production deployment
 - `[Done]` Environment-based configuration and setup wizard
 - `[Done]` `public_html` coexistence architecture
