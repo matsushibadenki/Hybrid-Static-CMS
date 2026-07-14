@@ -14,8 +14,14 @@ import { deleteMedia, listMedia, uploadMedia } from "../../core/media";
 import { createPage, deletePage, getPageBySlug, listPages, updatePage } from "../../core/pages";
 import { createPost, deletePost, getPostBySlug, listPosts, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
+import { getMenuBySlug, listMenus } from "../../core/menus";
+import { getPublishedBlockBySlug, listBlocks } from "../../core/blocks";
+import { createAiFileProposal } from "../../core/aiProposals";
+import { hasPermission, requireApiPermission } from "../../core/permissions";
 
 export const apiRoutes = new Hono();
+
+apiRoutes.use("/*", requireApiPermission());
 
 apiRoutes.get("/posts", async (c) => {
   const page = Number(c.req.query("page") ?? 1);
@@ -79,6 +85,34 @@ apiRoutes.get("/forms/:slug", async (c) => {
   return c.json(form);
 });
 
+apiRoutes.get("/menus", async (c) => {
+  return c.json({ items: await listMenus("published") });
+});
+
+apiRoutes.get("/menus/:slug", async (c) => {
+  const menu = await getMenuBySlug(c.req.param("slug"));
+  return menu ? c.json(menu) : c.json({ error: "Not found" }, 404);
+});
+
+apiRoutes.get("/blocks", async (c) => c.json({ items: await listBlocks("published") }));
+apiRoutes.get("/blocks/:slug", async (c) => {
+  const block = await getPublishedBlockBySlug(c.req.param("slug"));
+  return block ? c.json(block) : c.json({ error: "Not found" }, 404);
+});
+
+apiRoutes.post("/ai/proposals", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const payload = await c.req.json();
+    const proposal = await createAiFileProposal({ relativePath: String(payload.relativePath ?? ""), proposedContent: String(payload.proposedContent ?? ""), reason: String(payload.reason ?? "") }, user.id);
+    await writeAuditLog({ actorUserId: user.id, action: "ai.proposal.create", targetType: "ai_file_proposal", targetId: proposal.id, summary: `Created AI proposal for "${proposal.relativePath}".`, ipAddress: requestIp(c) });
+    return c.json({ proposal }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Invalid proposal" }, 400);
+  }
+});
+
 apiRoutes.post("/posts", async (c) => {
   const user = c.get("sessionUser");
   if (!user) {
@@ -86,6 +120,7 @@ apiRoutes.post("/posts", async (c) => {
   }
 
   const payload = await c.req.json();
+  if (payload.status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
   const post = await createPost(
     {
       title: payload.title,
@@ -96,6 +131,9 @@ apiRoutes.post("/posts", async (c) => {
       status: payload.status ?? "draft",
       seoTitle: payload.seoTitle,
       seoDescription: payload.seoDescription,
+      seoCanonicalUrl: payload.seoCanonicalUrl,
+      seoOgImage: payload.seoOgImage,
+      seoKeywords: payload.seoKeywords,
       seoNoindex: Boolean(payload.seoNoindex),
       seoNofollow: Boolean(payload.seoNofollow),
       publishedAt: payload.publishedAt ?? null,
@@ -124,6 +162,7 @@ apiRoutes.put("/posts/:id", async (c) => {
   }
 
   const payload = await c.req.json();
+  if (payload.status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
   const post = await updatePost(Number(c.req.param("id")), {
     title: payload.title,
     slug: payload.slug || slugify(payload.title),
@@ -133,12 +172,15 @@ apiRoutes.put("/posts/:id", async (c) => {
     status: payload.status ?? "draft",
     seoTitle: payload.seoTitle,
     seoDescription: payload.seoDescription,
+    seoCanonicalUrl: payload.seoCanonicalUrl,
+    seoOgImage: payload.seoOgImage,
+    seoKeywords: payload.seoKeywords,
     seoNoindex: Boolean(payload.seoNoindex),
     seoNofollow: Boolean(payload.seoNofollow),
     publishedAt: payload.publishedAt ?? null,
     categorySlugs: payload.categorySlugs ?? [],
     tagSlugs: payload.tagSlugs ?? [],
-  });
+  }, user.id);
 
   await writeAuditLog({
     actorUserId: user.id,
@@ -178,6 +220,7 @@ apiRoutes.post("/pages", async (c) => {
   }
 
   const payload = await c.req.json();
+  if (payload.status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
   const page = await createPage(
     {
       title: payload.title,
@@ -188,6 +231,9 @@ apiRoutes.post("/pages", async (c) => {
       status: payload.status ?? "draft",
       seoTitle: payload.seoTitle,
       seoDescription: payload.seoDescription,
+      seoCanonicalUrl: payload.seoCanonicalUrl,
+      seoOgImage: payload.seoOgImage,
+      seoKeywords: payload.seoKeywords,
       seoNoindex: Boolean(payload.seoNoindex),
       seoNofollow: Boolean(payload.seoNofollow),
       publishedAt: payload.publishedAt ?? null,
@@ -214,6 +260,7 @@ apiRoutes.put("/pages/:id", async (c) => {
   }
 
   const payload = await c.req.json();
+  if (payload.status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
   const page = await updatePage(Number(c.req.param("id")), {
     title: payload.title,
     slug: payload.slug || slugify(payload.title),
@@ -223,10 +270,13 @@ apiRoutes.put("/pages/:id", async (c) => {
     status: payload.status ?? "draft",
     seoTitle: payload.seoTitle,
     seoDescription: payload.seoDescription,
+    seoCanonicalUrl: payload.seoCanonicalUrl,
+    seoOgImage: payload.seoOgImage,
+    seoKeywords: payload.seoKeywords,
     seoNoindex: Boolean(payload.seoNoindex),
     seoNofollow: Boolean(payload.seoNofollow),
     publishedAt: payload.publishedAt ?? null,
-  });
+  }, user.id);
 
   await writeAuditLog({
     actorUserId: user.id,

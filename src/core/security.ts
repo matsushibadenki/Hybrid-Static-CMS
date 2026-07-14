@@ -59,6 +59,50 @@ export function randomToken(size = 32) {
   return toBase64Url(crypto.getRandomValues(new Uint8Array(size)));
 }
 
+function decodeBase32(value: string) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const normalized = value.toUpperCase().replace(/[^A-Z2-7]/g, "");
+  const output: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const character of normalized) {
+    const digit = alphabet.indexOf(character);
+    if (digit < 0) return null;
+    buffer = (buffer << 5) | digit;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      output.push((buffer >> bits) & 0xff);
+    }
+  }
+  return new Uint8Array(output);
+}
+
+async function totpCode(secret: string, counter: number) {
+  const keyBytes = decodeBase32(secret);
+  if (!keyBytes) return null;
+  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const message = new ArrayBuffer(8);
+  new DataView(message).setBigUint64(0, BigInt(counter));
+  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, message));
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
+  return String(binary % 1_000_000).padStart(6, "0");
+}
+
+export async function verifyTotpCode(secret: string, submittedCode: string) {
+  if (!/^\d{6}$/.test(submittedCode.trim())) return false;
+  const counter = Math.floor(Date.now() / 30_000);
+  for (const offset of [-1, 0, 1]) {
+    if ((await totpCode(secret, counter + offset)) === submittedCode.trim()) return true;
+  }
+  return false;
+}
+
 type RecaptchaVerificationResult = {
   ok: boolean;
   score: number | null;

@@ -7,7 +7,7 @@ Hybrid-Static-CMS is intended to be generic and open-source friendly, but the op
 ## Current operational expectations
 
 - Operators manage Bun process uptime themselves
-- Operators manage PostgreSQL backups themselves
+- Operators can create PostgreSQL backups with the included CLI, but must choose and verify their own retention and off-site storage policy
 - Operators are responsible for reverse proxy TLS and access logs
 - Generated CMS artifacts are overwritten during publish/render flows
 
@@ -26,6 +26,42 @@ The current codebase includes:
 - Explicit confirmation step before snapshot restore
 - Optional Google reCAPTCHA v3 verification for public form submissions
 - CSRF protection for authenticated admin and API mutations
+- Media picker buttons in post and page editing for image, video, audio, and PDF snippets
+- Revision history for posts and pages, including restore through the normal validation and publishing flow
+- Automatic pre-restore snapshots and rollback links for file snapshot restoration
+- Basic Body HTML authoring toolbar for common formatting and links
+- Canonical URL, OG image, and keyword controls with automatic metadata fallbacks
+- Audit log filtering by actor, target text, summary, and exact action
+- Dashboard notifications for important authentication, deletion, restore, and revision actions
+- A lightweight scheduled job that publishes due content and removes expired sessions and stale login-attempt records
+- AI file proposals with protected paths, diff review, approval, rejection, and automatic pre-apply snapshots
+- First-run setup wizard at `/setup`, locked automatically after the first administrator is created
+- Database-backed login throttling by client IP and email key
+- Optional deployment-wide TOTP two-factor login
+
+### PostgreSQL backup and restore
+
+The repository includes portable SQL backup commands. The host running the commands must have the PostgreSQL client tools `pg_dump` and `psql` installed, and `DATABASE_URL` must point to the target database.
+
+Create a backup in the Git-ignored `storage/backups` directory:
+
+```bash
+bun run db:backup
+```
+
+Choose an explicit output path when needed:
+
+```bash
+bun run db:backup -- --output /safe/backup/location/hybrid-static-cms.sql
+```
+
+Restore only after confirming the target database and taking a current backup. Restoration can replace tables included in the dump:
+
+```bash
+bun run db:restore -- --input /safe/backup/location/hybrid-static-cms.sql --confirm
+```
+
+The commands read connection details from `DATABASE_URL` without printing the password. Backup files are created with owner-only permissions and may contain password hashes, user records, and form submissions; store them in protected, encrypted, access-controlled storage. They do not back up `public_html` uploads or hand-edited files; back up those directories separately when the site requires them.
 
 ### CSRF behavior
 
@@ -35,10 +71,7 @@ For authenticated JSON API mutations, send the token from the current session in
 
 The current codebase does not yet include:
 
-- 2FA
-- brute-force login throttling
 - encrypted API key storage
-- file snapshot rollback
 
 For any public deployment, treat the current repository as an MVP foundation rather than a finished hardened CMS.
 
@@ -62,6 +95,9 @@ This means installation users should know:
 
 - Change the seeded admin password immediately
 - Use a strong `SESSION_SECRET`
+- Set `COOKIE_SECURE=true` when serving through HTTPS if automatic detection is not sufficient
+- Set `TRUST_PROXY=true` only behind a proxy you control; otherwise forwarded client-IP headers are ignored
+- Enable `TWO_FACTOR_ENABLED=true` with a protected Base32 `TWO_FACTOR_SECRET` for an additional login factor
 - Configure `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` before exposing public forms
 - Restrict direct server access
 - Put the app behind HTTPS

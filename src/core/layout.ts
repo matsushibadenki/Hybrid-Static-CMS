@@ -1,24 +1,32 @@
 import { config } from "./config";
 import { escapeHtml } from "./content";
 import type { SessionUser } from "./types";
+import { listAdminLinks } from "./extensions";
+import { hasPermission } from "./permissions";
 
 export function adminLayout(title: string, user: SessionUser | null, body: string) {
   const csrfField = user?.csrfToken
     ? `<input type="hidden" name="_csrf" value="${escapeHtml(user.csrfToken)}" />`
     : "";
+  const can = (permission: Parameters<typeof hasPermission>[1]) => Boolean(user && hasPermission(user, permission));
   const nav = user
     ? `
       <nav class="shell-nav">
         <a href="${config.controlPanelPath}">Dashboard</a>
-        <a href="${config.controlPanelPath}/posts">Posts</a>
-        <a href="${config.controlPanelPath}/pages">Pages</a>
-        <a href="${config.controlPanelPath}/forms">Forms</a>
-        <a href="${config.controlPanelPath}/media">Media</a>
-        <a href="${config.controlPanelPath}/logs">Logs</a>
-        <a href="${config.controlPanelPath}/snapshots">Snapshots</a>
-        <a href="${config.controlPanelPath}/posts/new">New post</a>
-        <a href="${config.controlPanelPath}/pages/new">New page</a>
+        ${can("posts.read") ? `<a href="${config.controlPanelPath}/posts">Posts</a>` : ""}
+        ${can("pages.read") ? `<a href="${config.controlPanelPath}/pages">Pages</a>` : ""}
+        ${can("forms.read") ? `<a href="${config.controlPanelPath}/forms">Forms</a>` : ""}
+        ${can("menus.read") ? `<a href="${config.controlPanelPath}/menus">Menus</a>` : ""}
+        ${can("blocks.read") ? `<a href="${config.controlPanelPath}/blocks">Blocks</a>` : ""}
+        ${can("ai.review") ? `<a href="${config.controlPanelPath}/proposals">AI proposals</a>` : ""}
+        ${can("media.read") ? `<a href="${config.controlPanelPath}/media">Media</a>` : ""}
+        ${can("users.manage") ? `<a href="${config.controlPanelPath}/users">Users</a>` : ""}
+        ${can("audit.read") ? `<a href="${config.controlPanelPath}/logs">Logs</a>` : ""}
+        ${can("snapshots.read") ? `<a href="${config.controlPanelPath}/snapshots">Snapshots</a>` : ""}
+        ${can("posts.write") ? `<a href="${config.controlPanelPath}/posts/new">New post</a>` : ""}
+        ${can("pages.write") ? `<a href="${config.controlPanelPath}/pages/new">New page</a>` : ""}
         <a href="${config.cmsApiPrefix}/posts">API</a>
+        ${listAdminLinks().map((link) => `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`).join("")}
         <form method="post" action="/logout">${csrfField}<button type="submit">Logout</button></form>
       </nav>
     `

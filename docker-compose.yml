@@ -23,11 +23,19 @@ services:
       RECAPTCHA_SITE_KEY: ${RECAPTCHA_SITE_KEY:-}
       RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY:-}
       RECAPTCHA_MIN_SCORE: ${RECAPTCHA_MIN_SCORE:-0.5}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-8}
+      LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-900}
+      TWO_FACTOR_ENABLED: ${TWO_FACTOR_ENABLED:-false}
+      TWO_FACTOR_SECRET: ${TWO_FACTOR_SECRET:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
       PUBLIC_HTML_DIR: /app/public_html
       CONTROL_PANEL_PATH: /control-panel
       CMS_API_PREFIX: /cms-api
       CMS_OUTPUT_DIR: /app/public_html/cms
       CMS_UPLOAD_DIR: /app/public_html/cms/uploads
+      TEMPLATE_DIR: /app/templates
+      PLUGIN_DIR: /app/plugins
       DEFAULT_PAGE_SIZE: 10
     ports:
       - "3000:3000"

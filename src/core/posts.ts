@@ -8,6 +8,7 @@ import {
   validateSlug,
 } from "./validation";
 import type { PostInput, PostRecord } from "./types";
+import { createContentRevision } from "./revisions";
 
 function normalizePost(row: Record<string, unknown>): PostRecord {
   return {
@@ -20,6 +21,9 @@ function normalizePost(row: Record<string, unknown>): PostRecord {
     status: row.status as PostRecord["status"],
     seoTitle: (row.seo_title as string | null) ?? null,
     seoDescription: (row.seo_description as string | null) ?? null,
+    seoCanonicalUrl: (row.seo_canonical_url as string | null) ?? null,
+    seoOgImage: (row.seo_og_image as string | null) ?? null,
+    seoKeywords: (row.seo_keywords as string | null) ?? null,
     seoNoindex: Boolean(row.seo_noindex),
     seoNofollow: Boolean(row.seo_nofollow),
     publishedAt: row.published_at ? String(row.published_at) : null,
@@ -92,6 +96,9 @@ const basePostQuery = sql`
     p.status,
     p.seo_title,
     p.seo_description,
+    p.seo_canonical_url,
+    p.seo_og_image,
+    p.seo_keywords,
     p.seo_noindex,
     p.seo_nofollow,
     p.published_at,
@@ -223,6 +230,9 @@ export async function createPost(input: PostInput, authorId: number) {
           published_at,
           seo_title,
           seo_description,
+          seo_canonical_url,
+          seo_og_image,
+          seo_keywords,
           seo_noindex,
           seo_nofollow
         ) values (
@@ -236,6 +246,9 @@ export async function createPost(input: PostInput, authorId: number) {
           ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
           ${input.seoTitle ?? null},
           ${input.seoDescription ?? null},
+          ${input.seoCanonicalUrl ?? null},
+          ${input.seoOgImage ?? null},
+          ${input.seoKeywords ?? null},
           ${input.seoNoindex ?? false},
           ${input.seoNofollow ?? false}
         )
@@ -256,8 +269,9 @@ export async function createPost(input: PostInput, authorId: number) {
   return getPostById(result);
 }
 
-export async function updatePost(id: number, input: PostInput) {
+export async function updatePost(id: number, input: PostInput, actorUserId?: number | null) {
   validatePostInput(input);
+  const previous = await getPostById(id);
   const bodyHtml = deriveBodyHtml(input);
   const categorySlugs = (input.categorySlugs ?? []).filter(Boolean);
   const tagSlugs = (input.tagSlugs ?? []).filter(Boolean);
@@ -276,6 +290,9 @@ export async function updatePost(id: number, input: PostInput) {
           published_at = ${input.publishedAt ?? (input.status === "published" ? new Date().toISOString() : null)},
           seo_title = ${input.seoTitle ?? null},
           seo_description = ${input.seoDescription ?? null},
+          seo_canonical_url = ${input.seoCanonicalUrl ?? null},
+          seo_og_image = ${input.seoOgImage ?? null},
+          seo_keywords = ${input.seoKeywords ?? null},
           seo_noindex = ${input.seoNoindex ?? false},
           seo_nofollow = ${input.seoNofollow ?? false},
           updated_at = now()
@@ -289,6 +306,10 @@ export async function updatePost(id: number, input: PostInput) {
       throw new AppValidationError(`Slug "${input.slug}" is already in use.`);
     }
     throw error;
+  }
+
+  if (previous) {
+    await createContentRevision("post", id, previous, actorUserId ?? previous.authorId);
   }
 
   return getPostById(id);

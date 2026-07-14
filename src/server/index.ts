@@ -9,6 +9,9 @@ import { authRoutes } from "./routes/auth";
 import { apiRoutes } from "./routes/api";
 import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
+import { runScheduledJobs } from "../core/scheduler";
+import { loadPlugins } from "../core/hooks";
+import { customApiRoutes } from "../core/extensions";
 
 const app = new Hono();
 
@@ -26,10 +29,30 @@ app.onError((error, c) => {
   return c.text("Internal Server Error", 500);
 });
 
-await ensureDefaultSettings();
+await ensureDefaultSettings().catch((error) => {
+  console.warn("Initial settings are not ready; complete /setup after database migration:", error);
+});
+await loadPlugins();
+app.route(config.cmsApiPrefix, customApiRoutes);
 await renderPublishedArtifacts().catch((error) => {
   console.warn("Initial artifact rendering skipped:", error);
 });
+
+let scheduledJobRunning = false;
+setInterval(async () => {
+  if (scheduledJobRunning) return;
+  scheduledJobRunning = true;
+  try {
+    const result = await runScheduledJobs();
+    if (result.publishedPosts || result.publishedPages) {
+      await renderPublishedArtifacts();
+    }
+  } catch (error) {
+    console.warn("Scheduled maintenance skipped:", error);
+  } finally {
+    scheduledJobRunning = false;
+  }
+}, 60_000);
 
 serve(
   {

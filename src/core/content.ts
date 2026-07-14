@@ -15,6 +15,10 @@ export function renderMarkdownLike(markdown: string) {
     .map((block) => block.trim())
     .filter(Boolean)
     .map((block) => {
+      if (block.startsWith("```mermaid") && block.endsWith("```")) {
+        const chart = block.slice("```mermaid".length, -3).trim();
+        return `<pre><code class="language-mermaid">${escapeHtml(chart)}</code></pre>`;
+      }
       if (block.startsWith("## ")) {
         return `<h2>${escapeHtml(block.slice(3))}</h2>`;
       }
@@ -34,6 +38,8 @@ export function sanitizeRichHtml(value: string) {
       "br",
       "strong",
       "em",
+      "s",
+      "del",
       "ul",
       "ol",
       "li",
@@ -44,11 +50,55 @@ export function sanitizeRichHtml(value: string) {
       "h1",
       "h2",
       "h3",
+      "h4",
+      "hr",
+      "div",
+      "span",
+      "ruby",
+      "rt",
+      "rp",
       "img",
+      "video",
+      "audio",
     ],
     allowedAttributes: {
       a: ["href", "target", "rel"],
-      img: ["src", "alt"],
+      p: ["class", "style"],
+      div: ["class", "style"],
+      span: ["class", "style"],
+      ruby: ["class"],
+      rt: ["class"],
+      rp: ["class"],
+      h1: ["class", "style"],
+      h2: ["class", "style"],
+      h3: ["class", "style"],
+      h4: ["class", "style"],
+      blockquote: ["class", "style"],
+      code: ["class"],
+      pre: ["class"],
+      img: ["src", "alt", "title"],
+      video: ["controls", "src"],
+      audio: ["controls", "src"],
+    },
+    allowedClasses: {
+      p: ["align-left", "align-center", "align-right", "align-justify"],
+      div: ["align-left", "align-center", "align-right", "align-justify"],
+      span: ["align-left", "align-center", "align-right", "align-justify", "text-size-small", "text-size-normal", "text-size-large", "text-size-xlarge"],
+      ruby: ["ruby-small", "ruby-large"],
+      rt: ["ruby-small", "ruby-large"],
+      rp: ["ruby-small", "ruby-large"],
+      h1: ["align-left", "align-center", "align-right", "align-justify"],
+      h2: ["align-left", "align-center", "align-right", "align-justify"],
+      h3: ["align-left", "align-center", "align-right", "align-justify"],
+      h4: ["align-left", "align-center", "align-right", "align-justify"],
+      blockquote: ["align-left", "align-center", "align-right", "align-justify"],
+      code: ["language-mermaid"],
+      pre: ["mermaid"],
+    },
+    allowedStyles: {
+      "*": {
+        "text-align": [/^(left|center|right|justify)$/],
+      },
     },
     allowedSchemes: ["http", "https", "mailto"],
   });

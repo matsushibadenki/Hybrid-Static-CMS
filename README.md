@@ -40,6 +40,7 @@ Operator-facing notes now live under `docs/README.md`.
 - Media upload and library management under `/cms/uploads/*`
 - Post and page media helpers for image, video, audio, and PDF embeds
 - Google reCAPTCHA v3 support for public form submissions via `.env` keys
+- PostgreSQL backup and restore CLI workflows using `pg_dump` and `psql`
 - SEO-aware static output with canonical URLs, meta descriptions, structured data, robots controls, and AI-friendly `llms.txt`
 - Manual snapshot creation and restore for `public_html` files
 - Static renderer for:
@@ -96,6 +97,8 @@ cp .env.example .env
 bun run migrate
 ```
 
+For an interactive first-run flow, start the app with `DATABASE_URL` configured and open `/setup` instead. The wizard creates the first administrator and locks itself after completion.
+
 4. Seed a local admin user.
 
 ```bash
@@ -111,6 +114,18 @@ Default seed credentials:
 
 ```bash
 bun run dev
+```
+
+Create a Git-ignored PostgreSQL backup when needed:
+
+```bash
+bun run db:backup
+```
+
+Restore a SQL backup only with explicit confirmation:
+
+```bash
+bun run db:restore -- --input /path/to/backup.sql --confirm
 ```
 
 Reverse proxy and deployment notes are documented in `docs/deployment.md`.

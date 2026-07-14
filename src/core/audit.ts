@@ -1,5 +1,24 @@
 import type { Context } from "hono";
 import { sql } from "./db";
+import { config } from "./config";
+import { createOperatorNotification } from "./notifications";
+import { emitHook } from "./hooks";
+
+const notificationActions = new Set([
+  "auth.login",
+  "auth.logout",
+  "post.delete",
+  "page.delete",
+  "media.delete",
+  "snapshot.restore",
+  "post.revision.restore",
+  "page.revision.restore",
+  "menu.delete",
+  "block.delete",
+  "ai.proposal.create",
+  "ai.proposal.approve",
+  "ai.proposal.reject",
+]);
 
 export type AuditLogRecord = {
   id: number;
@@ -52,10 +71,27 @@ export async function writeAuditLog(input: {
       ${input.ipAddress ?? null}
     )
   `;
+  if (notificationActions.has(input.action)) {
+    const level = input.action.includes("delete") || input.action.includes("restore") ? "warning" : "info";
+    await createOperatorNotification({ level, action: input.action, message: input.summary }).catch(() => undefined);
+  }
+  await emitHook("audit", { ...input });
 }
 
-export async function listAuditLogs(limit = 100) {
-  const rows = await sql`
+export async function listAuditLogs(limit = 100, search?: string, action?: string) {
+  const params: (string | number)[] = [];
+  const filters: string[] = [];
+  if (search?.trim()) {
+    params.push(`%${search.trim().toLowerCase()}%`);
+    filters.push(`(lower(a.summary) like $${params.length} or lower(a.target_type) like $${params.length} or lower(coalesce(u.display_name, '')) like $${params.length})`);
+  }
+  if (action?.trim()) {
+    params.push(action.trim());
+    filters.push(`a.action = $${params.length}`);
+  }
+  const whereSql = filters.length ? `where ${filters.join(" and ")}` : "";
+  params.push(Math.max(1, Math.min(500, limit)));
+  const rows = await sql.unsafe(`
     select
       a.id,
       a.actor_user_id,
@@ -68,13 +104,17 @@ export async function listAuditLogs(limit = 100) {
       a.created_at
     from audit_logs a
     left join users u on u.id = a.actor_user_id
+    ${whereSql}
     order by a.created_at desc, a.id desc
-    limit ${limit}
-  `;
+    limit $${params.length}
+  `, params as any[]);
 
   return rows.map((row) => normalizeAudit(row as Record<string, unknown>));
 }
 
 export function requestIp(c: Context) {
-  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || null;
+  if (config.trustProxy) {
+    return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || null;
+  }
+  return null;
 }

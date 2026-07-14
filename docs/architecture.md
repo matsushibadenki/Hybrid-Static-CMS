@@ -97,6 +97,8 @@ Included now:
 - Post CRUD
 - Page CRUD
 - Form CRUD and submission capture
+- CMS-managed navigation menus
+- Reusable published content blocks for CMS-managed pages
 - Media uploads
 - File snapshots
 - SEO-aware static post and page output
@@ -107,7 +109,5 @@ Included now:
 
 Planned next:
 
-- Page revisions and post revisions
-- Media library
 - AI proposal workflow with approval gates
 - Plugin hooks

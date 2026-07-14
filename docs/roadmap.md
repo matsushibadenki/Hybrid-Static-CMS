@@ -1,6 +1,6 @@
 # Roadmap
 
-This roadmap tracks what Hybrid-Static-CMS already supports and what is still ahead.
+This roadmap tracks what Hybrid-Static-CMS already supports and what is planned next.
 
 ## Status legend
 
@@ -10,142 +10,142 @@ This roadmap tracks what Hybrid-Static-CMS already supports and what is still ah
 
 ## Current status
 
-Hybrid-Static-CMS is in an MVP-to-operations expansion phase.
-
-The core coexistence model is already working:
-
-- existing `public_html` pages can remain in place
-- CMS content can be exposed through static fragments, JSON APIs, and `embed.js`
-- operators can manage posts, pages, forms, media, logs, and file snapshots from the control panel
+Hybrid-Static-CMS has completed its MVP feature set and is moving into production hardening. The coexistence model remains central: existing `public_html` pages can continue working while CMS-managed content is published as static fragments, APIs, or embeds.
 
 ## Completed
 
-### Platform foundation
+### Platform and coexistence
 
 - `[Done]` Bun + Hono application server
 - `[Done]` TypeScript 7-compatible project configuration
-- `[Done]` PostgreSQL-backed persistence layer
-- `[Done]` Docker baseline for local and team setup
-- `[Done]` environment-based configuration
-- `[Done]` migration and seed scripts
-
-### Coexistence CMS model
-
+- `[Done]` PostgreSQL persistence, migrations, and seed scripts
+- `[Done]` Docker baseline for local and production deployment
+- `[Done]` Environment-based configuration and setup wizard
 - `[Done]` `public_html` coexistence architecture
-- `[Done]` reverse-proxy-ready control panel under `/control-panel`
+- `[Done]` Reverse-proxy-ready control panel under `/control-panel`
 - `[Done]` JSON API under `/cms-api/*`
-- `[Done]` generated output under `/cms/*`
-- `[Done]` static publishing flow that regenerates fragments on content changes
+- `[Done]` Generated CMS output under `/cms/*`
+- `[Done]` Configurable generated templates through `templates/page.html`
+- `[Done]` Google Fonts configuration through `GOOGLE_FONTS_CSS_URLS`
 
-### Content management
+### Content and editor
 
-- `[Done]` post CRUD
-- `[Done]` category and tag assignment for posts
-- `[Done]` page CRUD
-- `[Done]` multiple form generation, management, deletion, and submission capture
-- `[Done]` published/draft/scheduled status fields
-- `[Done]` media upload and media library management
-- `[Done]` post and page media helpers for image, video, audio, and PDF embeds
-- `[Done]` SEO title and SEO description fields
-- `[Done]` per-entry `noindex` and `nofollow` controls
-- `[Done]` Google reCAPTCHA v3 support for public form submissions via `.env`
+- `[Done]` Post CRUD with categories, tags, draft, published, and scheduled states
+- `[Done]` CMS-managed page CRUD
+- `[Done]` Multiple form generation, management, deletion, and submission capture
+- `[Done]` Media library for images, video, audio, PDF, and text files
+- `[Done]` Media picker and direct upload from post/page editors
+- `[Done]` HTML authoring toolbar for bold, italic, strikethrough, quotes, lists, links, alignment, code, and rules
+- `[Done]` H1-H4 headings and article text-size presets
+- `[Done]` Semantic ruby annotations
+- `[Done]` LaTeX mathematics through MathJax rendering
+- `[Done]` Mermaid chart blocks and static-page rendering
+- `[Done]` Reusable published blocks via `[[block:slug]]`
+- `[Done]` CMS-managed navigation menus
+- `[Done]` Post and page revisions with review and restore
 
-### Publishing outputs
+### Publishing and discoverability
 
-- `[Done]` latest posts fragment
-- `[Done]` full post list fragment
-- `[Done]` per-post static HTML pages
-- `[Done]` paginated post list pages
-- `[Done]` CMS-managed page HTML output
-- `[Done]` CMS-managed form HTML output
-- `[Done]` RSS output
-- `[Done]` sitemap output
-- `[Done]` robots.txt output
-- `[Done]` AI-oriented `llms.txt` output
-- `[Done]` client-side `embed.js`
+- `[Done]` Latest posts, full list, pagination, and per-post static HTML output
+- `[Done]` CMS-managed page and form HTML output
+- `[Done]` RSS and sitemap output
+- `[Done]` `robots.txt` and AI-oriented `llms.txt`
+- `[Done]` Client-side `embed.js`
+- `[Done]` Canonical URLs, OG images, keywords, indexing controls, and JSON-LD
+- `[Done]` Google reCAPTCHA v3 support for public forms
+- `[Done]` Magazine-style default static page design
 
-### Admin and operations
+### Security and administration
 
-- `[Done]` cookie-based authentication
-- `[Done]` role-aware admin access checks
-- `[Done]` audit logs for auth, publishing, media, regeneration, form blocking, and snapshots
-- `[Done]` admin search and filtering for posts, pages, and forms
-- `[Done]` validation feedback for slugs, publish state, and duplicate content in the admin UI
-- `[Done]` file snapshots for safe text-based files inside `public_html`
-- `[Done]` diff preview before snapshot restore
-- `[Done]` explicit confirmation step before snapshot restore
-- `[Done]` quick snapshot creation from post and page edit screens
-- `[Done]` restore success and error feedback in the UI
-- `[Done]` hidden-dot-path blocking for public static file serving
-
-## Unfinished
-
-### Next priority
-
-#### Content safety and workflow
-
-- `[Next]` revisions for posts and pages
-- `[Next]` automatic snapshot creation before restore
-- `[Next]` snapshot restore rollback flow
-- `[Next]` PostgreSQL data backup and restore workflows
-- `[Next]` better diff visualization for long files
-
-#### Editor usability
-
-- `[Next]` media picker inside post and page editing
-- `[Next]` richer content editing experience
-
-#### Security hardening
-
+- `[Done]` Cookie-based authentication and login throttling
+- `[Done]` Optional deployment-wide TOTP two-factor authentication
+- `[Done]` User directory with role assignment, activation, password reset, and session revocation
+- `[Done]` Fine-grained permissions for reading, editing, publishing, deleting, restoring, AI, snapshots, and user administration
 - `[Done]` CSRF protection for authenticated admin and API mutations
-- `[Next]` login throttling
-- `[Next]` optional two-factor authentication
-- `[Next]` stronger cookie and proxy-aware security defaults
+- `[Done]` Strong cookie and proxy-aware security defaults
+- `[Done]` Audit logs with text and action filtering
+- `[Done]` Operator notifications
+- `[Done]` Hidden-dot-path blocking for public static file serving
+- `[Done]` AI proposal workflow with approval gates, protected paths, and audit links
 
-### Later roadmap
+### Operations and extensibility
 
-#### Site-building capabilities
+- `[Done]` File snapshots for safe text files inside `public_html`
+- `[Done]` Diff preview, explicit restore confirmation, and automatic rollback snapshots
+- `[Done]` PostgreSQL backup and restore workflows
+- `[Done]` Scheduled publishing and housekeeping jobs
+- `[Done]` Plugin hooks for rendering and audit events
+- `[Done]` Custom API extension points
+- `[Done]` Admin menu extension support
+- `[Done]` VPS, Docker, upgrade, contributor, and architecture documentation
 
-- `[Later]` CMS-managed menus
-- `[Later]` reusable page sections or blocks
-- `[Later]` theme/template override model
-- `[Later]` configurable generated output templates
+## Next priority
 
-#### SEO and discoverability
+### Reliability and quality
 
-- `[Later]` stronger SEO optimization workflows for posts and pages beyond the current canonical, structured-data, sitemap, robots, indexing, and AI discovery controls
-- `[Later]` automated meta and structured-data assistance
-- `[Later]` richer sitemap, canonical, and indexing controls
+- `[Next]` Automated unit and integration tests for authentication, permissions, publishing, sanitization, forms, media, backup, and restore
+- `[Next]` GitHub Actions CI for TypeScript, tests, migration checks, and security checks
+- `[Next]` Atomic static artifact publishing with temporary files and rename-on-success
+- `[Next]` Publish preview URLs, scheduled-publishing timezone support, failure notifications, and retry handling
+- `[Next]` Health and readiness endpoints for PostgreSQL, rendering, storage, and backup status
+- `[Next]` Structured application logs and operator alert integrations
 
-#### Operational depth
+### Security and media hardening
 
-- `[Later]` audit log filtering
-- `[Later]` operator notifications for important actions
-- `[Later]` background jobs for scheduled publishing and housekeeping
+- `[Next]` File-size limits, upload quotas, and per-role upload policies
+- `[Next]` SVG and media-content safety checks with safer default handling for active formats
+- `[Next]` Image metadata extraction, automatic resizing, WebP/AVIF variants, and thumbnails
+- `[Next]` Unused-media detection, cleanup workflow, and storage usage reporting
+- `[Next]` Per-user 2FA enrollment, password self-service, recovery flow, and login-session listing
+- `[Next]` Public form rate limiting, submission retention policies, email notifications, and CSV export
 
-#### Extensibility
+### Editorial workflow
 
-- `[Later]` plugin hook system
-- `[Later]` custom API extension points
-- `[Later]` admin menu extension support
+- `[Next]` Autosave drafts and crash recovery
+- `[Next]` Private preview links with expiration
+- `[Next]` Editorial review states and approval workflow separate from publication status
+- `[Next]` Post/page import and export for migration and portability
+- `[Next]` Redirect manager and 404 report for slug changes and broken links
+- `[Next]` Japanese-aware full-text search and search administration tools
 
-#### AI-assisted workflows
+## Later roadmap
 
-- `[Later]` proposal-based AI edits for `public_html`
-- `[Later]` diff review before AI changes are applied
-- `[Later]` protected path rules for AI actions
-- `[Later]` AI action logging linked to snapshots and audit logs
+### Site and theme management
 
-#### Open-source distribution maturity
+- `[Later]` Theme settings UI for colors, typography, spacing, and Google Fonts
+- `[Later]` Theme starter kits and reusable public templates
+- `[Later]` Visual layout blocks with responsive previews
+- `[Later]` Local font hosting and privacy-first asset mode
+- `[Later]` Multi-language content, locale routing, and translation metadata
 
-- `[Later]` polished VPS deployment guide
-- `[Later]` production-ready Docker deployment profile
-- `[Later]` upgrade guide between schema versions
-- `[Later]` contributor guide and architectural decision records
+### API and integrations
+
+- `[Later]` Scoped API keys and machine-user management
+- `[Later]` Webhooks for publishing, form submissions, media events, and backup events
+- `[Later]` OAuth or OIDC login integration
+- `[Later]` External object storage adapters such as S3-compatible storage
+- `[Later]` Search adapters for larger installations
+
+### Operations at scale
+
+- `[Later]` Distributed scheduler locks for multi-instance deployments
+- `[Later]` Queue-backed rendering and media processing
+- `[Later]` Automated off-site backup rotation and restore drills
+- `[Later]` Metrics dashboard for publishing, traffic, forms, storage, and errors
+- `[Later]` Database health, slow-query, and retention management tools
+
+## Priority order
+
+1. `[Next]` Tests, CI, and permission regression coverage
+2. `[Next]` Atomic publishing, preview, health checks, and structured alerts
+3. `[Next]` Media and upload security hardening
+4. `[Next]` Editorial autosave, preview, and review workflow
+5. `[Next]` Forms operations, imports/exports, redirects, and Japanese search
+6. `[Later]` Themes, integrations, scale-out operations, and localization
 
 ## Notes for contributors
 
 - roadmap items are directional, not contractual
-- features should preserve the main coexistence principle:
-  existing sites must keep working without forcing a full CMS takeover
-- safety features should be prioritized over convenience when file writes are involved
+- existing `public_html` sites must keep working without a full CMS takeover
+- safety, data portability, and backward-compatible migrations take priority over convenience
+- every completed item should include documentation and an appropriate verification path

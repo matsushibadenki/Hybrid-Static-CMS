@@ -93,6 +93,8 @@ These are important for adopters:
 
 ## Deployment models
 
+For a production-oriented Docker stack, use `docker-compose.production.yml`. It avoids publishing PostgreSQL's port, waits for database health, does not seed data automatically, and keeps `public_html`, storage, templates, and plugins in explicit host-mounted locations.
+
 ### VPS model
 
 Best overall fit.

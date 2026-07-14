@@ -73,6 +73,17 @@ export async function createFileSnapshot(relativePath: string, createdBy: number
   const content = await readFile(absolutePath, "utf8");
   const fileType = path.extname(normalized).slice(1) || "text";
 
+  return insertFileSnapshot(normalized, fileType, content, createdBy, reason);
+}
+
+async function insertFileSnapshot(
+  normalized: string,
+  fileType: string,
+  content: string,
+  createdBy: number | null,
+  reason?: string,
+) {
+
   const rows = await sql`
     insert into file_snapshots (
       relative_path,
@@ -191,7 +202,7 @@ export async function getFileSnapshotDiff(snapshotId: number): Promise<FileSnaps
   };
 }
 
-export async function restoreFileSnapshot(snapshotId: number) {
+export async function restoreFileSnapshot(snapshotId: number, restoredBy: number | null = null) {
   const rows = await sql`
     select id, relative_path, content
     from file_snapshots
@@ -205,11 +216,24 @@ export async function restoreFileSnapshot(snapshotId: number) {
 
   const normalized = ensureAllowedPath(String(row.relative_path));
   const absolutePath = snapshotAbsolutePath(normalized);
+  const currentContent = await readCurrentContent(normalized);
+  let rollbackSnapshotId: number | null = null;
+  if (currentContent !== null) {
+    const rollback = await insertFileSnapshot(
+      normalized,
+      path.extname(normalized).slice(1) || "text",
+      currentContent,
+      restoredBy,
+      `Automatic rollback before restoring snapshot #${snapshotId}`,
+    );
+    rollbackSnapshotId = rollback?.id ?? null;
+  }
   await mkdir(path.dirname(absolutePath), { recursive: true });
   await writeFile(absolutePath, String(row.content), "utf8");
 
   return {
     id: Number(row.id),
     relativePath: normalized,
+    rollbackSnapshotId,
   };
 }

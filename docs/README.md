@@ -9,6 +9,9 @@ This directory collects the design, installation, deployment, and operations not
 3. [Deployment and coexistence model](./deployment.md)
 4. [Operations and security notes](./operations.md)
 5. [Roadmap](./roadmap.md)
+6. [VPS production guide](./vps.md)
+7. [Upgrade guide](./upgrade.md)
+8. [Architecture decision records](./adr/0001-public-html-coexistence.md)
 
 ## Audience
 

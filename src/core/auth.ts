@@ -2,7 +2,8 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { Context, MiddlewareHandler } from "hono";
 import { requestIp, writeAuditLog } from "./audit";
 import { sql } from "./db";
-import { hashPassword, randomToken, verifyPassword } from "./security";
+import { hashPassword, randomToken, verifyPassword, verifyTotpCode } from "./security";
+import { config } from "./config";
 import type { SessionUser, UserRole } from "./types";
 
 const SESSION_COOKIE = "hybrid_static_cms_session";
@@ -29,7 +30,9 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
     return;
   }
 
-  const rows = await sql`
+  let rows;
+  try {
+    rows = await sql`
     select
       s.token,
       s.csrf_token,
@@ -37,6 +40,7 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
       u.id,
       u.email,
       u.display_name,
+      u.is_active,
       coalesce(array_agg(r.name) filter (where r.name is not null), '{}') as roles
     from sessions s
     join users u on u.id = s.user_id
@@ -44,9 +48,15 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
     left join roles r on r.id = ur.role_id
     where s.token = ${token}
       and s.expires_at > now()
+      and u.is_active = true
     group by s.token, s.csrf_token, s.expires_at, u.id
     limit 1
-  `;
+    `;
+  } catch {
+    c.set("sessionUser", null);
+    await next();
+    return;
+  }
 
   if (!rows[0]) {
     c.set("sessionUser", null);
@@ -65,23 +75,78 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
-export async function attemptLogin(c: Context, email: string, password: string) {
+function loginAttemptKeys(c: Context, email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const ip = requestIp(c) ?? "unknown";
+  return [`ip:${ip}`, `email:${normalizedEmail}`];
+}
+
+async function isLoginRateLimited(keys: string[]) {
   const rows = await sql`
-    select id, email, display_name, password_hash
+    select attempt_key, attempts
+    from login_attempts
+    where attempt_key = any(${sql.array(keys)})
+      and window_started > now() - make_interval(secs => ${config.loginWindowSeconds})
+  `;
+  return rows.some((row) => Number(row.attempts) >= config.loginMaxAttempts);
+}
+
+async function recordFailedLogin(keys: string[]) {
+  for (const key of keys) {
+    await sql`
+      insert into login_attempts (attempt_key, attempts, window_started)
+      values (${key}, 1, now())
+      on conflict (attempt_key) do update set
+        attempts = case
+          when login_attempts.window_started <= now() - make_interval(secs => ${config.loginWindowSeconds}) then 1
+          else login_attempts.attempts + 1
+        end,
+        window_started = case
+          when login_attempts.window_started <= now() - make_interval(secs => ${config.loginWindowSeconds}) then now()
+          else login_attempts.window_started
+        end
+    `;
+  }
+}
+
+async function clearLoginAttempts(keys: string[]) {
+  await sql`delete from login_attempts where attempt_key = any(${sql.array(keys)})`;
+}
+
+export async function attemptLogin(c: Context, email: string, password: string, twoFactorCode = "") {
+  const normalizedEmail = email.trim().toLowerCase();
+  const attemptKeys = loginAttemptKeys(c, normalizedEmail);
+  if (await isLoginRateLimited(attemptKeys)) {
+    return null;
+  }
+
+  const rows = await sql`
+    select id, email, display_name, password_hash, is_active
     from users
-    where email = ${email}
+    where email = ${normalizedEmail}
     limit 1
   `;
 
   const row = rows[0];
-  if (!row) {
+  if (!row || row.is_active !== true) {
+    await recordFailedLogin(attemptKeys);
     return null;
   }
 
   const isValid = await verifyPassword(password, String(row.password_hash));
   if (!isValid) {
+    await recordFailedLogin(attemptKeys);
     return null;
   }
+
+  if (config.twoFactorEnabled && config.twoFactorSecret && !(await verifyTotpCode(config.twoFactorSecret, twoFactorCode))) {
+    await recordFailedLogin(attemptKeys);
+    return null;
+  }
+
+  await clearLoginAttempts(attemptKeys);
+
+  await sql`update users set last_login_at = now() where id = ${row.id}`;
 
   const token = randomToken();
   const csrfToken = randomToken();
@@ -105,7 +170,7 @@ export async function attemptLogin(c: Context, email: string, password: string) 
     httpOnly: true,
     path: "/",
     sameSite: "Lax",
-    secure: false,
+    secure: config.cookieSecure,
     expires: expiresAt,
   });
 
@@ -158,8 +223,8 @@ export async function createUser(input: {
 }) {
   const passwordHash = await hashPassword(input.password);
   const rows = await sql`
-    insert into users (email, display_name, password_hash)
-    values (${input.email}, ${input.displayName}, ${passwordHash})
+    insert into users (email, display_name, password_hash, password_changed_at)
+    values (${input.email.trim().toLowerCase()}, ${input.displayName.trim()}, ${passwordHash}, now())
     returning id
   `;
 

@@ -54,6 +54,7 @@ backups/
 # Application storage: keep directory structure, ignore contents
 storage/cache/*
 !storage/cache/.gitkeep
+!storage/backups/
 storage/backups/*
 !storage/backups/.gitkeep
 storage/logs/*
@@ -73,6 +74,8 @@ public_html/cms/pages/*
 !public_html/cms/pages/.gitkeep
 public_html/cms/forms/*
 !public_html/cms/forms/.gitkeep
+public_html/cms/menus/*
+!public_html/cms/menus/.gitkeep
 public_html/cms/uploads/*
 !public_html/cms/uploads/.gitkeep
 public_html/sitemap.xml

@@ -18,6 +18,9 @@ export type PostRecord = {
   status: "draft" | "published" | "scheduled";
   seoTitle: string | null;
   seoDescription: string | null;
+  seoCanonicalUrl: string | null;
+  seoOgImage: string | null;
+  seoKeywords: string | null;
   seoNoindex: boolean;
   seoNofollow: boolean;
   publishedAt: string | null;
@@ -37,6 +40,9 @@ export type PostInput = {
   status: "draft" | "published" | "scheduled";
   seoTitle?: string;
   seoDescription?: string;
+  seoCanonicalUrl?: string;
+  seoOgImage?: string;
+  seoKeywords?: string;
   seoNoindex?: boolean;
   seoNofollow?: boolean;
   publishedAt?: string | null;
@@ -54,6 +60,9 @@ export type PageRecord = {
   status: "draft" | "published" | "scheduled";
   seoTitle: string | null;
   seoDescription: string | null;
+  seoCanonicalUrl: string | null;
+  seoOgImage: string | null;
+  seoKeywords: string | null;
   seoNoindex: boolean;
   seoNofollow: boolean;
   publishedAt: string | null;
@@ -71,6 +80,9 @@ export type PageInput = {
   status: "draft" | "published" | "scheduled";
   seoTitle?: string;
   seoDescription?: string;
+  seoCanonicalUrl?: string;
+  seoOgImage?: string;
+  seoKeywords?: string;
   seoNoindex?: boolean;
   seoNofollow?: boolean;
   publishedAt?: string | null;
