@@ -14,6 +14,7 @@ import {
   getFormById,
   listForms,
   listFormSubmissions,
+  renderFormSubmissionsCsv,
   updateForm,
 } from "../../core/forms";
 import { adminLayout } from "../../core/layout";
@@ -1261,6 +1262,26 @@ adminRoutes.post("/forms", async (c) => {
   return c.redirect(`${config.controlPanelPath}/forms/${created?.id ?? ""}/edit?success=${encodeURIComponent("Form saved.")}`);
 });
 
+adminRoutes.get("/forms/:id/submissions.csv", async (c) => {
+  const user = c.get("sessionUser");
+  const form = await getFormById(Number(c.req.param("id")));
+  if (!form) {
+    return c.text("Not found", 404);
+  }
+  const submissions = await listFormSubmissions(form.id);
+  await writeAuditLog({
+    actorUserId: user?.id ?? null,
+    action: "form.submissions.export",
+    targetType: "form",
+    targetId: form.id,
+    summary: `Exported submissions for form "${form.title}".`,
+    ipAddress: requestIp(c),
+  });
+  c.header("Content-Type", "text/csv; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="${form.slug}.submissions.csv"`);
+  return c.body(`\uFEFF${renderFormSubmissionsCsv(form, submissions)}`);
+});
+
 adminRoutes.get("/forms/:id/edit", async (c) => {
   const user = c.get("sessionUser");
   const form = await getFormById(Number(c.req.param("id")));
@@ -1284,7 +1305,7 @@ adminRoutes.get("/forms/:id/edit", async (c) => {
         <p class="meta">reCAPTCHA v3 is currently ${recaptchaEnabled ? "enabled" : "disabled"} for published forms.</p>
         <div class="row" style="justify-content:space-between; align-items:center;">
           <h2 style="margin-bottom:0;">Submissions</h2>
-          <a class="button" href="/cms/forms/${form.slug}.html">Open published form</a>
+          <span class="row"><a class="button" href="/cms/forms/${form.slug}.html">Open published form</a><a class="button" href="${config.controlPanelPath}/forms/${form.id}/submissions.csv">Download CSV</a></span>
         </div>
         <table>
           <thead><tr><th>When</th><th>Payload</th></tr></thead>
@@ -1328,7 +1349,7 @@ adminRoutes.post("/forms/:id", async (c) => {
           <p class="meta">reCAPTCHA v3 is currently ${Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey) ? "enabled" : "disabled"} for published forms.</p>
           <div class="row" style="justify-content:space-between; align-items:center;">
             <h2 style="margin-bottom:0;">Submissions</h2>
-            <a class="button" href="/cms/forms/${values.slug}.html">Open published form</a>
+            <span class="row"><a class="button" href="/cms/forms/${values.slug}.html">Open published form</a><a class="button" href="${config.controlPanelPath}/forms/${c.req.param("id")}/submissions.csv">Download CSV</a></span>
           </div>
           <table>
             <thead><tr><th>When</th><th>Payload</th></tr></thead>

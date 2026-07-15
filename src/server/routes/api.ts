@@ -18,6 +18,10 @@ import { getMenuBySlug, listMenus } from "../../core/menus";
 import { getPublishedBlockBySlug, listBlocks } from "../../core/blocks";
 import { createAiFileProposal } from "../../core/aiProposals";
 import { hasPermission, requireApiPermission } from "../../core/permissions";
+import { consumeFormSubmissionRateLimit } from "../../core/formRateLimit";
+import { config } from "../../core/config";
+import { sendFormSubmissionEmail } from "../../core/email";
+import { createOperatorNotification } from "../../core/notifications";
 
 export const apiRoutes = new Hono();
 
@@ -432,6 +436,19 @@ apiRoutes.post("/forms/:slug/submit", async (c) => {
   if (!form) {
     return c.json({ error: "Not found" }, 404);
   }
+  const clientKey = requestIp(c) ?? "untrusted-client";
+  if (!(await consumeFormSubmissionRateLimit(form.id, clientKey))) {
+    await writeAuditLog({
+      actorUserId: null,
+      action: "form.submit.rate_limited",
+      targetType: "form",
+      targetId: form.id,
+      summary: `Rate-limited submission for form "${form.title}".`,
+      ipAddress: requestIp(c),
+    });
+    c.header("Retry-After", String(config.formRateLimitWindowSeconds));
+    return c.json({ error: "Too many submissions. Please try again later." }, 429);
+  }
   const formData = await c.req.formData();
   const recaptchaToken = String(formData.get("recaptchaToken") ?? "");
   const recaptchaAction = `form_submit_${form.slug.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
@@ -453,6 +470,31 @@ apiRoutes.post("/forms/:slug/submit", async (c) => {
     payload[field.name] = String(raw ?? "");
   }
   await createFormSubmission(form.id, payload);
+  try {
+    await sendFormSubmissionEmail(form, payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown SMTP error";
+    try {
+      await createOperatorNotification({
+        level: "error",
+        action: "form.submit.email_failed",
+        message: `Email notification failed for form "${form.title}": ${message.slice(0, 240)}`,
+      });
+    } catch {
+      // Delivery failure must not turn a successfully stored submission into a visitor error.
+    }
+    try {
+      await writeAuditLog({
+        action: "form.submit.email_failed",
+        targetType: "form",
+        targetId: form.id,
+        summary: `Email notification failed for form "${form.title}".`,
+        ipAddress: requestIp(c),
+      });
+    } catch {
+      // Keep the public form response available even if the database is temporarily degraded.
+    }
+  }
   await writeAuditLog({
     actorUserId: null,
     action: "form.submit",

@@ -258,6 +258,34 @@ export async function listFormSubmissions(formId: number) {
   }));
 }
 
+function csvValue(value: unknown) {
+  const text = value == null ? "" : typeof value === "string" ? value : JSON.stringify(value);
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+export function renderFormSubmissionsCsv(form: FormRecord, submissions: Awaited<ReturnType<typeof listFormSubmissions>>) {
+  const fieldNames = form.fields.map((field) => field.name);
+  const rows = [
+    ["created_at", ...fieldNames],
+    ...submissions.map((submission) => [
+      submission.createdAt,
+      ...fieldNames.map((fieldName) => submission.payload[fieldName] ?? ""),
+    ]),
+  ];
+  return `${rows.map((row) => row.map(csvValue).join(",")).join("\r\n")}\r\n`;
+}
+
+export async function deleteExpiredFormSubmissions() {
+  if (config.formSubmissionRetentionDays <= 0) {
+    return 0;
+  }
+  const result = await sql`
+    delete from form_submissions
+    where created_at < now() - make_interval(days => ${config.formSubmissionRetentionDays})
+  `;
+  return result.count;
+}
+
 function renderField(field: FormFieldRecord) {
   const required = field.required ? "required" : "";
   if (field.type === "textarea") {

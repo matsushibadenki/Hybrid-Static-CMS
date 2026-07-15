@@ -84,8 +84,10 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 ### Reliability and quality
 
-- `[Next]` Automated unit and integration tests for authentication, permissions, publishing, sanitization, forms, media, backup, and restore
-- `[Next]` GitHub Actions CI for TypeScript, tests, migration checks, and security checks
+- `[Done]` Core unit tests for permissions, validation, sanitization, LaTeX, Mermaid, and Ruby formatting
+- `[Done]` GitHub Actions CI for TypeScript, Bun tests, and PostgreSQL 18 migration checks
+- `[Done]` Application smoke integration tests for liveness and unauthenticated control-panel access
+- `[Next]` Full integration tests for authentication, publishing, forms, media, backup, and restore
 - `[Done]` Atomic static artifact publishing with temporary files and rename-on-success
 - `[Next]` Publish preview URLs, scheduled-publishing timezone support, failure notifications, and retry handling
 - `[Next]` Structured application logs and operator alert integrations
@@ -93,11 +95,16 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 ### Security and media hardening
 
 - `[Next]` File-size limits, upload quotas, and per-role upload policies
-- `[Next]` SVG and media-content safety checks with safer default handling for active formats
+- `[Done]` Per-file upload size limits and opt-in SVG handling
+- `[Done]` Media content-signature checks for common image, video, audio, and PDF uploads
+- `[Done]` SVG sanitization and removal of scripts, event attributes, and foreign content
+- `[Next]` Deeper media-content inspection with safer handling for active formats
 - `[Next]` Image metadata extraction, automatic resizing, WebP/AVIF variants, and thumbnails
 - `[Next]` Unused-media detection, cleanup workflow, and storage usage reporting
 - `[Next]` Per-user 2FA enrollment, password self-service, recovery flow, and login-session listing
-- `[Next]` Public form rate limiting, submission retention policies, email notifications, and CSV export
+- `[Done]` PostgreSQL-backed public form rate limiting by form and trusted client IP
+- `[Done]` Configurable form-submission retention cleanup and permission-protected CSV export
+- `[Done]` SMTP form submission notifications with operator-visible delivery failures
 
 ### Editorial workflow
 

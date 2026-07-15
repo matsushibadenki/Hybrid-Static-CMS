@@ -58,7 +58,7 @@ const rolePermissions: Record<UserRole, readonly Permission[]> = {
   ai_agent: ["posts.read", "pages.read", "ai.propose"],
 };
 
-export function hasPermission(user: { roles: UserRole[] } | null | undefined, permission: Permission) {
+export function hasPermission(user: { roles: ReadonlyArray<UserRole> } | null | undefined, permission: Permission) {
   return Boolean(user?.roles.some((role) => rolePermissions[role]?.includes(permission)));
 }
 
@@ -92,6 +92,7 @@ function adminPermissionForRequest(c: Context): Permission {
   }
   if (path.startsWith("/forms")) {
     if (path.endsWith("/delete")) return "forms.delete";
+    if (path.endsWith("/submissions.csv")) return "forms.submissions.read";
     return path === "/forms/new" || path.endsWith("/edit") ? "forms.write" : method === "GET" ? "forms.read" : "forms.write";
   }
   if (path.startsWith("/menus")) return path.endsWith("/delete") ? "menus.delete" : path === "/menus/new" ? "menus.write" : method === "GET" ? "menus.read" : "menus.write";

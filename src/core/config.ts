@@ -24,6 +24,19 @@ export type AppConfig = {
   pluginDir: string;
   defaultPageSize: number;
   googleFontsCssUrls: string[];
+  maxUploadBytes: number;
+  allowSvgUploads: boolean;
+  formRateLimitAttempts: number;
+  formRateLimitWindowSeconds: number;
+  formSubmissionRetentionDays: number;
+  smtpHost: string | null;
+  smtpPort: number;
+  smtpTls: boolean;
+  smtpHostname: string;
+  smtpUsername: string | null;
+  smtpPassword: string | null;
+  smtpFrom: string | null;
+  formNotificationEmail: string | null;
 };
 
 function requireEnv(name: string, fallback?: string) {
@@ -61,6 +74,19 @@ export const config: AppConfig = {
   templateDir: path.resolve(requireEnv("TEMPLATE_DIR", path.join(process.cwd(), "templates"))),
   pluginDir: path.resolve(requireEnv("PLUGIN_DIR", path.join(process.cwd(), "plugins"))),
   defaultPageSize: Number(process.env.DEFAULT_PAGE_SIZE ?? 10),
+  maxUploadBytes: Math.max(1_048_576, Number(process.env.MAX_UPLOAD_BYTES ?? 20 * 1024 * 1024)),
+  allowSvgUploads: process.env.ALLOW_SVG_UPLOADS === "true",
+  formRateLimitAttempts: Math.max(1, Number(process.env.FORM_RATE_LIMIT_ATTEMPTS ?? 5)),
+  formRateLimitWindowSeconds: Math.max(60, Number(process.env.FORM_RATE_LIMIT_WINDOW_SECONDS ?? 300)),
+  formSubmissionRetentionDays: Math.max(0, Number(process.env.FORM_SUBMISSION_RETENTION_DAYS ?? 0)),
+  smtpHost: process.env.SMTP_HOST?.trim() || null,
+  smtpPort: Number(process.env.SMTP_PORT ?? 465),
+  smtpTls: process.env.SMTP_TLS !== "false",
+  smtpHostname: process.env.SMTP_HOSTNAME?.trim() || "localhost",
+  smtpUsername: process.env.SMTP_USERNAME?.trim() || null,
+  smtpPassword: process.env.SMTP_PASSWORD || null,
+  smtpFrom: process.env.SMTP_FROM?.trim() || null,
+  formNotificationEmail: process.env.FORM_NOTIFICATION_EMAIL?.trim() || null,
   googleFontsCssUrls: (process.env.GOOGLE_FONTS_CSS_URLS ?? [
     "https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&family=Noto+Sans+JP:wght@100..900&family=Noto+Sans+Mono:wght@100..900&family=Noto+Serif+JP:wght@200..900&family=Roboto:ital,wght@0,100..900;1,100..900&family=Zen+Maru+Gothic&display=swap",
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=search",

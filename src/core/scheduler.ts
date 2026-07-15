@@ -1,5 +1,7 @@
 import { writeAuditLog } from "./audit";
 import { sql } from "./db";
+import { clearExpiredFormRateLimits } from "./formRateLimit";
+import { deleteExpiredFormSubmissions } from "./forms";
 
 export async function runScheduledJobs() {
   const posts = await sql`
@@ -17,6 +19,8 @@ export async function runScheduledJobs() {
 
   await sql`delete from sessions where expires_at <= now()`;
   await sql`delete from login_attempts where window_started < now() - interval '1 day'`;
+  await clearExpiredFormRateLimits();
+  await deleteExpiredFormSubmissions();
 
   const publishedPosts = posts.length;
   const publishedPages = pages.length;

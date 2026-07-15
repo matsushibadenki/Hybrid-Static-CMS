@@ -8,6 +8,7 @@
     "dev": "bun --watch src/server/index.ts",
     "start": "bun src/server/index.ts",
     "check": "bunx tsc --noEmit",
+    "test": "DATABASE_URL=postgres://postgres:postgres@localhost:5432/hybrid_static_cms bun test",
     "migrate": "bun src/scripts/migrate.ts",
     "seed": "bun src/scripts/seed.ts",
     "db:backup": "bun src/scripts/backup.ts",

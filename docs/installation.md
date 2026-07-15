@@ -47,6 +47,16 @@ Important settings:
 - `CMS_API_PREFIX`: API route prefix
 - `CMS_OUTPUT_DIR`: generated CMS output directory
 - `TEMPLATE_DIR`: optional template override directory, default `./templates`
+- `MAX_UPLOAD_BYTES`: maximum size for each uploaded media file, default `20971520` (20 MB)
+- `ALLOW_SVG_UPLOADS`: set to `true` only when SVG uploads are required; disabled by default because SVG can contain active content. Enabled SVG files are sanitized before storage.
+- `FORM_RATE_LIMIT_ATTEMPTS`: accepted public form submissions per client and form in one window, default `5`
+- `FORM_RATE_LIMIT_WINDOW_SECONDS`: public form rate-limit window, default `300`
+- `FORM_SUBMISSION_RETENTION_DAYS`: delete stored form submissions older than this many days during scheduled housekeeping; `0` disables automatic deletion
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`: implicit-TLS SMTP server settings for form notifications; defaults target port `465` with TLS enabled
+- `SMTP_HOSTNAME`: hostname sent in `EHLO`, default `localhost`
+- `SMTP_USERNAME`, `SMTP_PASSWORD`: optional SMTP `AUTH LOGIN` credentials
+- `SMTP_FROM`: sender address; notifications remain disabled unless this and `FORM_NOTIFICATION_EMAIL` are configured
+- `FORM_NOTIFICATION_EMAIL`: destination address for new public form submissions
 - `GOOGLE_FONTS_CSS_URLS`: pipe-separated (`|`) Google Fonts CSS URLs for generated static pages; the bundled default includes Google Sans Flex, Noto Sans JP, Noto Sans Mono, Noto Serif JP, Roboto, Zen Maru Gothic, and Material Symbols Outlined
 
 ## Local setup
@@ -104,6 +114,14 @@ The post editor provides a safe HTML writing toolbar for bold, italic, strikethr
 
 The HTML sanitizer keeps the supported formatting tags and removes scripts and unsupported attributes before content is saved. Use the Body HTML editor for rich content; the Markdown-like field remains available for simpler posts and migration-friendly authoring.
 
+Media uploads also receive a lightweight content-signature check for common image, video, audio, and PDF formats. The server does not rely only on the browser-provided MIME type. Files that do not match their declared type are rejected.
+
+Public form submissions are rate-limited in PostgreSQL before reCAPTCHA verification. When `TRUST_PROXY=true` is enabled behind a trusted reverse proxy, the limit is applied per client IP and form. Without a trusted proxy, the application uses a conservative shared key because forwarded IP headers must not be trusted.
+
+Form administrators can download submissions as UTF-8 CSV from the form edit screen. The export includes the submission timestamp and one column for each configured field. Set `FORM_SUBMISSION_RETENTION_DAYS` only after confirming the site's legal and operational retention requirements; automatic deletion cannot be undone from the CMS.
+
+When all SMTP notification variables are configured, a successful public form submission triggers a plain-text email. SMTP delivery failures do not reject the visitor's submission; they create an operator notification and audit entry. The built-in sender uses implicit TLS (normally port 465), so deployments requiring STARTTLS should place an SMTP relay in front of the CMS or use a provider's implicit-TLS endpoint.
+
 ### LaTeX mathematics
 
 The standard generated template loads MathJax 3 and supports LaTeX in both fields. Use `\(...\)` for inline mathematics and `\[...\]` or `$$...$$` for display mathematics. The post editor toolbar includes `Math` and `Math block` helpers. Sites using a custom `templates/page.html` must include MathJax 3 in that template if they want the same rendering behavior.
@@ -152,6 +170,13 @@ The following sensitive actions are independently protected: publishing, deletio
 
 ```bash
 bun run dev
+```
+
+Run the local quality checks with:
+
+```bash
+bun run check
+bun test
 ```
 
 ## PostgreSQL backup and restore

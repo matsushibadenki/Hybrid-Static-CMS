@@ -67,6 +67,10 @@ The commands read connection details from `DATABASE_URL` without printing the pa
 
 Browser requests from the control panel are protected by same-origin checks. The control panel also exposes the per-session token in its forms for integrations and progressive enhancement, so operators do not need to configure an additional value.
 
+Form submissions can be exported from each form's edit screen as a UTF-8 CSV. Automatic retention cleanup is disabled by default; set `FORM_SUBMISSION_RETENTION_DAYS` to a positive number when a documented retention policy requires it.
+
+SMTP notification errors are visible in operator notifications and audit logs under `form.submit.email_failed`. Monitor these entries if form mail is operationally important; the public submission is retained even when delivery fails.
+
 For authenticated JSON API mutations, send the token from the current session in the `X-CSRF-Token` header. Public form submissions under `/cms-api/forms/:slug/submit` remain available to visitors and use the optional reCAPTCHA v3 protection instead.
 
 The current codebase does not yet include:
