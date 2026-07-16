@@ -37,5 +37,9 @@ export async function updatePageGroup(id: number, input: { title: string; slug: 
 
 export async function deletePageGroup(id: number) { await sql`delete from page_groups where id = ${id}`; }
 export async function listPageGroupMembers(groupId: number) { return sql`select p.id, p.title, p.slug, p.status, m.position from page_group_members m join pages p on p.id = m.page_id where m.group_id = ${groupId} order by m.position asc, p.id asc`; }
+export async function getPageGroupId(pageId: number) {
+  const rows = await sql`select group_id from page_group_members where page_id = ${pageId} limit 1`;
+  return rows[0] ? Number(rows[0].group_id) : null;
+}
 export async function assignPageToGroup(groupId: number, pageId: number, position: number) { await sql`insert into page_group_members (page_id, group_id, position) values (${pageId}, ${groupId}, ${Math.max(0, position)}) on conflict (page_id) do update set group_id = excluded.group_id, position = excluded.position`; await sql`update page_groups set updated_at = now() where id = ${groupId}`; }
 export async function removePageFromGroup(pageId: number) { await sql`delete from page_group_members where page_id = ${pageId}`; }

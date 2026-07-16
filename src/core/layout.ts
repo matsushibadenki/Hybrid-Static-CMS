@@ -27,36 +27,34 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
           </a>
         </div>
         <div class="shell-nav-group">
-          <p class="shell-nav-label" data-i18n="Content">Content</p>
           <div class="shell-nav-subgroup">
-            <p class="shell-nav-sublabel" data-i18n="Manage">Manage</p>
+            <p class="shell-nav-sublabel" data-i18n="Articles">Articles</p>
+            ${can("posts.write") ? `<a data-i18n="New post" href="${config.controlPanelPath}/posts/new" class="nav-action"><span class="nav-icon">＋</span>Create post</a>` : ""}
             ${can("posts.read") ? `<a data-i18n="Posts" href="${config.controlPanelPath}/posts">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
             Post list
           </a>` : ""}
-            ${can("pages.read") ? `<a data-i18n="Pages" href="${config.controlPanelPath}/pages">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            Page list
-          </a>` : ""}
-            ${can("forms.read") ? `<a data-i18n="Forms" href="${config.controlPanelPath}/forms">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12h6"/><path d="M9 16h6"/><path d="M9 8h6"/></svg>
-            Forms
-          </a>` : ""}
-            ${can("media.read") ? `<a data-i18n="Media" href="${config.controlPanelPath}/media">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            Media
+          ${can("series.read") ? `<a data-i18n="Series" href="${config.controlPanelPath}/series">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h16"/><circle cx="18" cy="12" r="2"/></svg>
+            Series
           </a>` : ""}
           </div>
-          <div class="shell-nav-subgroup shell-nav-create">
-            <p class="shell-nav-sublabel" data-i18n="Create">Create</p>
-            ${can("posts.write") ? `<a data-i18n="New post" href="${config.controlPanelPath}/posts/new" class="nav-action">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Create post
+          <div class="shell-nav-subgroup">
+            <p class="shell-nav-sublabel" data-i18n="Fixed pages">Fixed pages</p>
+            ${can("pages.write") ? `<a data-i18n="New page" href="${config.controlPanelPath}/pages/new" class="nav-action"><span class="nav-icon">＋</span>Create page</a>` : ""}
+            ${can("pages.read") ? `<a data-i18n="Pages" href="${config.controlPanelPath}/pages">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6"/></svg>
+            Page list
           </a>` : ""}
-            ${can("pages.write") ? `<a data-i18n="New page" href="${config.controlPanelPath}/pages/new" class="nav-action">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Create page
+          ${can("page_groups.read") ? `<a data-i18n="Page groups" href="${config.controlPanelPath}/page-groups">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="5" rx="1"/><rect x="3" y="15" width="18" height="5" rx="1"/></svg>
+            Page groups
           </a>` : ""}
+          </div>
+          <div class="shell-nav-subgroup shell-nav-separated">
+            <p class="shell-nav-sublabel" data-i18n="Forms and media">Forms and media</p>
+            ${can("forms.read") ? `<a data-i18n="Forms" href="${config.controlPanelPath}/forms">Forms</a>` : ""}
+            ${can("media.read") ? `<a data-i18n="Media" href="${config.controlPanelPath}/media">Media</a>` : ""}
           </div>
         </div>
         <div class="shell-nav-group">
@@ -64,14 +62,6 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
           ${can("menus.read") ? `<a data-i18n="Menus" href="${config.controlPanelPath}/menus">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             Menus
-          </a>` : ""}
-          ${can("series.read") ? `<a data-i18n="Series" href="${config.controlPanelPath}/series">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h16"/><circle cx="18" cy="12" r="2"/></svg>
-            Series
-          </a>` : ""}
-          ${can("page_groups.read") ? `<a data-i18n="Page groups" href="${config.controlPanelPath}/page-groups">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><rect x="3" y="15" width="18" height="5" rx="1"/></svg>
-            Page groups
           </a>` : ""}
           ${can("blocks.read") ? `<a data-i18n="Blocks" href="${config.controlPanelPath}/blocks">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
@@ -310,6 +300,12 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         border-bottom: 1px solid var(--line-light);
       }
 
+      .shell-nav-group + .shell-nav-group {
+        border-top: 1px solid var(--line-light);
+        padding-top: 16px;
+        margin-top: 8px;
+      }
+
       .shell-nav-group:last-of-type { border-bottom: 0; margin-bottom: 0; }
 
       .shell-nav-label {
@@ -332,6 +328,12 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
       .shell-nav-subgroup + .shell-nav-subgroup {
         border-top: 1px solid var(--line-light);
         padding-top: 8px;
+      }
+
+      .shell-nav-separated {
+        margin-top: 12px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line-light);
       }
 
       .shell-nav-sublabel {
@@ -443,6 +445,12 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
       .shell-language button:hover {
         background: var(--accent-light);
         color: var(--accent);
+      }
+
+      .shell-language button.active {
+        background: var(--accent-light);
+        color: var(--accent-hover);
+        font-weight: 600;
       }
 
       /* Logout */
@@ -650,12 +658,70 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         gap: 20px;
       }
 
+      .editor-form { padding-block: 24px 56px; }
+      .editor-section {
+        display: grid;
+        gap: 16px;
+        padding: 24px 0 32px;
+        border-bottom: 1px solid var(--line);
+      }
+      .editor-section:first-child { padding-top: 0; }
+      .editor-section:last-of-type { padding-bottom: 40px; border-bottom: 0; }
+      .editor-section-compact { gap: 14px; }
+      .editor-collapsible { padding-block: 16px; }
+      .editor-collapsible > summary,
+      .editor-inline-details > summary {
+        cursor: pointer;
+        list-style: none;
+      }
+      .editor-collapsible > summary::-webkit-details-marker,
+      .editor-inline-details > summary::-webkit-details-marker { display: none; }
+      .editor-collapsible > summary::before,
+      .editor-inline-details > summary::before {
+        content: "+";
+        display: inline-block;
+        width: 1.2em;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .editor-collapsible[open] > summary::before,
+      .editor-inline-details[open] > summary::before { content: "-"; }
+      .editor-collapsible > summary .editor-section-title { display: block; }
+      .editor-collapsible > summary + .form-grid { margin-top: 18px; }
+      .editor-inline-details { display: grid; gap: 14px; padding-top: 4px; }
+      .editor-inline-details[open] { padding-top: 12px; }
+      .editor-section-kicker {
+        margin: 0;
+        color: var(--accent);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .editor-section-title { margin: -8px 0 2px; font-size: 1.2rem; font-weight: 600; }
+
       label {
         display: grid;
         gap: 6px;
         font-weight: 600;
         font-size: 0.88rem;
         color: var(--ink);
+      }
+
+      label.checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 24px;
+        font-weight: 500;
+      }
+
+      label.checkbox-label input[type="checkbox"] {
+        width: 16px;
+        min-width: 16px;
+        height: 16px;
+        margin: 0;
+        padding: 0;
       }
 
       input, textarea, select {
@@ -818,6 +884,12 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
           padding: 0;
           margin: 0;
         }
+        .shell-admin .shell-nav-group + .shell-nav-group,
+        .shell-admin .shell-nav-separated {
+          border-top: none;
+          padding-top: 0;
+          margin-top: 0;
+        }
         .shell-admin .shell-nav-label {
           display: none;
         }
@@ -892,15 +964,31 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         document.documentElement.lang = value === "zh" ? "zh-CN" : value;
         document.querySelectorAll("[data-i18n]").forEach((node) => {
           const key = node.getAttribute("data-i18n");
-          if (key && dictionary[key]) node.textContent = dictionary[key];
+          if (!key || !dictionary[key]) return;
+          const textNode = [...node.childNodes].find((child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim());
+          if (textNode) textNode.textContent = "\\n            " + dictionary[key] + "\\n          ";
+          else node.textContent = dictionary[key];
         });
         document.title = (dictionary[${JSON.stringify(title)}] || ${JSON.stringify(title)}) + " | " + ${JSON.stringify(config.appName)};
+        document.querySelectorAll("[data-locale]").forEach((button) => button.classList.toggle("active", button.dataset.locale === value));
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const ignored = new Set(["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA"]);
+        const textNodes = [];
+        let current;
+        while ((current = walker.nextNode())) {
+          if (!ignored.has(current.parentElement?.tagName || "")) textNodes.push(current);
+        }
+        textNodes.forEach((node) => {
+          const original = node.textContent || "";
+          const key = original.trim();
+          if (key && dictionary[key]) node.textContent = original.replace(key, dictionary[key]);
+        });
       }
       applyAdminLocale(locale);
-      const currentPath = location.pathname.replace(/\/$/, "") || "/";
+      const currentPath = location.pathname.replace(/\\/$/, "") || "/";
       const navLinks = [...document.querySelectorAll(".shell-nav a")];
       const matches = navLinks
-        .map((link) => ({ link, path: new URL(link.href, location.origin).pathname.replace(/\/$/, "") || "/" }))
+        .map((link) => ({ link, path: new URL(link.href, location.origin).pathname.replace(/\\/$/, "") || "/" }))
         .filter(({ path }) => currentPath === path || (path !== ${JSON.stringify(config.controlPanelPath)} && currentPath.startsWith(path + "/")))
         .sort((left, right) => right.path.length - left.path.length);
       matches[0]?.link.classList.add("active");

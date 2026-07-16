@@ -73,6 +73,11 @@ export async function listSeriesPosts(seriesId: number) {
   `;
 }
 
+export async function getPostSeriesId(postId: number) {
+  const rows = await sql`select series_id from post_series where post_id = ${postId} limit 1`;
+  return rows[0] ? Number(rows[0].series_id) : null;
+}
+
 export async function assignPostToSeries(seriesId: number, postId: number, position: number) {
   await sql`
     insert into post_series (post_id, series_id, position) values (${postId}, ${seriesId}, ${Math.max(0, position)})

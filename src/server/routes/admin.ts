@@ -42,8 +42,8 @@ import { createBlock, deleteBlock, getBlockById, listBlocks, updateBlock } from 
 import { getAiFileProposal, getAiProposalDiff, listAiFileProposals, reviewAiFileProposal } from "../../core/aiProposals";
 import { listOperatorNotifications, markOperatorNotificationRead } from "../../core/notifications";
 import { createPreviewToken } from "../../core/previews";
-import { assignPostToSeries, createSeries, deleteSeries, getSeriesById, listSeries, listSeriesPosts, removePostFromSeries, updateSeries } from "../../core/series";
-import { assignPageToGroup, createPageGroup, deletePageGroup, getPageGroupById, listPageGroupMembers, listPageGroups, removePageFromGroup, updatePageGroup } from "../../core/pageGroups";
+import { assignPostToSeries, createSeries, deleteSeries, getPostSeriesId, getSeriesById, listSeries, listSeriesPosts, removePostFromSeries, updateSeries } from "../../core/series";
+import { assignPageToGroup, createPageGroup, deletePageGroup, getPageGroupById, getPageGroupId, listPageGroupMembers, listPageGroups, removePageFromGroup, updatePageGroup } from "../../core/pageGroups";
 import type { FormFieldRecord, UserRole } from "../../core/types";
 
 function splitCsv(value: FormDataEntryValue | null) {
@@ -51,6 +51,11 @@ function splitCsv(value: FormDataEntryValue | null) {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function autoScopedSlug(rawSlug: string, title: string, parentSlug?: string) {
+  const slug = rawSlug.trim() || slugify(title);
+  return rawSlug.trim() || !parentSlug ? slug : `${parentSlug}-${slug}`;
 }
 
 function noticeCard(message: string, tone: "success" | "error" = "success") {
@@ -103,7 +108,7 @@ function userRolesFromForm(form: FormData) {
 function postValuesFromForm(form: FormData) {
   return {
     title: String(form.get("title") ?? ""),
-    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
+    slug: String(form.get("slug") ?? ""),
     excerpt: String(form.get("excerpt") ?? ""),
     bodyMd: String(form.get("bodyMd") ?? ""),
     bodyHtml: String(form.get("bodyHtml") ?? ""),
@@ -111,6 +116,7 @@ function postValuesFromForm(form: FormData) {
     publishedAt: String(form.get("publishedAt") ?? ""),
     categories: String(form.get("categories") ?? ""),
     tags: String(form.get("tags") ?? ""),
+    seriesId: String(form.get("seriesId") ?? ""),
     seoTitle: String(form.get("seoTitle") ?? ""),
     seoDescription: String(form.get("seoDescription") ?? ""),
     seoCanonicalUrl: String(form.get("seoCanonicalUrl") ?? ""),
@@ -124,12 +130,13 @@ function postValuesFromForm(form: FormData) {
 function pageValuesFromForm(form: FormData) {
   return {
     title: String(form.get("title") ?? ""),
-    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
+    slug: String(form.get("slug") ?? ""),
     excerpt: String(form.get("excerpt") ?? ""),
     bodyMd: String(form.get("bodyMd") ?? ""),
     bodyHtml: String(form.get("bodyHtml") ?? ""),
     status: String(form.get("status") ?? "draft"),
     publishedAt: String(form.get("publishedAt") ?? ""),
+    pageGroupId: String(form.get("pageGroupId") ?? ""),
     seoTitle: String(form.get("seoTitle") ?? ""),
     seoDescription: String(form.get("seoDescription") ?? ""),
     seoCanonicalUrl: String(form.get("seoCanonicalUrl") ?? ""),
@@ -282,67 +289,148 @@ function richEditorTools(uploadUrl?: string) {
   `;
 }
 
-function postForm(action: string, values?: Record<string, string>) {
+function seriesSelect(series: Awaited<ReturnType<typeof listSeries>>, selectedId?: string) {
+  return `<label>Series <select name="seriesId" data-slug-scope="series"><option value="">No series</option>${series.map((item) => `<option value="${item.id}" data-scope-slug="${escapeHtml(item.slug)}" ${selectedId === String(item.id) ? "selected" : ""}>${escapeHtml(item.title)} (${escapeHtml(item.slug)})</option>`).join("")}</select><span class="meta">Group this article under one series. Manage series in the Series menu.</span></label>`;
+}
+
+function slugAutomationScript() {
+  return `<script>
+    (() => {
+      const form = document.currentScript?.previousElementSibling;
+      if (!form) return;
+      const title = form.querySelector('input[name="title"]');
+      const slug = form.querySelector('input[name="slug"]');
+      const scope = form.querySelector('select[data-slug-scope]');
+      if (!title || !slug || !scope) return;
+      let generated = !slug.value;
+      const normalize = (value) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const update = () => {
+        if (!generated) return;
+        const parent = scope.selectedOptions[0]?.dataset.scopeSlug || "";
+        const child = normalize(title.value);
+        slug.value = parent && child ? parent + "-" + child : child;
+      };
+      title.addEventListener("input", update);
+      scope.addEventListener("change", update);
+      slug.addEventListener("input", () => { generated = false; });
+      update();
+    })();
+  </script>`;
+}
+
+function pageGroupSelect(groups: Awaited<ReturnType<typeof listPageGroups>>, selectedId?: string) {
+  return `<label>Page group <select name="pageGroupId" data-slug-scope="pageGroup"><option value="">No page group</option>${groups.map((item) => `<option value="${item.id}" data-scope-slug="${escapeHtml(item.slug)}" ${selectedId === String(item.id) ? "selected" : ""}>${escapeHtml(item.title)} (${escapeHtml(item.slug)})</option>`).join("")}</select><span class="meta">Group this fixed page under one page group. Manage groups in the Page groups menu.</span></label>`;
+}
+
+function postForm(action: string, values?: Record<string, string>, series: Awaited<ReturnType<typeof listSeries>> = []) {
   return `
-    <form method="post" action="${action}" class="form-grid">
-      <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
-      <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
-      <label>Excerpt <textarea name="excerpt">${escapeHtml(values?.excerpt ?? "")}</textarea></label>
-      <label>Body (Markdown-like) <textarea name="bodyMd">${escapeHtml(values?.bodyMd ?? "")}</textarea></label>
-      <label>Body HTML editor <textarea name="bodyHtml" rows="16" placeholder="Write HTML here, or use the toolbar below.">${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>
-      ${richEditorTools(`${config.controlPanelPath}/posts/media/upload`)}
-      <label>Status
+    <form method="post" action="${action}" class="form-grid editor-form">
+      <section class="editor-section">
+        <p class="editor-section-kicker">Content setup</p>
+        <h2 class="editor-section-title">Basic information</h2>
+        <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
+        <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
+        ${seriesSelect(series, values?.seriesId)}
+        <details class="editor-inline-details">
+          <summary>Additional article information</summary>
+          <div class="form-grid">
+            <label>Excerpt <textarea name="excerpt">${escapeHtml(values?.excerpt ?? "")}</textarea></label>
+            <label>Categories (comma-separated slugs) <input name="categories" value="${escapeHtml(values?.categories ?? "")}" /></label>
+            <label>Tags (comma-separated slugs) <input name="tags" value="${escapeHtml(values?.tags ?? "")}" /></label>
+          </div>
+        </details>
+      </section>
+      <section class="editor-section">
+        <p class="editor-section-kicker">Writing</p>
+        <h2 class="editor-section-title">Article body</h2>
+        <label>Body (Markdown-like) <textarea name="bodyMd">${escapeHtml(values?.bodyMd ?? "")}</textarea></label>
+        <label>Body HTML editor <textarea name="bodyHtml" rows="16" placeholder="Write HTML here, or use the toolbar below.">${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>
+        ${richEditorTools(`${config.controlPanelPath}/posts/media/upload`)}
+      </section>
+      <details class="editor-section editor-section-compact editor-collapsible">
+        <summary><span class="editor-section-kicker">Publishing</span><span class="editor-section-title">Publication settings</span></summary>
+        <div class="form-grid">
+        <label>Status
         <select name="status">
           <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
           <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
           <option value="scheduled" ${values?.status === "scheduled" ? "selected" : ""}>Scheduled</option>
         </select>
-      </label>
-      <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /></label>
-      <label>Categories (comma-separated slugs) <input name="categories" value="${escapeHtml(values?.categories ?? "")}" /></label>
-      <label>Tags (comma-separated slugs) <input name="tags" value="${escapeHtml(values?.tags ?? "")}" /></label>
-      <label>SEO title <input name="seoTitle" value="${escapeHtml(values?.seoTitle ?? "")}" /></label>
-      <label>SEO description <textarea name="seoDescription">${escapeHtml(values?.seoDescription ?? "")}</textarea></label>
-      <label>Canonical URL <input name="seoCanonicalUrl" value="${escapeHtml(values?.seoCanonicalUrl ?? "")}" placeholder="auto-generated if empty" /></label>
-      <label>OG image URL <input name="seoOgImage" value="${escapeHtml(values?.seoOgImage ?? "")}" /></label>
-      <label>SEO keywords <input name="seoKeywords" value="${escapeHtml(values?.seoKeywords ?? "")}" placeholder="comma-separated" /></label>
-      <label><input type="checkbox" name="seoNoindex" value="true" ${values?.seoNoindex === "true" ? "checked" : ""} /> Prevent search indexing (noindex)</label>
-      <label><input type="checkbox" name="seoNofollow" value="true" ${values?.seoNofollow === "true" ? "checked" : ""} /> Prevent link following (nofollow)</label>
+        </label>
+        <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /></label>
+        </div>
+      </details>
+      <details class="editor-section editor-section-compact editor-collapsible">
+        <summary><span class="editor-section-kicker">Search visibility</span><span class="editor-section-title">SEO settings</span></summary>
+        <div class="form-grid">
+        <label>SEO title <input name="seoTitle" value="${escapeHtml(values?.seoTitle ?? "")}" /></label>
+        <label>SEO description <textarea name="seoDescription">${escapeHtml(values?.seoDescription ?? "")}</textarea></label>
+        <label>Canonical URL <input name="seoCanonicalUrl" value="${escapeHtml(values?.seoCanonicalUrl ?? "")}" placeholder="auto-generated if empty" /></label>
+        <label>OG image URL <input name="seoOgImage" value="${escapeHtml(values?.seoOgImage ?? "")}" /></label>
+        <label>SEO keywords <input name="seoKeywords" value="${escapeHtml(values?.seoKeywords ?? "")}" placeholder="comma-separated" /></label>
+        <label class="checkbox-label"><input type="checkbox" name="seoNoindex" value="true" ${values?.seoNoindex === "true" ? "checked" : ""} /> <span>Prevent search indexing (noindex)</span></label>
+        <label class="checkbox-label"><input type="checkbox" name="seoNofollow" value="true" ${values?.seoNofollow === "true" ? "checked" : ""} /> <span>Prevent link following (nofollow)</span></label>
+        </div>
+      </details>
       <div class="row">
         <button class="button button-primary" type="submit">Save post</button>
       </div>
     </form>
+    ${slugAutomationScript()}
   `;
 }
 
-function pageForm(action: string, values?: Record<string, string>) {
+function pageForm(action: string, values?: Record<string, string>, groups: Awaited<ReturnType<typeof listPageGroups>> = []) {
   return `
-    <form method="post" action="${action}" class="form-grid">
-      <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
-      <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
-      <label>Excerpt <textarea name="excerpt">${escapeHtml(values?.excerpt ?? "")}</textarea></label>
-      <label>Body (Markdown-like) <textarea name="bodyMd">${escapeHtml(values?.bodyMd ?? "")}</textarea></label>
-      <label>Body HTML override <textarea name="bodyHtml">${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>
-      ${richEditorTools()}
-      <label>Status
+    <form method="post" action="${action}" class="form-grid editor-form">
+      <section class="editor-section">
+        <p class="editor-section-kicker">Page setup</p>
+        <h2 class="editor-section-title">Basic information</h2>
+        <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
+        <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
+        ${pageGroupSelect(groups, values?.pageGroupId)}
+        <details class="editor-inline-details">
+          <summary>Additional page information</summary>
+          <label>Excerpt <textarea name="excerpt">${escapeHtml(values?.excerpt ?? "")}</textarea></label>
+        </details>
+      </section>
+      <section class="editor-section">
+        <p class="editor-section-kicker">Writing</p>
+        <h2 class="editor-section-title">Page body</h2>
+        <label>Body (Markdown-like) <textarea name="bodyMd">${escapeHtml(values?.bodyMd ?? "")}</textarea></label>
+        <label>Body HTML override <textarea name="bodyHtml">${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>
+        ${richEditorTools()}
+      </section>
+      <details class="editor-section editor-section-compact editor-collapsible">
+        <summary><span class="editor-section-kicker">Publishing</span><span class="editor-section-title">Publication settings</span></summary>
+        <div class="form-grid">
+        <label>Status
         <select name="status">
           <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
           <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
           <option value="scheduled" ${values?.status === "scheduled" ? "selected" : ""}>Scheduled</option>
         </select>
-      </label>
-      <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /></label>
-      <label>SEO title <input name="seoTitle" value="${escapeHtml(values?.seoTitle ?? "")}" /></label>
-      <label>SEO description <textarea name="seoDescription">${escapeHtml(values?.seoDescription ?? "")}</textarea></label>
-      <label>Canonical URL <input name="seoCanonicalUrl" value="${escapeHtml(values?.seoCanonicalUrl ?? "")}" placeholder="auto-generated if empty" /></label>
-      <label>OG image URL <input name="seoOgImage" value="${escapeHtml(values?.seoOgImage ?? "")}" /></label>
-      <label>SEO keywords <input name="seoKeywords" value="${escapeHtml(values?.seoKeywords ?? "")}" placeholder="comma-separated" /></label>
-      <label><input type="checkbox" name="seoNoindex" value="true" ${values?.seoNoindex === "true" ? "checked" : ""} /> Prevent search indexing (noindex)</label>
-      <label><input type="checkbox" name="seoNofollow" value="true" ${values?.seoNofollow === "true" ? "checked" : ""} /> Prevent link following (nofollow)</label>
+        </label>
+        <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /></label>
+        </div>
+      </details>
+      <details class="editor-section editor-section-compact editor-collapsible">
+        <summary><span class="editor-section-kicker">Search visibility</span><span class="editor-section-title">SEO settings</span></summary>
+        <div class="form-grid">
+        <label>SEO title <input name="seoTitle" value="${escapeHtml(values?.seoTitle ?? "")}" /></label>
+        <label>SEO description <textarea name="seoDescription">${escapeHtml(values?.seoDescription ?? "")}</textarea></label>
+        <label>Canonical URL <input name="seoCanonicalUrl" value="${escapeHtml(values?.seoCanonicalUrl ?? "")}" placeholder="auto-generated if empty" /></label>
+        <label>OG image URL <input name="seoOgImage" value="${escapeHtml(values?.seoOgImage ?? "")}" /></label>
+        <label>SEO keywords <input name="seoKeywords" value="${escapeHtml(values?.seoKeywords ?? "")}" placeholder="comma-separated" /></label>
+        <label class="checkbox-label"><input type="checkbox" name="seoNoindex" value="true" ${values?.seoNoindex === "true" ? "checked" : ""} /> <span>Prevent search indexing (noindex)</span></label>
+        <label class="checkbox-label"><input type="checkbox" name="seoNofollow" value="true" ${values?.seoNofollow === "true" ? "checked" : ""} /> <span>Prevent link following (nofollow)</span></label>
+        </div>
+      </details>
       <div class="row">
         <button class="button button-primary" type="submit">Save page</button>
       </div>
     </form>
+    ${slugAutomationScript()}
   `;
 }
 
@@ -794,6 +882,9 @@ adminRoutes.get("/posts", async (c) => {
   const status = c.req.query("status") ?? "any";
   const category = c.req.query("category") ?? "";
   const posts = await listPosts({ page: 1, limit: 50, status, category: category || undefined, search: q || undefined });
+  const series = await listSeries();
+  const seriesById = new Map(series.map((item) => [item.id, item.title]));
+  const postSeriesIds = new Map(await Promise.all(posts.items.map(async (post) => [post.id, await getPostSeriesId(post.id)] as const)));
   const body = `
     ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;">
@@ -816,7 +907,7 @@ adminRoutes.get("/posts", async (c) => {
       </div>
     </form>
     <table>
-      <thead><tr><th>Title</th><th>Status</th><th>Categories</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Title</th><th>Status</th><th>Series</th><th>Categories</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${posts.items
           .map(
@@ -824,6 +915,7 @@ adminRoutes.get("/posts", async (c) => {
               <tr>
                 <td><a href="${config.controlPanelPath}/posts/${post.id}/edit">${escapeHtml(post.title)}</a></td>
                 <td>${escapeHtml(post.status)}</td>
+                <td>${escapeHtml(seriesById.get(postSeriesIds.get(post.id) ?? 0) ?? "No series")}</td>
                 <td>${escapeHtml(post.categories.join(", "))}</td>
                 <td>${new Date(post.updatedAt).toLocaleString("en-US")}</td>
                 <td>
@@ -844,9 +936,9 @@ adminRoutes.get("/posts", async (c) => {
   return c.html(adminLayout("Posts", user, body));
 });
 
-adminRoutes.get("/posts/new", (c) => {
+adminRoutes.get("/posts/new", async (c) => {
   const user = c.get("sessionUser");
-  return c.html(adminLayout("New Post", user, queryNotice(c) + postForm(`${config.controlPanelPath}/posts`)));
+  return c.html(adminLayout("New Post", user, queryNotice(c) + postForm(`${config.controlPanelPath}/posts`, undefined, await listSeries())));
 });
 
 adminRoutes.post("/posts", async (c) => {
@@ -857,6 +949,9 @@ adminRoutes.post("/posts", async (c) => {
 
   const form = await c.req.formData();
   const values = postValuesFromForm(form);
+  const series = await listSeries();
+  const selectedSeries = series.find((item) => item.id === Number(form.get("seriesId")));
+  values.slug = autoScopedSlug(values.slug, values.title, selectedSeries?.slug);
   let post;
   try {
     if (values.status !== "draft" && !hasPermission(user, "posts.publish")) throw new AppValidationError("You do not have permission to publish posts.");
@@ -881,9 +976,11 @@ adminRoutes.post("/posts", async (c) => {
       },
       user.id,
     );
+    const seriesId = Number(form.get("seriesId"));
+    if (seriesId > 0 && post) await assignPostToSeries(seriesId, post.id, 0);
   } catch (error) {
     if (error instanceof AppValidationError) {
-      return c.html(adminLayout("New Post", user, noticeCard(error.message, "error") + postForm(`${config.controlPanelPath}/posts`, values)), 400);
+      return c.html(adminLayout("New Post", user, noticeCard(error.message, "error") + postForm(`${config.controlPanelPath}/posts`, values, series)), 400);
     }
     throw error;
   }
@@ -920,6 +1017,8 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
   const user = c.get("sessionUser");
   const post = await getPostById(Number(c.req.param("id")));
   const mediaItems = await listMedia();
+  const series = await listSeries();
+  const seriesId = await getPostSeriesId(Number(c.req.param("id")));
   if (!post) {
     return c.text("Not found", 404);
   }
@@ -945,7 +1044,8 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
         seoKeywords: post.seoKeywords ?? "",
         seoNoindex: post.seoNoindex ? "true" : "false",
         seoNofollow: post.seoNofollow ? "true" : "false",
-      }) +
+        seriesId: seriesId ? String(seriesId) : "",
+      }, series) +
         snapshotHelperCard(`${config.controlPanelPath}/posts/${post.id}/edit`, [
           "index.html",
           "assets/site.css",
@@ -961,6 +1061,7 @@ adminRoutes.post("/posts/:id", async (c) => {
   const form = await c.req.formData();
   const user = c.get("sessionUser");
   const mediaItems = await listMedia();
+  const series = await listSeries();
   const values = postValuesFromForm(form);
   try {
     if (values.status !== "draft" && !hasPermission(user, "posts.publish")) throw new AppValidationError("You do not have permission to publish posts.");
@@ -982,6 +1083,9 @@ adminRoutes.post("/posts/:id", async (c) => {
       seoNoindex: values.seoNoindex === "true",
       seoNofollow: values.seoNofollow === "true",
     }, user?.id);
+    const seriesId = Number(form.get("seriesId"));
+    if (seriesId > 0) await assignPostToSeries(seriesId, Number(c.req.param("id")), 0);
+    else await removePostFromSeries(Number(c.req.param("id")));
   } catch (error) {
     if (error instanceof AppValidationError) {
       return c.html(
@@ -989,7 +1093,7 @@ adminRoutes.post("/posts/:id", async (c) => {
           "Edit Post",
           user,
           noticeCard(error.message, "error") +
-            postForm(`${config.controlPanelPath}/posts/${c.req.param("id")}`, values) +
+            postForm(`${config.controlPanelPath}/posts/${c.req.param("id")}`, values, series) +
             snapshotHelperCard(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit`, [
               "index.html",
               "assets/site.css",
@@ -1118,6 +1222,9 @@ adminRoutes.get("/pages", async (c) => {
   const q = c.req.query("q") ?? "";
   const status = c.req.query("status") ?? "any";
   const pages = await listPages({ page: 1, limit: 50, status, search: q || undefined });
+  const groups = await listPageGroups();
+  const groupById = new Map(groups.map((item) => [item.id, item.title]));
+  const pageGroupIds = new Map(await Promise.all(pages.items.map(async (page) => [page.id, await getPageGroupId(page.id)] as const)));
   const body = `
     ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;">
@@ -1136,7 +1243,7 @@ adminRoutes.get("/pages", async (c) => {
       </div>
     </form>
     <table>
-      <thead><tr><th>Title</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Title</th><th>Status</th><th>Page group</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${pages.items
           .map(
@@ -1144,6 +1251,7 @@ adminRoutes.get("/pages", async (c) => {
               <tr>
                 <td><a href="${config.controlPanelPath}/pages/${page.id}/edit">${escapeHtml(page.title)}</a></td>
                 <td>${escapeHtml(page.status)}</td>
+                <td>${escapeHtml(groupById.get(pageGroupIds.get(page.id) ?? 0) ?? "No page group")}</td>
                 <td>${new Date(page.updatedAt).toLocaleString("en-US")}</td>
                 <td>
                   <div class="row">
@@ -1164,9 +1272,9 @@ adminRoutes.get("/pages", async (c) => {
   return c.html(adminLayout("Pages", user, body));
 });
 
-adminRoutes.get("/pages/new", (c) => {
+adminRoutes.get("/pages/new", async (c) => {
   const user = c.get("sessionUser");
-  return c.html(adminLayout("New Page", user, queryNotice(c) + pageForm(`${config.controlPanelPath}/pages`)));
+  return c.html(adminLayout("New Page", user, queryNotice(c) + pageForm(`${config.controlPanelPath}/pages`, undefined, await listPageGroups())));
 });
 
 adminRoutes.get("/forms", async (c) => {
@@ -1410,6 +1518,9 @@ adminRoutes.post("/pages", async (c) => {
 
   const form = await c.req.formData();
   const values = pageValuesFromForm(form);
+  const groups = await listPageGroups();
+  const selectedGroup = groups.find((item) => item.id === Number(form.get("pageGroupId")));
+  values.slug = autoScopedSlug(values.slug, values.title, selectedGroup?.slug);
   let page;
   try {
     if (values.status !== "draft" && !hasPermission(user, "pages.publish")) throw new AppValidationError("You do not have permission to publish pages.");
@@ -1432,9 +1543,11 @@ adminRoutes.post("/pages", async (c) => {
       },
       user.id,
     );
+    const groupId = Number(form.get("pageGroupId"));
+    if (groupId > 0 && page) await assignPageToGroup(groupId, page.id, 0);
   } catch (error) {
     if (error instanceof AppValidationError) {
-      return c.html(adminLayout("New Page", user, noticeCard(error.message, "error") + pageForm(`${config.controlPanelPath}/pages`, values)), 400);
+      return c.html(adminLayout("New Page", user, noticeCard(error.message, "error") + pageForm(`${config.controlPanelPath}/pages`, values, groups)), 400);
     }
     throw error;
   }
@@ -1455,6 +1568,8 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
   const user = c.get("sessionUser");
   const page = await getPageById(Number(c.req.param("id")));
   const mediaItems = await listMedia();
+  const groups = await listPageGroups();
+  const groupId = await getPageGroupId(Number(c.req.param("id")));
   if (!page) {
     return c.text("Not found", 404);
   }
@@ -1478,7 +1593,8 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
         seoKeywords: page.seoKeywords ?? "",
         seoNoindex: page.seoNoindex ? "true" : "false",
         seoNofollow: page.seoNofollow ? "true" : "false",
-      }) +
+        pageGroupId: groupId ? String(groupId) : "",
+      }, groups) +
         snapshotHelperCard(`${config.controlPanelPath}/pages/${page.id}/edit`, [
           "index.html",
           "about.php",
@@ -1494,6 +1610,7 @@ adminRoutes.post("/pages/:id", async (c) => {
   const form = await c.req.formData();
   const user = c.get("sessionUser");
   const mediaItems = await listMedia();
+  const groups = await listPageGroups();
   const values = pageValuesFromForm(form);
   try {
     if (values.status !== "draft" && !hasPermission(user, "pages.publish")) throw new AppValidationError("You do not have permission to publish pages.");
@@ -1513,6 +1630,9 @@ adminRoutes.post("/pages/:id", async (c) => {
       seoNoindex: values.seoNoindex === "true",
       seoNofollow: values.seoNofollow === "true",
     }, user?.id);
+    const groupId = Number(form.get("pageGroupId"));
+    if (groupId > 0) await assignPageToGroup(groupId, Number(c.req.param("id")), 0);
+    else await removePageFromGroup(Number(c.req.param("id")));
   } catch (error) {
     if (error instanceof AppValidationError) {
       return c.html(
@@ -1520,7 +1640,7 @@ adminRoutes.post("/pages/:id", async (c) => {
           "Edit Page",
           user,
           noticeCard(error.message, "error") +
-            pageForm(`${config.controlPanelPath}/pages/${c.req.param("id")}`, values) +
+            pageForm(`${config.controlPanelPath}/pages/${c.req.param("id")}`, values, groups) +
             snapshotHelperCard(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit`, [
               "index.html",
               "about.php",

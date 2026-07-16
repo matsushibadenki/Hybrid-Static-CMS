@@ -298,7 +298,7 @@ function renderField(field: FormFieldRecord) {
     return `<label>${escapeHtml(field.label)}<select name="${escapeHtml(field.name)}" ${required}>${options}</select></label>`;
   }
   if (field.type === "checkbox") {
-    return `<label><input type="checkbox" name="${escapeHtml(field.name)}" value="yes" /> ${escapeHtml(field.label)}</label>`;
+    return `<label class="checkbox-label"><input type="checkbox" name="${escapeHtml(field.name)}" value="yes" /> <span>${escapeHtml(field.label)}</span></label>`;
   }
   return `<label>${escapeHtml(field.label)}<input type="${escapeHtml(field.type)}" name="${escapeHtml(field.name)}" ${required} /></label>`;
 }
