@@ -5,7 +5,7 @@ export const adminTranslations = {
     "New post": "投稿を作成", "New page": "固定ページを作成", API: "API", Logout: "ログアウト", "control panel": "コントロールパネル",
     "Signed in as": "ログイン中:", "Sign in to manage posts and generated fragments.": "ログインして投稿と生成ページを管理してください。",
     "Switch language": "言語", English: "英語", Japanese: "日本語", "Simplified Chinese": "簡体字中国語",
-    Overview: "概要", Content: "コンテンツ", Manage: "管理", Create: "作成", "Site structure": "サイト構成", Operations: "運用・管理",
+    Overview: "概要", Content: "コンテンツ", Manage: "管理", Create: "作成", Series: "シリーズ", "Page groups": "ページグループ", "Site structure": "サイト構成", Operations: "運用・管理",
     Search: "検索", Save: "保存", Delete: "削除", Edit: "編集",
   },
   zh: {
@@ -14,7 +14,7 @@ export const adminTranslations = {
     "New post": "创建文章", "New page": "创建页面", API: "API", Logout: "退出登录", "control panel": "控制面板",
     "Signed in as": "当前登录:", "Sign in to manage posts and generated fragments.": "请登录以管理文章和生成页面。",
     "Switch language": "语言", English: "英语", Japanese: "日语", "Simplified Chinese": "简体中文",
-    Overview: "概览", Content: "内容", Manage: "管理", Create: "创建", "Site structure": "网站结构", Operations: "运营与管理",
+    Overview: "概览", Content: "内容", Manage: "管理", Create: "创建", Series: "系列", "Page groups": "页面分组", "Site structure": "网站结构", Operations: "运营与管理",
     Search: "搜索", Save: "保存", Delete: "删除", Edit: "编辑",
   },
 } as const;

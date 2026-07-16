@@ -42,6 +42,8 @@ import { createBlock, deleteBlock, getBlockById, listBlocks, updateBlock } from 
 import { getAiFileProposal, getAiProposalDiff, listAiFileProposals, reviewAiFileProposal } from "../../core/aiProposals";
 import { listOperatorNotifications, markOperatorNotificationRead } from "../../core/notifications";
 import { createPreviewToken } from "../../core/previews";
+import { assignPostToSeries, createSeries, deleteSeries, getSeriesById, listSeries, listSeriesPosts, removePostFromSeries, updateSeries } from "../../core/series";
+import { assignPageToGroup, createPageGroup, deletePageGroup, getPageGroupById, listPageGroupMembers, listPageGroups, removePageFromGroup, updatePageGroup } from "../../core/pageGroups";
 import type { FormFieldRecord, UserRole } from "../../core/types";
 
 function splitCsv(value: FormDataEntryValue | null) {
@@ -1626,6 +1628,136 @@ adminRoutes.post("/pages/:id/revisions/:revisionId/restore", async (c) => {
   await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/pages/${pageId}/edit?success=${encodeURIComponent("Revision restored.")}`);
 });
+
+adminRoutes.get("/series", async (c) => {
+  const user = c.get("sessionUser");
+  const series = await listSeries();
+  const body = `${queryNotice(c)}
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <div><p class="meta">Group related articles into an ordered editorial thread.</p></div>
+      <a class="button button-primary" href="${config.controlPanelPath}/series/new">New series</a>
+    </div>
+    <table><thead><tr><th>Series</th><th>Slug</th><th>Articles</th><th>Actions</th></tr></thead><tbody>
+      ${series.map((item) => `<tr><td><strong>${escapeHtml(item.title)}</strong><br><span class="meta">${escapeHtml(item.description ?? "")}</span></td><td><code>${escapeHtml(item.slug)}</code></td><td>${item.postCount}</td><td><div class="row"><a class="button" href="${config.controlPanelPath}/series/${item.id}/edit">Manage articles</a><form method="post" action="${config.controlPanelPath}/series/${item.id}/delete"><button class="button" type="submit">Delete</button></form></div></td></tr>`).join("") || "<tr><td colspan='4'>No series yet.</td></tr>"}
+    </tbody></table>`;
+  return c.html(adminLayout("Series", user, body));
+});
+
+adminRoutes.get("/series/new", (c) => c.html(adminLayout("New Series", c.get("sessionUser"), `${queryNotice(c)}
+  <form method="post" action="${config.controlPanelPath}/series" class="form-grid">
+    <label>Series title <input name="title" required placeholder="e.g. CMS development diary" /></label>
+    <label>Slug <input name="slug" required placeholder="cms-development-diary" /></label>
+    <label>Description <textarea name="description"></textarea></label>
+    <button class="button button-primary" type="submit">Create series</button>
+  </form>`)));
+
+adminRoutes.post("/series", async (c) => {
+  const form = await c.req.formData();
+  try {
+    const item = await createSeries({ title: String(form.get("title") ?? ""), slug: String(form.get("slug") ?? ""), description: String(form.get("description") ?? "") });
+    return c.redirect(`${config.controlPanelPath}/series/${item?.id ?? ""}/edit?success=${encodeURIComponent("Series created.")}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.html(adminLayout("New Series", c.get("sessionUser"), noticeCard(error.message, "error")), 400);
+    throw error;
+  }
+});
+
+adminRoutes.get("/series/:id/edit", async (c) => {
+  const user = c.get("sessionUser");
+  const item = await getSeriesById(Number(c.req.param("id")));
+  if (!item) return c.text("Not found", 404);
+  const posts = await listPosts({ page: 1, limit: 50, status: "any" });
+  const members = await listSeriesPosts(item.id);
+  const memberIds = new Set(members.map((post) => Number(post.id)));
+  const body = `${queryNotice(c)}
+    <section style="border:1px solid var(--line); padding:20px; margin-bottom:24px;">
+      <p class="meta">Series parent</p>
+      <form method="post" action="${config.controlPanelPath}/series/${item.id}" class="form-grid">
+        <label>Series title <input name="title" value="${escapeHtml(item.title)}" required /></label>
+        <label>Slug <input name="slug" value="${escapeHtml(item.slug)}" required /></label>
+        <label>Description <textarea name="description">${escapeHtml(item.description ?? "")}</textarea></label>
+        <button class="button button-primary" type="submit">Save series</button>
+      </form>
+    </section>
+    <section style="border:1px solid var(--line); padding:20px;">
+      <p class="meta">Series articles</p>
+      <h2>${escapeHtml(item.title)} <span class="meta">(${members.length} articles)</span></h2>
+      <form method="post" action="${config.controlPanelPath}/series/${item.id}/posts" class="row" style="align-items:end; margin-bottom:20px;">
+        <label style="flex:1;">Add article<select name="postId"><option value="">Select an article</option>${posts.items.filter((post) => !memberIds.has(post.id)).map((post) => `<option value="${post.id}">${escapeHtml(post.title)}</option>`).join("")}</select></label>
+        <label style="width:120px;">Order<input type="number" name="position" min="0" value="${members.length}" /></label>
+        <button class="button button-primary" type="submit">Add to series</button>
+      </form>
+      <ol>${members.map((post) => `<li style="padding:10px 0; border-bottom:1px solid var(--line);"><div class="row" style="justify-content:space-between;"><span><strong>${escapeHtml(String(post.title))}</strong> <span class="meta">#${post.position}</span></span><form method="post" action="${config.controlPanelPath}/series/${item.id}/posts/${post.id}/remove"><button class="button" type="submit">Remove</button></form></div></li>`).join("") || "<li>No articles assigned.</li>"}</ol>
+    </section>`;
+  return c.html(adminLayout("Edit Series", user, body));
+});
+
+adminRoutes.post("/series/:id", async (c) => {
+  const form = await c.req.formData();
+  try {
+    await updateSeries(Number(c.req.param("id")), { title: String(form.get("title") ?? ""), slug: String(form.get("slug") ?? ""), description: String(form.get("description") ?? "") });
+    return c.redirect(`${config.controlPanelPath}/series/${c.req.param("id")}/edit?success=${encodeURIComponent("Series saved.")}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.redirect(`${config.controlPanelPath}/series/${c.req.param("id")}/edit?error=${encodeURIComponent(error.message)}`);
+    throw error;
+  }
+});
+
+adminRoutes.post("/series/:id/posts", async (c) => {
+  const form = await c.req.formData();
+  const postId = Number(form.get("postId"));
+  if (postId) await assignPostToSeries(Number(c.req.param("id")), postId, Number(form.get("position") ?? 0));
+  return c.redirect(`${config.controlPanelPath}/series/${c.req.param("id")}/edit?success=${encodeURIComponent("Article assigned.")}`);
+});
+
+adminRoutes.post("/series/:id/posts/:postId/remove", async (c) => {
+  await removePostFromSeries(Number(c.req.param("postId")));
+  return c.redirect(`${config.controlPanelPath}/series/${c.req.param("id")}/edit?success=${encodeURIComponent("Article removed.")}`);
+});
+
+adminRoutes.post("/series/:id/delete", async (c) => {
+  await deleteSeries(Number(c.req.param("id")));
+  return c.redirect(`${config.controlPanelPath}/series?success=${encodeURIComponent("Series deleted.")}`);
+});
+
+adminRoutes.get("/page-groups", async (c) => {
+  const groups = await listPageGroups();
+  const body = `${queryNotice(c)}<div class="row" style="justify-content:space-between; align-items:center; margin-bottom:20px;"><p class="meta">Organize fixed pages under a shared parent and order.</p><a class="button button-primary" href="${config.controlPanelPath}/page-groups/new">New page group</a></div><table><thead><tr><th>Group</th><th>Slug</th><th>Pages</th><th>Actions</th></tr></thead><tbody>${groups.map((item) => `<tr><td><strong>${escapeHtml(item.title)}</strong><br><span class="meta">${escapeHtml(item.description ?? "")}</span></td><td><code>${escapeHtml(item.slug)}</code></td><td>${item.pageCount}</td><td><div class="row"><a class="button" href="${config.controlPanelPath}/page-groups/${item.id}/edit">Manage pages</a><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/delete"><button class="button" type="submit">Delete</button></form></div></td></tr>`).join("") || "<tr><td colspan='4'>No page groups yet.</td></tr>"}</tbody></table>`;
+  return c.html(adminLayout("Page groups", c.get("sessionUser"), body));
+});
+
+adminRoutes.get("/page-groups/new", (c) => c.html(adminLayout("New Page Group", c.get("sessionUser"), `<form method="post" action="${config.controlPanelPath}/page-groups" class="form-grid"><label>Group title <input name="title" required placeholder="e.g. Company information" /></label><label>Slug <input name="slug" required placeholder="company" /></label><label>Description <textarea name="description"></textarea></label><button class="button button-primary" type="submit">Create page group</button></form>`)));
+
+adminRoutes.post("/page-groups", async (c) => {
+  const form = await c.req.formData();
+  try {
+    const item = await createPageGroup({ title: String(form.get("title") ?? ""), slug: String(form.get("slug") ?? ""), description: String(form.get("description") ?? "") });
+    return c.redirect(`${config.controlPanelPath}/page-groups/${item?.id ?? ""}/edit?success=${encodeURIComponent("Page group created.")}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.html(adminLayout("New Page Group", c.get("sessionUser"), noticeCard(error.message, "error")), 400);
+    throw error;
+  }
+});
+
+adminRoutes.get("/page-groups/:id/edit", async (c) => {
+  const item = await getPageGroupById(Number(c.req.param("id")));
+  if (!item) return c.text("Not found", 404);
+  const pages = await listPages({ page: 1, limit: 50, status: "any" });
+  const members = await listPageGroupMembers(item.id);
+  const memberIds = new Set(members.map((page) => Number(page.id)));
+  const body = `${queryNotice(c)}<section style="border:1px solid var(--line); padding:20px; margin-bottom:24px;"><p class="meta">Page group parent</p><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}" class="form-grid"><label>Group title <input name="title" value="${escapeHtml(item.title)}" required /></label><label>Slug <input name="slug" value="${escapeHtml(item.slug)}" required /></label><label>Description <textarea name="description">${escapeHtml(item.description ?? "")}</textarea></label><button class="button button-primary" type="submit">Save page group</button></form></section><section style="border:1px solid var(--line); padding:20px;"><p class="meta">Grouped pages</p><h2>${escapeHtml(item.title)} <span class="meta">(${members.length} pages)</span></h2><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/pages" class="row" style="align-items:end; margin-bottom:20px;"><label style="flex:1;">Add page<select name="pageId"><option value="">Select a page</option>${pages.items.filter((page) => !memberIds.has(page.id)).map((page) => `<option value="${page.id}">${escapeHtml(page.title)}</option>`).join("")}</select></label><label style="width:120px;">Order<input type="number" name="position" min="0" value="${members.length}" /></label><button class="button button-primary" type="submit">Add to group</button></form><ol>${members.map((page) => `<li style="padding:10px 0; border-bottom:1px solid var(--line);"><div class="row" style="justify-content:space-between;"><span><strong>${escapeHtml(String(page.title))}</strong> <span class="meta">#${page.position}</span></span><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/pages/${page.id}/remove"><button class="button" type="submit">Remove</button></form></div></li>`).join("") || "<li>No pages assigned.</li>"}</ol></section>`;
+  return c.html(adminLayout("Edit Page Group", c.get("sessionUser"), body));
+});
+
+adminRoutes.post("/page-groups/:id", async (c) => {
+  const form = await c.req.formData();
+  try { await updatePageGroup(Number(c.req.param("id")), { title: String(form.get("title") ?? ""), slug: String(form.get("slug") ?? ""), description: String(form.get("description") ?? "") }); return c.redirect(`${config.controlPanelPath}/page-groups/${c.req.param("id")}/edit?success=${encodeURIComponent("Page group saved.")}`); }
+  catch (error) { if (error instanceof AppValidationError) return c.redirect(`${config.controlPanelPath}/page-groups/${c.req.param("id")}/edit?error=${encodeURIComponent(error.message)}`); throw error; }
+});
+
+adminRoutes.post("/page-groups/:id/pages", async (c) => { const form = await c.req.formData(); const pageId = Number(form.get("pageId")); if (pageId) await assignPageToGroup(Number(c.req.param("id")), pageId, Number(form.get("position") ?? 0)); return c.redirect(`${config.controlPanelPath}/page-groups/${c.req.param("id")}/edit?success=${encodeURIComponent("Page assigned.")}`); });
+adminRoutes.post("/page-groups/:id/pages/:pageId/remove", async (c) => { await removePageFromGroup(Number(c.req.param("pageId"))); return c.redirect(`${config.controlPanelPath}/page-groups/${c.req.param("id")}/edit?success=${encodeURIComponent("Page removed.")}`); });
+adminRoutes.post("/page-groups/:id/delete", async (c) => { await deletePageGroup(Number(c.req.param("id"))); return c.redirect(`${config.controlPanelPath}/page-groups?success=${encodeURIComponent("Page group deleted.")}`); });
 
 adminRoutes.get("/menus", async (c) => {
   const user = c.get("sessionUser");

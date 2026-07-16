@@ -18,6 +18,12 @@ export type Permission =
   | "forms.submissions.read"
   | "forms.write"
   | "forms.delete"
+  | "series.read"
+  | "series.write"
+  | "series.delete"
+  | "page_groups.read"
+  | "page_groups.write"
+  | "page_groups.delete"
   | "media.read"
   | "media.write"
   | "media.delete"
@@ -39,19 +45,19 @@ export type Permission =
 const rolePermissions: Record<UserRole, readonly Permission[]> = {
   owner: [
     "admin.access", "posts.read", "posts.write", "posts.publish", "posts.delete", "posts.restore",
-    "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "forms.read", "forms.submissions.read", "forms.write", "forms.delete",
+    "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "forms.read", "forms.submissions.read", "forms.write", "forms.delete", "series.read", "series.write", "series.delete", "page_groups.read", "page_groups.write", "page_groups.delete",
     "media.read", "media.write", "media.delete", "menus.read", "menus.write", "menus.delete", "blocks.read", "blocks.write", "blocks.delete",
     "ai.review", "ai.propose", "audit.read", "snapshots.read", "snapshots.write", "snapshots.restore", "users.manage", "publishing.render",
   ],
   admin: [
     "admin.access", "posts.read", "posts.write", "posts.publish", "posts.delete", "posts.restore",
-    "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "forms.read", "forms.submissions.read", "forms.write", "forms.delete",
+    "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "forms.read", "forms.submissions.read", "forms.write", "forms.delete", "series.read", "series.write", "series.delete", "page_groups.read", "page_groups.write", "page_groups.delete",
     "media.read", "media.write", "media.delete", "menus.read", "menus.write", "menus.delete", "blocks.read", "blocks.write", "blocks.delete",
     "ai.review", "ai.propose", "audit.read", "snapshots.read", "snapshots.write", "snapshots.restore", "users.manage", "publishing.render",
   ],
   editor: [
     "admin.access", "posts.read", "posts.write", "posts.publish", "pages.read", "pages.write", "pages.publish",
-    "forms.read", "forms.submissions.read", "forms.write", "media.read", "media.write", "menus.read", "menus.write", "blocks.read", "blocks.write", "publishing.render",
+    "forms.read", "forms.submissions.read", "forms.write", "series.read", "series.write", "page_groups.read", "page_groups.write", "media.read", "media.write", "menus.read", "menus.write", "blocks.read", "blocks.write", "publishing.render",
   ],
   author: ["admin.access", "posts.read", "posts.write", "media.read", "media.write"],
   viewer: ["admin.access", "posts.read", "pages.read", "forms.read", "media.read", "menus.read", "blocks.read"],
@@ -94,6 +100,14 @@ function adminPermissionForRequest(c: Context): Permission {
     if (path.endsWith("/delete")) return "forms.delete";
     if (path.endsWith("/submissions.csv")) return "forms.submissions.read";
     return path === "/forms/new" || path.endsWith("/edit") ? "forms.write" : method === "GET" ? "forms.read" : "forms.write";
+  }
+  if (path.startsWith("/series")) {
+    if (path.endsWith("/delete")) return "series.delete";
+    return path === "/series/new" || path.endsWith("/edit") || method === "POST" ? "series.write" : "series.read";
+  }
+  if (path.startsWith("/page-groups")) {
+    if (path.endsWith("/delete")) return "page_groups.delete";
+    return path === "/page-groups/new" || path.endsWith("/edit") || method === "POST" ? "page_groups.write" : "page_groups.read";
   }
   if (path.startsWith("/menus")) return path.endsWith("/delete") ? "menus.delete" : path === "/menus/new" ? "menus.write" : method === "GET" ? "menus.read" : "menus.write";
   if (path.startsWith("/blocks")) return path.endsWith("/delete") ? "blocks.delete" : path === "/blocks/new" ? "blocks.write" : method === "GET" ? "blocks.read" : "blocks.write";

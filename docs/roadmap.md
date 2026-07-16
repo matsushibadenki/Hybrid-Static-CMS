@@ -31,6 +31,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 ### Content and editor
 
 - `[Done]` Post CRUD with categories, tags, draft, published, and scheduled states
+- `[Done]` Series management with parent series, ordered article assignment, and dedicated control-panel management screens
+- `[Done]` Fixed-page groups with slug-based parents, ordered page assignment, and dedicated control-panel management screens
 - `[Done]` CMS-managed page CRUD
 - `[Done]` Multiple form generation, management, deletion, and submission capture
 - `[Done]` Media library for images, video, audio, PDF, and text files
