@@ -27,7 +27,16 @@ export const csrfMiddleware: MiddlewareHandler = async (c, next) => {
   }
 
   const suppliedToken = c.req.header("x-csrf-token");
-  const tokenMatches = Boolean(suppliedToken && suppliedToken === user.csrfToken);
+  let tokenMatches = Boolean(suppliedToken && suppliedToken === user.csrfToken);
+  const contentType = c.req.header("content-type") ?? "";
+  if (!tokenMatches && (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data"))) {
+    try {
+      const form = await c.req.raw.clone().formData();
+      tokenMatches = form.get("_csrf") === user.csrfToken;
+    } catch {
+      // Let the origin check below handle malformed form bodies.
+    }
+  }
   if (tokenMatches || isSameOrigin(c)) {
     await next();
     return;

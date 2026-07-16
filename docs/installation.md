@@ -33,6 +33,8 @@ Important settings:
 - `APP_URL`: canonical external URL
 - `SESSION_SECRET`: cookie/session secret, must be changed
 - `DATABASE_URL`: PostgreSQL connection string
+- `SEED_ADMIN_EMAIL`: email used by the optional seed script to create the initial local administrator
+- `SEED_ADMIN_PASSWORD`: password used by the optional seed script; use a strong value and change it after first login
 - `RECAPTCHA_SITE_KEY`: Google reCAPTCHA v3 site key for public forms
 - `RECAPTCHA_SECRET_KEY`: Google reCAPTCHA v3 secret key for server-side verification
 - `RECAPTCHA_MIN_SCORE`: minimum accepted v3 score, default `0.5`
@@ -89,10 +91,7 @@ Alternatively, start the app and open `/setup`. The setup wizard can run pending
 bun run seed
 ```
 
-Default seed credentials:
-
-- Email: `owner@example.com`
-- Password: `change-me-now`
+The seed administrator is configured by `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` in `.env`.
 
 Change this password immediately in any real environment.
 
@@ -229,3 +228,82 @@ The included `docker-compose.yml` starts:
 - `app`
 
 The app container currently runs migrations and seed automatically on startup for convenience. For production, many users will prefer separating migration execution from the normal app boot flow.
+
+### Installation and first-run cautions
+
+Choose one application startup mode at a time. The Docker `app` service and `bun run dev` both listen on port `3000`; starting both will produce a `Failed to start server. Is port 3000 in use?` error.
+
+For local development, start only PostgreSQL in Docker and run the Bun server on the host:
+
+```bash
+docker compose up -d postgres
+bun run dev
+```
+
+Alternatively, run the complete Docker stack and do not start `bun run dev` in another terminal:
+
+```bash
+docker compose up -d
+```
+
+The development Compose file maps PostgreSQL to host port `5432`. Check for another local PostgreSQL instance before starting it:
+
+```bash
+lsof -nP -iTCP:5432 -sTCP:LISTEN
+```
+
+If Homebrew PostgreSQL is using the port, inspect the exact service name before stopping it. For example, a versioned service may need:
+
+```bash
+brew services list
+brew services stop postgresql@14
+```
+
+Do not assume that `brew services stop postgresql` stops a versioned service. The Homebrew database and the Docker database are separate PostgreSQL installations and may contain different databases and users.
+
+### Setup and seed behavior
+
+The interactive `/setup` wizard creates the first administrator using the values entered in the form. It is locked after an administrator exists.
+
+The development Docker Compose command currently runs:
+
+```bash
+bun run migrate && bun run seed && bun run start
+```
+
+Therefore, a fresh Docker database is automatically seeded before the application starts. The seed script creates the configured administrator when that email does not already exist. It does not overwrite an existing user's password or email.
+
+The seed script also creates sample content. Change this password immediately in any environment that contains data that matters. If you want to use `/setup` instead, remove `bun run seed &&` from the Compose app command before creating a fresh database, then start only PostgreSQL and run `bun run dev`.
+
+### Re-running setup with a database reset
+
+The setup page provides a guarded application database reset for a logged-in `owner` or `admin`. Open `/setup`, type `RESET DATABASE`, and submit the reset form.
+
+The reset deletes application data, including users, sessions, posts, pages, forms, menus, settings, audit records, and login-attempt records. It preserves:
+
+- the database schema and migration history
+- the PostgreSQL Docker volume
+- `public_html` and generated files
+- media and uploaded files on disk
+
+After the reset completes, follow the link to `/setup` and create a new administrator. This operation is destructive and should be preceded by a backup when the database contains anything important:
+
+```bash
+bun run db:backup
+```
+
+Do not use `docker compose down -v` for this workflow unless deleting the entire PostgreSQL volume is intentional. That command removes the database volume and all data stored in it, whereas the `/setup` reset preserves the schema and volume.
+
+### Troubleshooting authentication
+
+If login fails after setup, verify that the Bun process and the PostgreSQL container use the same `DATABASE_URL`. A host-run Bun process normally uses `localhost`; an app container must use the Compose service name `postgres`:
+
+```text
+# Bun running on the host
+postgres://postgres:postgres@localhost:5432/hybrid_static_cms
+
+# App running inside Docker Compose
+postgres://postgres:postgres@postgres:5432/hybrid_static_cms
+```
+
+Repeated failed attempts are rate-limited by IP and email for the configured login window. During local troubleshooting, an administrator can wait for the window to expire or clear the `login_attempts` table after confirming that this is a disposable development database.

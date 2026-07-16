@@ -85,7 +85,7 @@ async function syncTerms(postId: number, categorySlugs: string[], tagSlugs: stri
   }
 }
 
-const basePostQuery = sql`
+const basePostQuery = `
   select
     p.id,
     p.title,

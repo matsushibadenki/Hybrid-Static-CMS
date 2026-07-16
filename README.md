@@ -105,10 +105,7 @@ For an interactive first-run flow, start the app with `DATABASE_URL` configured 
 bun run seed
 ```
 
-Default seed credentials:
-
-- Email: `owner@example.com`
-- Password: `change-me-now`
+Seed credentials are configured with `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` in `.env`.
 
 5. Start the app.
 

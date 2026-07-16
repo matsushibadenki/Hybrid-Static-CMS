@@ -1,147 +1,454 @@
+<!-- File: /public_html/index.html -->
+<!-- Filename: index.html -->
+<!-- Description: Hybrid-Static-CMSのデモ用トップページ。
+     note.com風のシンプル・クリーン・ハイクオリティなデザイン。
+     多言語対応を考慮した構造。 -->
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hybrid-Static-CMS Demo</title>
+    <title>Hybrid-Static-CMS</title>
+    <meta name="description" content="A Bun-powered coexistence CMS for existing public_html sites. Keep your site, add a modern publishing core." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
-        color-scheme: light;
-        --bg: #f7f4ea;
-        --panel: rgba(255, 253, 247, 0.94);
-        --ink: #1f2933;
-        --muted: #52606d;
-        --line: rgba(31, 41, 51, 0.12);
-        --accent: #b4492c;
-        --accent-2: #146356;
+        --bg: #ffffff;
+        --panel: #ffffff;
+        --ink: #333333;
+        --ink-secondary: #555555;
+        --muted: #999999;
+        --line: #ebebeb;
+        --line-light: #f5f5f5;
+        --accent: #41C9B4;
+        --accent-hover: #35b5a2;
+        --accent-light: rgba(65, 201, 180, 0.08);
+        --radius-sm: 6px;
+        --radius-md: 10px;
+        --radius-lg: 14px;
+        --radius-pill: 100px;
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+        --transition: 0.18s ease;
+        --font-sans: 'Inter', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
 
-      * {
-        box-sizing: border-box;
-      }
+      *, *::before, *::after { box-sizing: border-box; }
 
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: Georgia, "Times New Roman", serif;
+        font-family: var(--font-sans);
+        font-size: 15px;
         color: var(--ink);
-        background:
-          radial-gradient(circle at top left, rgba(180, 73, 44, 0.18), transparent 32%),
-          radial-gradient(circle at top right, rgba(20, 99, 86, 0.14), transparent 28%),
-          linear-gradient(180deg, #fbf8f0 0%, var(--bg) 100%);
-      }
-
-      main {
-        max-width: 1040px;
-        margin: 0 auto;
-        padding: 48px 16px 72px;
-      }
-
-      .hero,
-      .panel {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 28px;
-        box-shadow: 0 18px 40px rgba(31, 41, 51, 0.07);
-      }
-
-      .hero {
-        padding: 40px 24px;
-      }
-
-      .eyebrow {
-        display: inline-block;
-        margin-bottom: 16px;
-        font-size: 0.8rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--accent);
-      }
-
-      h1 {
-        margin: 0;
-        font-size: clamp(2.2rem, 6vw, 4.4rem);
-        line-height: 0.95;
-      }
-
-      p {
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
         line-height: 1.7;
       }
 
-      .grid {
-        display: grid;
-        gap: 24px;
-        margin-top: 24px;
+      /* ---- Header ---- */
+
+      .site-header {
+        border-bottom: 1px solid var(--line);
+        padding: 0 24px;
       }
 
-      .panel {
-        padding: 28px 20px;
-      }
-
-      .actions {
+      .site-header-inner {
+        max-width: 960px;
+        margin: 0 auto;
         display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        margin-top: 24px;
+        align-items: center;
+        justify-content: space-between;
+        height: 56px;
       }
+
+      .site-logo {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        color: var(--ink);
+        font-weight: 600;
+        font-size: 0.95rem;
+        letter-spacing: -0.01em;
+      }
+
+      .site-logo-mark {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        background: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .site-logo-mark svg {
+        width: 14px;
+        height: 14px;
+        color: #fff;
+      }
+
+      .site-nav {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .site-nav a {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 14px;
+        border-radius: var(--radius-pill);
+        text-decoration: none;
+        font-size: 0.86rem;
+        font-weight: 500;
+        transition: all var(--transition);
+      }
+
+      .nav-link {
+        color: var(--ink-secondary);
+      }
+
+      .nav-link:hover {
+        background: var(--line-light);
+        color: var(--ink);
+      }
+
+      .nav-cta {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .nav-cta:hover {
+        background: var(--accent-hover);
+      }
+
+      /* ---- Main ---- */
+
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* ---- Hero ---- */
+
+      .hero {
+        padding: 64px 0 56px;
+        text-align: center;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .hero-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 20px;
+        padding: 5px 14px;
+        border-radius: var(--radius-pill);
+        background: var(--accent-light);
+        color: var(--accent-hover);
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+
+      .hero-eyebrow::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      h1 {
+        margin: 0 auto 20px;
+        max-width: 640px;
+        font-size: clamp(1.8rem, 4vw, 2.6rem);
+        font-weight: 700;
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+
+      .hero-description {
+        max-width: 520px;
+        margin: 0 auto 28px;
+        color: var(--ink-secondary);
+        font-size: 1rem;
+        line-height: 1.75;
+      }
+
+      .hero-actions {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      /* ---- Buttons ---- */
 
       .button {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        padding: 12px 18px;
-        border-radius: 999px;
+        gap: 6px;
+        padding: 10px 22px;
+        border-radius: var(--radius-pill);
         text-decoration: none;
-        font-weight: 700;
+        font-family: var(--font-sans);
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--transition);
+        border: none;
+      }
+
+      .button:active {
+        transform: scale(0.97);
       }
 
       .button-primary {
-        background: var(--ink);
-        color: white;
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .button-primary:hover {
+        background: var(--accent-hover);
+        box-shadow: var(--shadow-md);
       }
 
       .button-secondary {
+        background: transparent;
         border: 1px solid var(--line);
+        color: var(--ink-secondary);
+      }
+
+      .button-secondary:hover {
+        background: var(--line-light);
+        border-color: #ddd;
         color: var(--ink);
       }
 
-      @media (min-width: 800px) {
-        .grid {
-          grid-template-columns: 1.3fr 0.9fr;
+      /* ---- Features grid ---- */
+
+      .features {
+        padding: 48px 0;
+      }
+
+      .features-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .feature-card {
+        padding: 28px 24px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--panel);
+        transition: all var(--transition);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .feature-card:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+        border-color: rgba(65, 201, 180, 0.25);
+      }
+
+      .feature-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: var(--accent-light);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+        color: var(--accent);
+      }
+
+      .feature-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .feature-card h3 {
+        margin: 0 0 8px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .feature-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.65;
+      }
+
+      /* ---- Embed section ---- */
+
+      .embed-section {
+        padding: 40px 0 56px;
+        border-top: 1px solid var(--line);
+      }
+
+      .embed-section h2 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0 0 8px;
+        color: var(--ink);
+      }
+
+      .embed-section > p {
+        color: var(--muted);
+        font-size: 0.88rem;
+        margin: 0 0 24px;
+      }
+
+      .embed-container {
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--panel);
+        box-shadow: var(--shadow-sm);
+      }
+
+      /* ---- Footer ---- */
+
+      .site-footer {
+        border-top: 1px solid var(--line);
+        padding: 24px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      /* ---- Responsive ---- */
+
+      @media (min-width: 640px) {
+        .features-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      @media (min-width: 860px) {
+        .features-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+
+      @media (max-width: 639px) {
+        .hero {
+          padding: 40px 0 36px;
+        }
+        h1 {
+          font-size: 1.6rem;
+        }
+        .site-header-inner {
+          height: 48px;
         }
       }
     </style>
   </head>
   <body>
+
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a href="/" class="site-logo">
+          <span class="site-logo-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </span>
+          Hybrid-Static-CMS
+        </a>
+        <nav class="site-nav">
+          <a class="nav-link" href="/cms/posts/latest.html">Latest</a>
+          <a class="nav-link" href="/cms/posts/list.html">Archive</a>
+          <a class="nav-cta" href="/control-panel">Control panel</a>
+        </nav>
+      </div>
+    </header>
+
     <main>
       <section class="hero">
-        <span class="eyebrow">public_html coexistence CMS</span>
+        <span class="hero-eyebrow">public_html coexistence CMS</span>
         <h1>Keep your site. Add a modern publishing core.</h1>
-        <p>
+        <p class="hero-description">
           Hybrid-Static-CMS is built for teams with existing HTML or PHP sites that need structured
           content without surrendering the whole document root to a monolithic CMS.
         </p>
-        <div class="actions">
-          <a class="button button-primary" href="/control-panel">Open control panel</a>
+        <div class="hero-actions">
+          <a class="button button-primary" href="/control-panel">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Open control panel
+          </a>
           <a class="button button-secondary" href="/cms/posts/latest.html">View latest fragment</a>
         </div>
       </section>
 
-      <section class="grid">
-        <article class="panel">
-          <h2>Latest posts via embed.js</h2>
-          <div data-hybrid-static-cms-posts data-limit="3"></div>
-        </article>
-        <aside class="panel">
-          <h2>How it works</h2>
-          <p>Posts are stored in PostgreSQL, rendered into static fragments, and exposed via API.</p>
-          <p>
-            Existing pages can use HTML includes, script embedding, or fetch APIs while keeping the
-            original site structure intact.
-          </p>
-        </aside>
+      <section class="features">
+        <div class="features-grid">
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <h3>Static fragments</h3>
+            <p>Posts are stored in PostgreSQL, rendered into static HTML fragments, RSS feeds, and sitemaps.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            </div>
+            <h3>REST API</h3>
+            <p>A full JSON API lets you fetch posts, pages, media, and forms from any client or framework.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </div>
+            <h3>Media library</h3>
+            <p>Upload and manage images, videos, audio, and documents with automatic embed snippets.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h3>Role-based access</h3>
+            <p>Fine-grained permissions with owner, admin, editor, and viewer roles for team collaboration.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+            </div>
+            <h3>File snapshots</h3>
+            <p>Create backups of your public_html files before making changes, with one-click restore.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <h3>Coexistence model</h3>
+            <p>Existing pages use HTML includes, script embedding, or fetch APIs while keeping the original site structure intact.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="embed-section">
+        <h2>Latest posts via embed.js</h2>
+        <p>This section is dynamically loaded from the CMS using the lightweight embed script.</p>
+        <div class="embed-container" data-hybrid-static-cms-posts data-limit="3"></div>
       </section>
     </main>
+
+    <footer class="site-footer">
+      Hybrid-Static-CMS &middot; Open source &middot; Built with Bun &amp; Hono
+    </footer>
 
     <script src="/cms/embed.js"></script>
   </body>

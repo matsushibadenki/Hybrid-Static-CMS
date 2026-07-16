@@ -5,13 +5,26 @@ import { createPage } from "../core/pages";
 import { renderPublishedArtifacts } from "../core/renderer";
 import { createPost } from "../core/posts";
 
-const existing = await sql`select id from users where email = 'owner@example.com' limit 1`;
+const seedAdminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+if (!seedAdminEmail || !seedAdminPassword) {
+  throw new Error("SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must be set before running the seed script.");
+}
 
-let userId = existing[0]?.id ? Number(existing[0].id) : null;
+const existingOwners = await sql`
+  select u.id
+  from users u
+  join user_roles ur on u.id = ur.user_id
+  join roles r on r.id = ur.role_id
+  where r.name = 'owner'
+  limit 1
+`;
+
+let userId = existingOwners[0]?.id ? Number(existingOwners[0].id) : null;
 if (!userId) {
   userId = await createUser({
-    email: "owner@example.com",
-    password: "change-me-now",
+    email: seedAdminEmail,
+    password: seedAdminPassword,
     displayName: "Site Owner",
     roles: ["owner", "admin"],
   });

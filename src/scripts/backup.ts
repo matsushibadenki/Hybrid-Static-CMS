@@ -9,29 +9,32 @@ function argumentValue(name: string) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-const requestedOutput = argumentValue("--output");
-const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-const output = path.resolve(requestedOutput ?? path.join("storage", "backups", `hybrid-static-cms-${timestamp}.sql`));
+export async function createBackup(requestedOutput?: string) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const output = path.resolve(requestedOutput ?? path.join("storage", "backups", `hybrid-static-cms-${timestamp}.sql`));
 
-await mkdir(path.dirname(output), { recursive: true });
-console.log(`Creating PostgreSQL backup for ${postgresDatabaseName()}...`);
+  await mkdir(path.dirname(output), { recursive: true });
+  console.log(`Creating PostgreSQL backup for ${postgresDatabaseName()}...`);
+  await runCommand(
+    "pg_dump",
+    [
+      "--dbname",
+      postgresDatabaseName(),
+      "--format=plain",
+      "--no-owner",
+      "--no-privileges",
+      "--clean",
+      "--if-exists",
+      "--file",
+      output,
+    ],
+    postgresCommandEnvironment(),
+  );
+  await chmod(output, 0o600);
+  console.log(`Backup written to ${output}`);
+  return output;
+}
 
-await runCommand(
-  "pg_dump",
-  [
-    "--dbname",
-    postgresDatabaseName(),
-    "--format=plain",
-    "--no-owner",
-    "--no-privileges",
-    "--clean",
-    "--if-exists",
-    "--file",
-    output,
-  ],
-  postgresCommandEnvironment(),
-);
-
-await chmod(output, 0o600);
-
-console.log(`Backup written to ${output}`);
+if (import.meta.main) {
+  await createBackup(argumentValue("--output"));
+}

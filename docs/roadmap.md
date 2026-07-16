@@ -87,9 +87,14 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Core unit tests for permissions, validation, sanitization, LaTeX, Mermaid, and Ruby formatting
 - `[Done]` GitHub Actions CI for TypeScript, Bun tests, and PostgreSQL 18 migration checks
 - `[Done]` Application smoke integration tests for liveness and unauthenticated control-panel access
-- `[Next]` Full integration tests for authentication, publishing, forms, media, backup, and restore
+- `[Done]` Authentication and public form submission integration coverage
+- `[Done]` Published-post static artifact integration coverage
+- `[Done]` Media upload, content-signature, storage, and deletion integration coverage
+- `[Done]` PostgreSQL backup-generation integration coverage
+- `[Done]` Destructive restore integration tests using an isolated temporary database
 - `[Done]` Atomic static artifact publishing with temporary files and rename-on-success
-- `[Next]` Publish preview URLs, scheduled-publishing timezone support, failure notifications, and retry handling
+- `[Next]` Scheduled-publishing timezone support, failure notifications, and retry handling
+- `[Done]` Signed one-hour preview URLs for draft, scheduled, and published posts/pages
 - `[Next]` Structured application logs and operator alert integrations
 
 ### Security and media hardening
@@ -105,6 +110,9 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` PostgreSQL-backed public form rate limiting by form and trusted client IP
 - `[Done]` Configurable form-submission retention cleanup and permission-protected CSV export
 - `[Done]` SMTP form submission notifications with operator-visible delivery failures
+- `[Later]` Optional Next.js Route Handler + Nodemailer mail gateway using an external SMTP provider, with signed internal requests, secret rotation, retry handling, and a migration path from the built-in SMTP sender
+- `[Later]` Optional Nodemailer `sendmail` transport for VPS installations with a local Sendmail-compatible MTA, including executable-path configuration, least-privilege execution, queue monitoring, and delivery-failure handling
+- `[Later]` Configurable mail-delivery strategy for Next.js server-side sending through SMTP, a provider mail API, or local Sendmail, switchable per installation without changing form code
 
 ### Editorial workflow
 
@@ -127,6 +135,9 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 ### API and integrations
 
+- `[Later]` External mail delivery adapter for Next.js Route Handler, Nodemailer, and provider-managed SMTP
+- `[Later]` Local Sendmail-compatible MTA adapter for Nodemailer-based deployments
+- `[Later]` Provider-neutral mail adapter settings, health checks, retry policy, secret management, and safe fallback rules for switching between SMTP, mail APIs, and local MTA delivery
 - `[Later]` Scoped API keys and machine-user management
 - `[Later]` Webhooks for publishing, form submissions, media events, and backup events
 - `[Later]` OAuth or OIDC login integration

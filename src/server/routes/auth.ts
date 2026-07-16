@@ -4,7 +4,7 @@ import { attemptLogin, logout } from "../../core/auth";
 import { config } from "../../core/config";
 import { escapeHtml } from "../../core/content";
 import { createUser } from "../../core/auth";
-import { getSetupStatus, runSetupMigrations, writeSetupEnvironment } from "../../core/setup";
+import { getSetupStatus, resetApplicationDatabase, runSetupMigrations, writeSetupEnvironment } from "../../core/setup";
 import { randomToken } from "../../core/security";
 
 function twoFactorField() {
@@ -33,8 +33,54 @@ function setupForm(values: Record<string, string> = {}, message = "") {
 
 authRoutes.get("/setup", async (c) => {
   const status = await getSetupStatus();
-  if (status.hasAdmin) return c.redirect("/login");
-  return c.html(adminLayout("Initial Setup", null, setupForm()));
+  const currentUser = c.get("sessionUser");
+  const canReset = Boolean(currentUser?.roles.some((role) => role === "owner" || role === "admin"));
+  if (status.hasAdmin && canReset) {
+    return c.html(adminLayout(
+      "Initial Setup",
+      currentUser,
+      `<p>The database already contains an administrator.</p>
+       <p class="meta">You can reset application data here. The database schema, Docker volume, and files under public_html remain unchanged.</p>
+       <form method="post" action="/setup/reset" class="form-grid">
+         <label>Type <code>RESET DATABASE</code> to confirm <input name="confirmation" autocomplete="off" required /></label>
+         <button class="button button-danger" type="submit">Reset application database</button>
+       </form>`,
+    ));
+  }
+  if (status.hasAdmin && !canReset) {
+    return c.html(adminLayout(
+      "Initial Setup",
+      null,
+      `<p>An administrator account has already been created (either via setup or seed script).</p>
+       <p class="meta">The setup wizard is locked to prevent unauthorized changes.</p>
+       <p><a class="button button-primary" href="/login">Go to login</a></p>`,
+    ));
+  }
+
+  const defaultEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase() || "";
+  return c.html(adminLayout("Initial Setup", null, setupForm({ email: defaultEmail })));
+});
+
+authRoutes.post("/setup/reset", async (c) => {
+  const currentUser = c.get("sessionUser");
+  const canReset = Boolean(currentUser?.roles.some((role) => role === "owner" || role === "admin"));
+  if (!canReset) return c.text("Forbidden", 403);
+
+  const form = await c.req.formData();
+  if (String(form.get("confirmation") ?? "") !== "RESET DATABASE") {
+    return c.html(adminLayout(
+      "Reset Application Database",
+      currentUser,
+      `<p>Reset cancelled. Type <code>RESET DATABASE</code> exactly to confirm.</p><p><a href="/setup">Return to setup</a></p>`,
+    ), 400);
+  }
+
+  await resetApplicationDatabase();
+  return c.html(adminLayout(
+    "Database Reset Complete",
+    null,
+    `<h2>Database reset complete</h2><p>Application data was deleted. The database schema and files were preserved.</p><p><a class="button button-primary" href="/setup">Run setup again</a></p>`,
+  ));
 });
 
 authRoutes.post("/setup", async (c) => {

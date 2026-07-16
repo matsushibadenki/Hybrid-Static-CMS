@@ -41,6 +41,7 @@ import { createMenu, deleteMenu, getMenuById, listMenus, updateMenu } from "../.
 import { createBlock, deleteBlock, getBlockById, listBlocks, updateBlock } from "../../core/blocks";
 import { getAiFileProposal, getAiProposalDiff, listAiFileProposals, reviewAiFileProposal } from "../../core/aiProposals";
 import { listOperatorNotifications, markOperatorNotificationRead } from "../../core/notifications";
+import { createPreviewToken } from "../../core/previews";
 import type { FormFieldRecord, UserRole } from "../../core/types";
 
 function splitCsv(value: FormDataEntryValue | null) {
@@ -51,14 +52,16 @@ function splitCsv(value: FormDataEntryValue | null) {
 }
 
 function noticeCard(message: string, tone: "success" | "error" = "success") {
-  const background = tone === "success" ? "rgba(20, 99, 86, 0.12)" : "rgba(180, 73, 44, 0.12)";
-  const border = tone === "success" ? "rgba(20, 99, 86, 0.28)" : "rgba(180, 73, 44, 0.28)";
+  const background = tone === "success" ? "rgba(65, 201, 180, 0.06)" : "rgba(224, 84, 78, 0.06)";
+  const border = tone === "success" ? "rgba(65, 201, 180, 0.18)" : "rgba(224, 84, 78, 0.18)";
+  const color = tone === "success" ? "#2a7a6e" : "#b4492c";
   return `
-    <div style="margin-bottom:16px; padding:14px 16px; border-radius:18px; background:${background}; border:1px solid ${border};">
+    <div style="margin-bottom:20px; padding:14px 18px; border-radius:10px; background:${background}; border:1px solid ${border}; color:${color}; font-size:0.9rem; line-height:1.5;">
       ${escapeHtml(message)}
     </div>
   `;
 }
+
 
 function queryNotice(c: { req: { query: (key: string) => string | undefined } }) {
   const success = c.req.query("success");
@@ -85,7 +88,7 @@ function userForm(action: string, values: { email?: string; displayName?: string
       <label>Display name <input name="displayName" value="${escapeHtml(values.displayName ?? "")}" autocomplete="name" required /></label>
       <label>Email <input type="email" name="email" value="${escapeHtml(values.email ?? "")}" autocomplete="email" required /></label>
       ${includePassword ? `<label>Temporary password <input type="password" name="password" autocomplete="new-password" minlength="12" required /><span class="meta">Use at least 12 characters. Share it securely, then ask the user to change it.</span></label>` : ""}
-      <fieldset style="border:1px solid var(--line); border-radius:16px; padding:14px;"><legend>Roles</legend><div class="form-grid">${roleOptions}</div></fieldset>
+      <fieldset style="border:1px solid var(--line); border-radius:10px; padding:16px;"><legend>Roles</legend><div class="form-grid">${roleOptions}</div></fieldset>
       <div class="row"><button class="button button-primary" type="submit">${includePassword ? "Create user" : "Save user"}</button></div>
     </form>
   `;
@@ -450,7 +453,7 @@ function snapshotHelperCard(returnTo: string, suggestions: string[]) {
     .join("");
 
   return `
-    <div style="margin-top:20px; padding:18px; border-radius:22px; background:rgba(255,255,255,0.72); border:1px solid rgba(31,41,51,0.12);">
+    <div style="margin-top:24px; padding:20px; border-radius:10px; background:var(--panel); border:1px solid var(--line); box-shadow:0 1px 3px rgba(0,0,0,0.04);">
       <h2>Protect a public_html file</h2>
       <p class="meta">Create a quick snapshot before changing surrounding templates or hand-edited site files.</p>
       <form method="post" action="${config.controlPanelPath}/snapshots" class="form-grid">
@@ -477,9 +480,9 @@ function mediaHelperCard(items: Awaited<ReturnType<typeof listMedia>>) {
     .map((item) => {
       let preview = `<span class="meta">No preview</span>`;
       if (isImageMedia(item.mimeType)) {
-        preview = `<img src="${item.publicUrl}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:120px; max-height:88px; border-radius:12px; border:1px solid rgba(0,0,0,0.08);" />`;
+        preview = `<img src="${item.publicUrl}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:120px; max-height:88px; border-radius:8px; border:1px solid var(--line);" />`;
       } else if (isVideoMedia(item.mimeType)) {
-        preview = `<video src="${item.publicUrl}" style="max-width:120px; max-height:88px; border-radius:12px; border:1px solid rgba(0,0,0,0.08);" muted></video>`;
+        preview = `<video src="${item.publicUrl}" style="max-width:120px; max-height:88px; border-radius:8px; border:1px solid var(--line);" muted></video>`;
       } else if (isAudioMedia(item.mimeType)) {
         preview = `<span class="meta">Audio file</span>`;
       } else if (isPdfMedia(item.mimeType)) {
@@ -487,7 +490,7 @@ function mediaHelperCard(items: Awaited<ReturnType<typeof listMedia>>) {
       }
 
       return `
-        <article style="padding:16px; border-radius:18px; background:rgba(255,255,255,0.78); border:1px solid rgba(31,41,51,0.12);">
+        <article style="padding:18px; border-radius:10px; background:var(--panel); border:1px solid var(--line); box-shadow:0 1px 3px rgba(0,0,0,0.04); transition:box-shadow 0.18s ease;">
           <div style="margin-bottom:12px;">${preview}</div>
           <h3 style="font-size:1rem; margin-bottom:8px;">${escapeHtml(item.originalName)}</h3>
           <p class="meta" style="margin-bottom:10px;">${escapeHtml(item.mimeType)}</p>
@@ -530,7 +533,7 @@ function mediaHelperCard(items: Awaited<ReturnType<typeof listMedia>>) {
 
 function revisionLinkCard(path: string) {
   return `
-    <div style="margin-top:20px; padding:16px 18px; border-radius:18px; background:rgba(255,255,255,0.72); border:1px solid rgba(31,41,51,0.12);">
+    <div style="margin-top:24px; padding:18px 20px; border-radius:10px; background:var(--panel); border:1px solid var(--line); box-shadow:0 1px 3px rgba(0,0,0,0.04);">
       <strong>Revision history</strong>
       <p class="meta">Updates keep the previous content so it can be reviewed or restored later.</p>
       <a class="button" href="${path}">Open revision history</a>
@@ -587,7 +590,7 @@ adminRoutes.get("/users", async (c) => {
         ${users.map((item) => `
           <tr>
             <td><strong>${escapeHtml(item.displayName)}</strong><br /><span class="meta">${escapeHtml(item.email)}</span></td>
-            <td>${item.roles.map((role) => `<span style="display:inline-block; margin:2px 4px 2px 0; padding:4px 8px; border-radius:999px; background:rgba(20,99,86,.12);">${escapeHtml(role)}</span>`).join("") || "-"}</td>
+            <td>${item.roles.map((role) => `<span style="display:inline-block; margin:2px 4px 2px 0; padding:3px 10px; border-radius:100px; background:rgba(65,201,180,0.1); color:#2a7a6e; font-size:0.8rem; font-weight:500;">${escapeHtml(role)}</span>`).join("") || "-"}</td>
             <td>${item.isActive ? "Active" : "Inactive"}</td>
             <td>${item.lastLoginAt ? escapeHtml(new Date(item.lastLoginAt).toLocaleString("en-US")) : "Never"}</td>
             <td>
@@ -923,7 +926,7 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
     adminLayout(
       "Edit Post",
       user,
-      queryNotice(c) + postForm(`${config.controlPanelPath}/posts/${post.id}`, {
+      queryNotice(c) + `<p class="meta"><a href="/preview/post/${encodeURIComponent(post.slug)}?token=${encodeURIComponent(await createPreviewToken("post", post.slug))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + postForm(`${config.controlPanelPath}/posts/${post.id}`, {
         title: post.title,
         slug: post.slug,
         excerpt: post.excerpt ?? "",
@@ -1458,7 +1461,7 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
     adminLayout(
       "Edit Page",
       user,
-      queryNotice(c) + pageForm(`${config.controlPanelPath}/pages/${page.id}`, {
+      queryNotice(c) + `<p class="meta"><a href="/preview/page/${encodeURIComponent(page.slug)}?token=${encodeURIComponent(await createPreviewToken("page", page.slug))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + pageForm(`${config.controlPanelPath}/pages/${page.id}`, {
         title: page.title,
         slug: page.slug,
         excerpt: page.excerpt ?? "",
@@ -1873,7 +1876,7 @@ adminRoutes.get("/media", async (c) => {
           ${items
             .map((item) => {
               const preview = item.mimeType.startsWith("image/")
-                ? `<img src="${item.publicUrl}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:96px; max-height:72px; border-radius:12px; border:1px solid rgba(0,0,0,0.08);" />`
+                ? `<img src="${item.publicUrl}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:96px; max-height:72px; border-radius:8px; border:1px solid var(--line);" />`
                 : `<span class="meta">No preview</span>`;
               return `
                 <tr>

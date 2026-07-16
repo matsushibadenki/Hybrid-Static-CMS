@@ -107,6 +107,9 @@ function pageTemplate(meta: SeoMeta, body: string) {
     ${robots}
     ${jsonLd}
     ${googleFontLinks()}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script>
       window.MathJax = {
         tex: {
@@ -134,93 +137,462 @@ function pageTemplate(meta: SeoMeta, body: string) {
       });
     </script>
     <style>
-      :root { --paper: #f3eee2; --paper-deep: #e7dece; --ink: #20231f; --muted: #726b5e; --line: #bdb3a3; --accent: #ad432f; --accent-deep: #703326; --teal: #1f5d5c; }
-      * { box-sizing: border-box; }
-      body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Noto Serif JP", Georgia, "Times New Roman", serif; }
-      body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .2; background-image: radial-gradient(rgba(32,35,31,.18) .6px, transparent .6px); background-size: 5px 5px; mix-blend-mode: multiply; }
-      main.magazine-shell { max-width: 1180px; margin: 0 auto; padding: 28px 28px 72px; }
-      .magazine-masthead { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; }
-      .magazine-masthead__name { color: var(--ink); font-family: "Google Sans Flex", "Roboto", sans-serif; font-size: clamp(1.15rem, 2vw, 1.5rem); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-      .magazine-masthead__issue, .magazine-kicker, .magazine-page-header__eyebrow { color: var(--muted); font-family: "Roboto", "Noto Sans JP", sans-serif; font-size: .68rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
-      .magazine-rule { border-top: 1px solid var(--line); margin: 20px 0 42px; }
-      .magazine-footer { border-top: 1px solid var(--line); color: var(--muted); font-family: "Roboto", "Noto Sans JP", sans-serif; font-size: .7rem; letter-spacing: .12em; margin-top: 54px; padding-top: 16px; text-transform: uppercase; }
-      .magazine-page-header { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 3fr); column-gap: 32px; align-items: end; margin-bottom: 30px; }
-      .magazine-page-header__eyebrow { margin: 0 0 12px; }
-      .magazine-page-header__title { font-size: clamp(3.2rem, 9vw, 8.4rem); font-weight: 400; letter-spacing: -.08em; line-height: .84; margin: 0; max-width: 850px; }
-      .magazine-page-header__deck { color: var(--muted); font-size: 1.05rem; line-height: 1.55; margin: 18px 0 0; max-width: 600px; }
-      .hybrid-static-cms-list.magazine-index { display: grid; grid-template-columns: repeat(12, 1fr); gap: 0 28px; }
-      .magazine-card { border-top: 1px solid var(--line); padding: 22px 0 26px; }
-      .magazine-card--lead { grid-column: span 7; grid-row: span 2; border-top: 0; border-bottom: 1px solid var(--line); padding-top: 0; padding-right: 28px; }
-      .magazine-card--compact { grid-column: span 5; display: grid; grid-template-columns: 1fr auto; column-gap: 18px; }
-      .magazine-card--compact .hybrid-static-cms-card__meta, .magazine-card--compact .magazine-card__title, .magazine-card--compact p { grid-column: 1 / -1; }
-      .hybrid-static-cms-card__meta { display: flex; gap: 14px; color: var(--muted); font-family: "Roboto", "Noto Sans JP", sans-serif; font-size: .68rem; font-weight: 700; letter-spacing: .1em; margin-bottom: 15px; text-transform: uppercase; }
-      .hybrid-static-cms-card__meta span + span { color: var(--accent); }
-      .magazine-card__title { font-size: clamp(1.7rem, 3vw, 3.1rem); font-weight: 400; letter-spacing: -.045em; line-height: .98; margin: 0; }
-      .magazine-card--lead .magazine-card__title { font-size: clamp(2.8rem, 6vw, 6.6rem); line-height: .88; }
-      .magazine-card p { color: var(--muted); font-size: 1rem; line-height: 1.55; margin: 17px 0 20px; max-width: 40em; }
-      a { color: var(--accent-deep); text-decoration-thickness: 1px; text-underline-offset: 4px; }
-      .magazine-card__read { align-self: end; color: var(--accent); font-family: "Roboto", "Noto Sans JP", sans-serif; font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
-      .magazine-card__read span { font-size: 1rem; margin-left: 4px; }
-      .magazine-pagination { border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 20px; margin-top: 28px; padding-top: 16px; }
-      .magazine-pagination a { font-family: "Roboto", "Noto Sans JP", sans-serif; font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-      .hybrid-static-cms-page, .magazine-prose { max-width: 900px; }
+      /* ========================================
+         note.com-inspired Public Page Design
+         Clean, minimal, reading-focused
+         ======================================== */
+
+      :root {
+        --bg: #ffffff;
+        --panel: #ffffff;
+        --ink: #333333;
+        --ink-secondary: #555555;
+        --muted: #999999;
+        --line: #ebebeb;
+        --line-light: #f5f5f5;
+        --accent: #41C9B4;
+        --accent-hover: #35b5a2;
+        --accent-light: rgba(65, 201, 180, 0.08);
+        --radius-sm: 6px;
+        --radius-md: 10px;
+        --radius-pill: 100px;
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+        --transition: 0.18s ease;
+        --font-sans: 'Inter', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 15px;
+        line-height: 1.8;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* ---- Site Header ---- */
+
+      .magazine-masthead {
+        border-bottom: 1px solid var(--line);
+        padding: 0 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 56px;
+        max-width: 100%;
+      }
+
+      .magazine-masthead__name {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+        text-transform: none;
+      }
+
+      .magazine-masthead__name::before {
+        content: '';
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        flex-shrink: 0;
+      }
+
+      .magazine-masthead__issue {
+        color: var(--muted);
+        font-family: var(--font-sans);
+        font-size: 0.8rem;
+        font-weight: 400;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+
+      .magazine-rule { display: none; }
+
+      /* ---- Shell / Main ---- */
+
+      main.magazine-shell {
+        max-width: 780px;
+        margin: 0 auto;
+        padding: 0 24px 64px;
+      }
+
+      /* ---- Footer ---- */
+
+      .magazine-footer {
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-family: var(--font-sans);
+        font-size: 0.8rem;
+        font-weight: 400;
+        letter-spacing: 0;
+        margin-top: 48px;
+        padding-top: 20px;
+        text-transform: none;
+        text-align: center;
+      }
+
+      /* ---- Page Header (list pages) ---- */
+
+      .magazine-page-header {
+        display: block;
+        margin: 40px 0 32px;
+      }
+
+      .magazine-page-header__eyebrow,
+      .magazine-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 0 12px;
+        padding: 4px 12px;
+        border-radius: var(--radius-pill);
+        background: var(--accent-light);
+        color: var(--accent-hover);
+        font-family: var(--font-sans);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: none;
+      }
+
+      .magazine-page-header__title {
+        font-family: var(--font-sans);
+        font-size: clamp(1.6rem, 4vw, 2.2rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+        margin: 0 0 8px;
+        color: var(--ink);
+      }
+
+      .magazine-page-header__deck {
+        color: var(--ink-secondary);
+        font-size: 1rem;
+        line-height: 1.7;
+        margin: 0;
+        max-width: 520px;
+      }
+
+      /* ---- Card Index (post / page list) ---- */
+
+      .hybrid-static-cms-list.magazine-index {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0;
+      }
+
+      .magazine-card {
+        border-top: none;
+        border-bottom: 1px solid var(--line);
+        padding: 20px 0;
+        transition: background var(--transition);
+      }
+
+      .magazine-card:last-child {
+        border-bottom: none;
+      }
+
+      .magazine-card--lead {
+        grid-column: auto;
+        grid-row: auto;
+        border-top: none;
+        border-bottom: 1px solid var(--line);
+        padding: 24px 0;
+      }
+
+      .magazine-card--compact {
+        grid-column: auto;
+        display: block;
+      }
+
+      .hybrid-static-cms-card__meta {
+        display: flex;
+        gap: 10px;
+        color: var(--muted);
+        font-family: var(--font-sans);
+        font-size: 0.78rem;
+        font-weight: 400;
+        letter-spacing: 0;
+        margin-bottom: 8px;
+        text-transform: none;
+      }
+
+      .hybrid-static-cms-card__meta span + span {
+        color: var(--accent);
+        font-weight: 500;
+      }
+
+      .magazine-card__title {
+        font-family: var(--font-sans);
+        font-size: 1.15rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        line-height: 1.4;
+        margin: 0;
+      }
+
+      .magazine-card--lead .magazine-card__title {
+        font-size: 1.4rem;
+        line-height: 1.3;
+      }
+
+      .magazine-card p {
+        color: var(--ink-secondary);
+        font-size: 0.9rem;
+        line-height: 1.65;
+        margin: 8px 0 12px;
+        max-width: none;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+        text-decoration-thickness: initial;
+        text-underline-offset: initial;
+        transition: color var(--transition);
+      }
+
+      a:hover { color: var(--accent-hover); }
+
+      .magazine-card__title a {
+        color: var(--ink);
+      }
+
+      .magazine-card__title a:hover {
+        color: var(--accent);
+      }
+
+      .magazine-card__read {
+        align-self: auto;
+        color: var(--accent);
+        font-family: var(--font-sans);
+        font-size: 0.82rem;
+        font-weight: 500;
+        letter-spacing: 0;
+        text-transform: none;
+        white-space: nowrap;
+      }
+
+      .magazine-card__read span { font-size: 0.9em; margin-left: 2px; }
+
+      .magazine-card__read:hover {
+        color: var(--accent-hover);
+      }
+
+      .magazine-pagination {
+        border-top: 1px solid var(--line);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 24px;
+        padding-top: 16px;
+      }
+
+      .magazine-pagination a {
+        font-family: var(--font-sans);
+        font-size: 0.82rem;
+        font-weight: 500;
+        letter-spacing: 0;
+        text-transform: none;
+        padding: 4px 12px;
+        border-radius: var(--radius-pill);
+        background: var(--line-light);
+        color: var(--ink-secondary);
+        transition: all var(--transition);
+      }
+
+      .magazine-pagination a:hover {
+        background: var(--accent-light);
+        color: var(--accent);
+      }
+
+      /* ---- Article Prose (single post / page) ---- */
+
+      .hybrid-static-cms-page,
+      .hybrid-static-cms-prose,
+      .magazine-prose {
+        max-width: none;
+      }
+
       .magazine-prose { line-height: 1.8; }
-      .magazine-prose__header { border-bottom: 1px solid var(--line); margin-bottom: 32px; padding-bottom: 28px; }
-      .magazine-prose__title { font-size: clamp(3rem, 8vw, 7rem); font-weight: 400; letter-spacing: -.08em; line-height: .86; margin: 8px 0 18px; }
-      .magazine-prose__deck { color: var(--muted); font-size: 1.2rem; line-height: 1.5; max-width: 650px; }
-      .magazine-prose__body { font-size: 1.08rem; max-width: 700px; }
-      .magazine-prose__body > p:first-child::first-letter { color: var(--accent); float: left; font-size: 4.8rem; line-height: .78; margin: 9px 8px 0 0; }
-      .magazine-prose__body h1, .magazine-prose__body h2, .magazine-prose__body h3, .magazine-prose__body h4 { letter-spacing: -.04em; line-height: 1; margin: 2.2em 0 .7em; }
-      .magazine-prose__body h1 { font-size: 2.2rem; }
-      .magazine-prose__body h2 { font-size: 1.8rem; }
-      .magazine-prose__body h3 { font-size: 1.45rem; }
-      .magazine-prose__body h4 { color: var(--accent-deep); font-family: "Roboto", "Noto Sans JP", sans-serif; font-size: .95rem; letter-spacing: .1em; text-transform: uppercase; }
-      .magazine-prose__body blockquote { border-left: 4px solid var(--accent); color: var(--accent-deep); font-size: 1.35rem; font-style: italic; margin: 2em 0; padding: 4px 0 4px 24px; }
-      .magazine-prose__body ul, .magazine-prose__body ol { padding-left: 1.5em; }
-      .magazine-prose__body li + li { margin-top: .45em; }
-      .magazine-prose__body pre { background: #252a27; border-radius: 8px; color: #f3eee2; overflow-x: auto; padding: 18px; }
-      .magazine-prose__body .mermaid { background: rgba(255,255,255,.46); border: 1px solid var(--line); border-radius: 8px; margin: 1.5em 0; overflow-x: auto; padding: 18px; }
-      .magazine-prose__body code { font-family: "Noto Sans Mono", "SFMono-Regular", Consolas, monospace; font-size: .88em; }
+
+      .magazine-prose__header {
+        border-bottom: 1px solid var(--line);
+        margin: 40px 0 32px;
+        padding-bottom: 24px;
+      }
+
+      .magazine-prose__title {
+        font-family: var(--font-sans);
+        font-size: clamp(1.6rem, 5vw, 2.4rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+        margin: 8px 0 12px;
+        color: var(--ink);
+      }
+
+      .magazine-prose__deck {
+        color: var(--ink-secondary);
+        font-size: 1.05rem;
+        line-height: 1.7;
+        max-width: 560px;
+      }
+
+      .magazine-prose__body {
+        font-size: 1rem;
+        max-width: none;
+        line-height: 1.85;
+        color: var(--ink);
+      }
+
+      .magazine-prose__body > p:first-child::first-letter {
+        color: var(--accent);
+        float: left;
+        font-size: 3.4rem;
+        line-height: 0.82;
+        margin: 6px 6px 0 0;
+        font-weight: 700;
+      }
+
+      .magazine-prose__body h1,
+      .magazine-prose__body h2,
+      .magazine-prose__body h3,
+      .magazine-prose__body h4 {
+        font-family: var(--font-sans);
+        letter-spacing: -0.02em;
+        line-height: 1.3;
+        margin: 2em 0 0.6em;
+        color: var(--ink);
+      }
+
+      .magazine-prose__body h1 { font-size: 1.7rem; font-weight: 700; }
+      .magazine-prose__body h2 { font-size: 1.4rem; font-weight: 700; }
+      .magazine-prose__body h3 { font-size: 1.15rem; font-weight: 600; }
+      .magazine-prose__body h4 {
+        color: var(--accent-hover);
+        font-family: var(--font-sans);
+        font-size: 0.92rem;
+        font-weight: 600;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+
+      .magazine-prose__body blockquote {
+        border-left: 3px solid var(--accent);
+        color: var(--ink-secondary);
+        font-size: 1.05rem;
+        font-style: italic;
+        margin: 1.8em 0;
+        padding: 4px 0 4px 20px;
+      }
+
+      .magazine-prose__body ul, .magazine-prose__body ol { padding-left: 1.4em; }
+      .magazine-prose__body li + li { margin-top: 0.4em; }
+
+      .magazine-prose__body pre {
+        background: #1e1e1e;
+        border-radius: var(--radius-sm);
+        color: #e5e5e5;
+        overflow-x: auto;
+        padding: 18px 20px;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        border: none;
+      }
+
+      .magazine-prose__body .mermaid {
+        background: var(--line-light);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        margin: 1.5em 0;
+        overflow-x: auto;
+        padding: 20px;
+      }
+
+      .magazine-prose__body code {
+        font-family: 'SF Mono', 'Fira Code', 'Noto Sans Mono', 'SFMono-Regular', Consolas, monospace;
+        font-size: 0.88em;
+      }
+
       .magazine-prose__body mjx-container { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
-      .magazine-prose__body :not(pre) > code { background: var(--paper-deep); border-radius: 3px; padding: 2px 5px; }
-      .magazine-prose__body hr { border: 0; border-top: 1px solid var(--line); margin: 2.5em 0; }
-      .magazine-prose__body img, .magazine-prose__body video, .magazine-prose__body audio { display: block; max-width: 100%; margin: 1.5em 0; }
+
+      .magazine-prose__body :not(pre) > code {
+        background: var(--line-light);
+        border-radius: 4px;
+        padding: 2px 6px;
+        color: var(--ink);
+      }
+
+      .magazine-prose__body hr {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 2.5em 0;
+      }
+
+      .magazine-prose__body img,
+      .magazine-prose__body video,
+      .magazine-prose__body audio {
+        display: block;
+        max-width: 100%;
+        margin: 1.5em 0;
+        border-radius: var(--radius-sm);
+      }
+
       .magazine-prose__body img { height: auto; }
+
       .align-left { text-align: left; }
       .align-center { text-align: center; }
       .align-right { text-align: right; }
       .align-justify { text-align: justify; }
       .magazine-prose__body .text-size-small { font-size: .82em; }
       .magazine-prose__body .text-size-normal { font-size: 1em; }
-      .magazine-prose__body .text-size-large { font-size: 1.28em; }
-      .magazine-prose__body .text-size-xlarge { font-size: 1.65em; }
+      .magazine-prose__body .text-size-large { font-size: 1.25em; }
+      .magazine-prose__body .text-size-xlarge { font-size: 1.6em; }
       .magazine-prose__body ruby { ruby-position: over; }
-      .magazine-prose__body rt { color: var(--accent-deep); font-family: "Roboto", "Noto Sans JP", sans-serif; font-size: .48em; letter-spacing: .04em; }
+      .magazine-prose__body rt { color: var(--accent-hover); font-family: var(--font-sans); font-size: .48em; letter-spacing: .04em; }
       .material-symbols-outlined { font-family: "Material Symbols Outlined"; font-weight: normal; font-style: normal; font-size: 1.2em; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; word-wrap: normal; direction: ltr; font-feature-settings: "liga"; -webkit-font-feature-settings: "liga"; -webkit-font-smoothing: antialiased; }
       .magazine-empty { border-top: 1px solid var(--line); color: var(--muted); padding-top: 20px; }
-      @media (max-width: 780px) {
-        main.magazine-shell { padding: 20px 18px 50px; }
-        .magazine-masthead { align-items: flex-start; flex-direction: column; gap: 8px; }
-        .magazine-rule { margin: 16px 0 30px; }
-        .magazine-page-header { display: block; }
-        .magazine-page-header__title { font-size: clamp(3.3rem, 17vw, 6rem); }
-        .hybrid-static-cms-list.magazine-index { display: block; }
-        .magazine-card--lead { border-top: 0; padding-right: 0; }
-        .magazine-card--lead .magazine-card__title { font-size: clamp(2.8rem, 15vw, 5rem); }
-        .magazine-card--compact { display: block; }
-        .magazine-card__read { display: inline-block; margin-top: 2px; }
+
+      /* ---- Responsive ---- */
+
+      @media (max-width: 640px) {
+        main.magazine-shell { padding: 0 16px 40px; }
+        .magazine-masthead { padding: 0 16px; height: 48px; }
+        .magazine-page-header { margin: 28px 0 24px; }
+        .magazine-prose__header { margin: 28px 0 24px; }
       }
+
+      /* ---- Scrollbar ---- */
+
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #bbb; }
     </style>
   </head>
   <body>
     <main class="magazine-shell">
       <header class="magazine-masthead">
         <a class="magazine-masthead__name" href="${escapeHtml(config.appUrl)}/">${escapeHtml(config.appName)}</a>
-        <span class="magazine-masthead__issue">Digital edition · ${new Date().getFullYear()}</span>
+        <span class="magazine-masthead__issue">${new Date().getFullYear()}</span>
       </header>
       <div class="magazine-rule"></div>
       ${body}
-      <footer class="magazine-footer">${escapeHtml(config.appName)} · Independent publishing system</footer>
+      <footer class="magazine-footer">${escapeHtml(config.appName)} · Built with Hybrid-Static-CMS</footer>
     </main>
   </body>
 </html>`;
@@ -276,7 +648,7 @@ function renderFragment(posts: PostRecord[]) {
   return `<div class="hybrid-static-cms-fragment magazine-index">${posts.map((post) => card(post)).join("")}</div>`;
 }
 
-async function renderPage(page: PageRecord) {
+export async function renderPage(page: PageRecord) {
   const expandedBody = await expandPublishedBlocks(page.bodyHtml);
   const canonicalUrl = page.seoCanonicalUrl || `${config.appUrl}${pagePublicPath(page.slug)}`;
   const robots = [page.seoNoindex ? "noindex" : "index", page.seoNofollow ? "nofollow" : "follow"].join(", ");
@@ -341,7 +713,7 @@ function renderPageIndex(pages: PageRecord[]) {
   );
 }
 
-function renderPost(post: PostRecord) {
+export function renderPost(post: PostRecord) {
   const canonicalUrl = post.seoCanonicalUrl || `${config.appUrl}${postPublicPath(post.slug)}`;
   const robots = [post.seoNoindex ? "noindex" : "index", post.seoNofollow ? "nofollow" : "follow"].join(", ");
   return pageTemplate(

@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/hybrid_static_cms
+      RUN_DB_INTEGRATION_TESTS: "true"
     services:
       postgres:
         image: postgres:18-alpine
