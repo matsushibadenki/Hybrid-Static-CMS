@@ -19,8 +19,11 @@ export async function runSetupMigrations() {
   const appliedNow: string[] = [];
   for (const file of files) {
     if (appliedNames.has(file)) continue;
-    await sql.unsafe(await readFile(path.join(migrationsDir, file), "utf8"));
-    await sql`insert into migrations (name) values (${file})`;
+    const statement = await readFile(path.join(migrationsDir, file), "utf8");
+    await sql.begin(async (trx) => {
+      await trx.unsafe(statement);
+      await trx`insert into migrations (name) values (${file})`;
+    });
     appliedNow.push(file);
   }
   return appliedNow;
@@ -36,6 +39,8 @@ export async function resetApplicationDatabase() {
         form_submission_attempts,
         post_categories,
         post_tags,
+        post_series,
+        page_group_members,
         menu_items,
         form_fields,
         form_submissions,
@@ -48,6 +53,8 @@ export async function resetApplicationDatabase() {
         forms,
         menus,
         content_blocks,
+        series,
+        page_groups,
         posts,
         pages,
         categories,
@@ -75,6 +82,13 @@ function envValue(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function roleByteLimitsValue(limits: Record<string, number | undefined>) {
+  return Object.entries(limits)
+    .filter((entry): entry is [string, number] => entry[1] !== undefined)
+    .map(([role, bytes]) => `${role}:${bytes}`)
+    .join(",");
+}
+
 export async function writeSetupEnvironment(input: {
   appName: string;
   appUrl: string;
@@ -93,6 +107,8 @@ export async function writeSetupEnvironment(input: {
     PORT: envValue(String(config.port)),
     APP_URL: envValue(input.appUrl),
     APP_NAME: envValue(input.appName),
+    PUBLIC_LOCALE: envValue(config.publicLocale),
+    SCHEDULE_TIME_ZONE: envValue(config.scheduleTimeZone),
     SESSION_SECRET: envValue(input.sessionSecret),
     DATABASE_URL: envValue(config.databaseUrl),
     PUBLIC_HTML_DIR: envValue(input.publicHtmlDir),
@@ -103,11 +119,24 @@ export async function writeSetupEnvironment(input: {
     TEMPLATE_DIR: envValue(config.templateDir),
     PLUGIN_DIR: envValue(config.pluginDir),
     DEFAULT_PAGE_SIZE: envValue(String(config.defaultPageSize)),
+    MAX_UPLOAD_BYTES: envValue(String(config.maxUploadBytes)),
+    ALLOW_SVG_UPLOADS: envValue(String(config.allowSvgUploads)),
+    MEDIA_SITE_QUOTA_BYTES: envValue(String(config.mediaSiteQuotaBytes)),
+    MEDIA_USER_QUOTA_BYTES: envValue(String(config.mediaUserQuotaBytes)),
+    MEDIA_UPLOAD_ALLOWED_ROLES: envValue(Array.from(config.mediaUploadAllowedRoles).join(",")),
+    MEDIA_ROLE_QUOTA_BYTES: envValue(roleByteLimitsValue(config.mediaRoleQuotaBytes)),
+    MEDIA_ROLE_MAX_UPLOAD_BYTES: envValue(roleByteLimitsValue(config.mediaRoleMaxUploadBytes)),
     RECAPTCHA_SITE_KEY: envValue(process.env.RECAPTCHA_SITE_KEY ?? ""),
     RECAPTCHA_SECRET_KEY: envValue(process.env.RECAPTCHA_SECRET_KEY ?? ""),
     RECAPTCHA_MIN_SCORE: envValue(String(config.recaptchaMinScore)),
     COOKIE_SECURE: envValue(String(config.cookieSecure)),
     TRUST_PROXY: envValue(String(config.trustProxy)),
+    LOG_LEVEL: envValue(config.logLevel),
+    LOG_FORMAT: envValue(config.logFormat),
+    OPERATOR_ALERT_WEBHOOK_URL: envValue(config.operatorAlertWebhookUrl ?? ""),
+    OPERATOR_ALERT_WEBHOOK_SECRET: envValue(config.operatorAlertWebhookSecret ?? ""),
+    OPERATOR_ALERT_MIN_LEVEL: envValue(config.operatorAlertMinLevel),
+    OPERATOR_ALERT_TIMEOUT_MS: envValue(String(config.operatorAlertTimeoutMs)),
   };
 
   const lines = existingEnv.split("\n");

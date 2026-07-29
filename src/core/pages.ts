@@ -1,5 +1,5 @@
 import { renderMarkdownLike, sanitizeRichHtml } from "./content";
-import { sql } from "./db";
+import { sql, withTransaction } from "./db";
 import {
   AppValidationError,
   isUniqueConstraintError,
@@ -44,6 +44,21 @@ function validatePageInput(input: PageInput) {
   requireNonEmpty(input.title, "Title");
   validateSlug(input.slug);
   validateScheduledState(input.status, input.publishedAt);
+}
+
+async function syncPageGroup(pageId: number, groupId: number | null, trx: typeof sql) {
+  if (!groupId) {
+    await trx`delete from page_group_members where page_id = ${pageId}`;
+    return;
+  }
+  const result = await trx`
+    insert into page_group_members (page_id, group_id, position)
+    select ${pageId}, id, 0 from page_groups where id = ${groupId}
+    on conflict (page_id) do update set
+      group_id = excluded.group_id,
+      position = case when page_group_members.group_id = excluded.group_id then page_group_members.position else 0 end
+  `;
+  if (result.count === 0) throw new AppValidationError("Selected page group does not exist.");
 }
 
 const basePageQuery = `
@@ -129,10 +144,11 @@ export async function getPageBySlug(slug: string, status = "published") {
 export async function createPage(input: PageInput, authorId: number) {
   validatePageInput(input);
   const bodyHtml = deriveBodyHtml(input);
-  let rows;
+  let pageId: number;
   try {
-    rows = await sql`
-      insert into pages (
+    pageId = await withTransaction(async (trx) => {
+      const rows = await trx`
+        insert into pages (
         title,
         slug,
         excerpt,
@@ -165,8 +181,12 @@ export async function createPage(input: PageInput, authorId: number) {
         ${input.seoNoindex ?? false},
         ${input.seoNofollow ?? false}
       )
-      returning id
-    `;
+        returning id
+      `;
+      const id = Number(rows[0].id);
+      if (input.pageGroupId) await syncPageGroup(id, input.pageGroupId, trx as typeof sql);
+      return id;
+    });
   } catch (error) {
     if (isUniqueConstraintError(error)) {
       throw new AppValidationError(`Slug "${input.slug}" is already in use.`);
@@ -174,7 +194,7 @@ export async function createPage(input: PageInput, authorId: number) {
     throw error;
   }
 
-  return getPageById(Number(rows[0].id));
+  return getPageById(pageId);
 }
 
 export async function updatePage(id: number, input: PageInput, actorUserId?: number | null) {
@@ -182,8 +202,9 @@ export async function updatePage(id: number, input: PageInput, actorUserId?: num
   const previous = await getPageById(id);
   const bodyHtml = deriveBodyHtml(input);
   try {
-    await sql`
-      update pages
+    await withTransaction(async (trx) => {
+      await trx`
+        update pages
       set
         title = ${input.title},
         slug = ${input.slug},
@@ -196,12 +217,17 @@ export async function updatePage(id: number, input: PageInput, actorUserId?: num
         seo_description = ${input.seoDescription ?? null},
         seo_canonical_url = ${input.seoCanonicalUrl ?? null},
         seo_og_image = ${input.seoOgImage ?? null},
-        seo_keywords = ${input.seoKeywords ?? null},
-        seo_noindex = ${input.seoNoindex ?? false},
-        seo_nofollow = ${input.seoNofollow ?? false},
-        updated_at = now()
-      where id = ${id}
-    `;
+          seo_keywords = ${input.seoKeywords ?? null},
+          seo_noindex = ${input.seoNoindex ?? false},
+          seo_nofollow = ${input.seoNofollow ?? false},
+          scheduled_publish_attempts = 0,
+          scheduled_publish_next_retry_at = null,
+          scheduled_publish_last_error = null,
+          updated_at = now()
+        where id = ${id}
+      `;
+      if (input.pageGroupId !== undefined) await syncPageGroup(id, input.pageGroupId, trx as typeof sql);
+    });
   } catch (error) {
     if (isUniqueConstraintError(error)) {
       throw new AppValidationError(`Slug "${input.slug}" is already in use.`);

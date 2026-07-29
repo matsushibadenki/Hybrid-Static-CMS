@@ -11,7 +11,12 @@ function isSameOrigin(c: Parameters<MiddlewareHandler>[0]) {
   }
 
   const referer = c.req.header("referer");
-  return Boolean(referer && new URL(referer).origin === expectedOrigin);
+  if (!referer) return false;
+  try {
+    return new URL(referer).origin === expectedOrigin;
+  } catch {
+    return false;
+  }
 }
 
 export const csrfMiddleware: MiddlewareHandler = async (c, next) => {

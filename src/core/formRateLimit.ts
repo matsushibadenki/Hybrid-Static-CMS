@@ -1,8 +1,8 @@
 import { sql } from "./db";
 import { config } from "./config";
 
-export async function consumeFormSubmissionRateLimit(formId: number, clientKey: string) {
-  const attemptKey = `form:${formId}:${clientKey}`;
+export async function consumeSubmissionRateLimit(scope: "form" | "comment", targetId: number, clientKey: string) {
+  const attemptKey = `${scope}:${targetId}:${clientKey}`;
   await sql`
     insert into form_submission_attempts (attempt_key, attempts, window_started)
     values (${attemptKey}, 1, now())
@@ -24,6 +24,10 @@ export async function consumeFormSubmissionRateLimit(formId: number, clientKey: 
     limit 1
   `;
   return Number(rows[0]?.attempts ?? 0) <= config.formRateLimitAttempts;
+}
+
+export function consumeFormSubmissionRateLimit(formId: number, clientKey: string) {
+  return consumeSubmissionRateLimit("form", formId, clientKey);
 }
 
 export async function clearExpiredFormRateLimits() {

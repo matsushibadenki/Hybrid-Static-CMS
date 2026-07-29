@@ -48,9 +48,16 @@ Important settings:
 - `CONTROL_PANEL_PATH`: admin route prefix
 - `CMS_API_PREFIX`: API route prefix
 - `CMS_OUTPUT_DIR`: generated CMS output directory
+- `PUBLIC_LOCALE`: language used by CMS-generated public navigation, validation messages, dates, and index pages; supported values are `en`, `ja`, and `zh`. Custom `templates/page.html` files can use `{{lang}}` for the matching HTML language code.
+- `SCHEDULE_TIME_ZONE`: IANA timezone used for timezone-less scheduled publication input, default `UTC`; for example `Asia/Tokyo`
 - `TEMPLATE_DIR`: optional template override directory, default `./templates`
 - `MAX_UPLOAD_BYTES`: maximum size for each uploaded media file, default `20971520` (20 MB)
 - `ALLOW_SVG_UPLOADS`: set to `true` only when SVG uploads are required; disabled by default because SVG can contain active content. Enabled SVG files are sanitized before storage.
+- `MEDIA_SITE_QUOTA_BYTES`: total media storage quota in bytes; `0` disables the site quota
+- `MEDIA_USER_QUOTA_BYTES`: default storage quota per uploader in bytes; `0` means unlimited
+- `MEDIA_UPLOAD_ALLOWED_ROLES`: comma-separated roles allowed to upload media, default `owner,admin,editor,author`
+- `MEDIA_ROLE_QUOTA_BYTES`: optional comma- or pipe-separated per-role quota overrides such as `author:268435456,editor:1073741824`
+- `MEDIA_ROLE_MAX_UPLOAD_BYTES`: optional per-role one-file limits; `MAX_UPLOAD_BYTES` remains the hard installation-wide ceiling
 - `FORM_RATE_LIMIT_ATTEMPTS`: accepted public form submissions per client and form in one window, default `5`
 - `FORM_RATE_LIMIT_WINDOW_SECONDS`: public form rate-limit window, default `300`
 - `FORM_SUBMISSION_RETENTION_DAYS`: delete stored form submissions older than this many days during scheduled housekeeping; `0` disables automatic deletion
@@ -59,6 +66,12 @@ Important settings:
 - `SMTP_USERNAME`, `SMTP_PASSWORD`: optional SMTP `AUTH LOGIN` credentials
 - `SMTP_FROM`: sender address; notifications remain disabled unless this and `FORM_NOTIFICATION_EMAIL` are configured
 - `FORM_NOTIFICATION_EMAIL`: destination address for new public form submissions
+- `LOG_LEVEL`: minimum application-log severity (`debug`, `info`, `warn`, or `error`), default `info`
+- `LOG_FORMAT`: `json` for structured production logs or `text` for local readability, default `json`
+- `OPERATOR_ALERT_WEBHOOK_URL`: optional HTTPS endpoint for operational alerts; HTTP is allowed only for localhost testing
+- `OPERATOR_ALERT_WEBHOOK_SECRET`: optional HMAC SHA-256 signing secret for webhook requests
+- `OPERATOR_ALERT_MIN_LEVEL`: minimum alert severity sent to the webhook, default `error`
+- `OPERATOR_ALERT_TIMEOUT_MS`: webhook timeout in milliseconds, default `5000`
 - `GOOGLE_FONTS_CSS_URLS`: pipe-separated (`|`) Google Fonts CSS URLs for generated static pages; the bundled default includes Google Sans Flex, Noto Sans JP, Noto Sans Mono, Noto Serif JP, Roboto, Zen Maru Gothic, and Material Symbols Outlined
 
 ## Local setup
@@ -102,6 +115,7 @@ The seed also creates:
 - one sample published contact form
 
 Uploads are not seeded, but the media library becomes available after migration under the control panel.
+The media screen displays site and current-user usage, the effective file-size limit, and whether the current role may upload. See [Media upload policies](./media-upload-policies.md) before enabling quotas.
 
 Published navigation menus are available under `/control-panel/menus`. Their static HTML output is written to `/cms/menus/{slug}.html`, which can be included by an existing HTML or PHP page.
 

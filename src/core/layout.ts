@@ -11,11 +11,39 @@ import { listAdminLinks } from "./extensions";
 import { hasPermission } from "./permissions";
 import { adminTranslations } from "./i18n";
 
-export function adminLayout(title: string, user: SessionUser | null, body: string) {
+export function adminDate(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `<time data-i18n-date datetime="${escapeHtml(date.toISOString())}">${escapeHtml(date.toLocaleString("en-US"))}</time>`;
+}
+
+function enhanceAdminTables(body: string) {
+  return body.replace(/<table\b[\s\S]*?<\/table>/gi, (table) => {
+    const enhancedTable = table.replace(/^<table\b([^>]*)>/i, (_match, attributes: string) => {
+      if (/\bclass\s*=/.test(attributes)) {
+        return `<table${attributes.replace(/\bclass=(["'])(.*?)\1/i, (_classMatch, quote: string, classes: string) => {
+          const classNames = classes.split(/\s+/).filter(Boolean);
+          if (!classNames.includes("data-table")) classNames.push("data-table");
+          return `class=${quote}${classNames.join(" ")}${quote}`;
+        })}>`;
+      }
+      return `<table class="data-table"${attributes}>`;
+    });
+    return `<div class="table-scroll">${enhancedTable}</div>`;
+  });
+}
+
+export function adminLayout(
+  title: string,
+  user: SessionUser | null,
+  body: string,
+  contentMode: "default" | "wide-list" = "default",
+) {
   const csrfField = user?.csrfToken
     ? `<input type="hidden" name="_csrf" value="${escapeHtml(user.csrfToken)}" />`
     : "";
   const can = (permission: Parameters<typeof hasPermission>[1]) => Boolean(user && hasPermission(user, permission));
+  const languageSwitcher = `<div class="shell-language" aria-label="Switch language"><span data-i18n="Switch language">Language</span><button type="button" data-locale="en">EN</button><button type="button" data-locale="ja">日本語</button><button type="button" data-locale="zh">简体中文</button></div>`;
   const nav = user
     ? `
       <nav class="shell-nav">
@@ -54,6 +82,7 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
           <div class="shell-nav-subgroup shell-nav-separated">
             <p class="shell-nav-sublabel" data-i18n="Forms and media">Forms and media</p>
             ${can("forms.read") ? `<a data-i18n="Forms" href="${config.controlPanelPath}/forms">Forms</a>` : ""}
+            ${can("comments.read") ? `<a data-i18n="Comments" href="${config.controlPanelPath}/comments">Comments</a>` : ""}
             ${can("media.read") ? `<a data-i18n="Media" href="${config.controlPanelPath}/media">Media</a>` : ""}
           </div>
         </div>
@@ -66,6 +95,10 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
           ${can("blocks.read") ? `<a data-i18n="Blocks" href="${config.controlPanelPath}/blocks">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
             Blocks
+          </a>` : ""}
+          ${can("settings.manage") ? `<a data-i18n="Permalinks" href="${config.controlPanelPath}/settings/permalinks">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            Permalinks
           </a>` : ""}
           ${can("ai.review") ? `<a data-i18n="AI proposals" href="${config.controlPanelPath}/proposals">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
@@ -92,7 +125,7 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
             Snapshots
           </a>` : ""}
         </div>
-        <div class="shell-language" aria-label="Switch language"><span data-i18n="Switch language">Language</span><button type="button" data-locale="en">EN</button><button type="button" data-locale="ja">日本語</button><button type="button" data-locale="zh">简体中文</button></div>
+        ${languageSwitcher}
         <form method="post" action="/logout"><button class="shell-logout-btn" data-i18n="Logout" type="submit">Logout</button></form>
       </nav>
     `
@@ -100,6 +133,9 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
   const protectedBody = user
     ? body.replace(/<form method="post"([^>]*)>/g, `<form method="post"$1>${csrfField}`)
     : body;
+  const hasTable = /<table\b/i.test(protectedBody);
+  const enhancedBody = hasTable ? enhanceAdminTables(protectedBody) : protectedBody;
+  const useWideLayout = contentMode === "wide-list" || hasTable;
 
   return `<!doctype html>
 <html lang="en">
@@ -150,6 +186,7 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
       /* ---- Reset & Base ---- */
 
       *, *::before, *::after { box-sizing: border-box; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
       body {
         margin: 0;
@@ -279,6 +316,17 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         margin: 0 auto;
         padding: 64px 48px 104px;
         color: var(--ink);
+      }
+
+      .shell-card-wide-list {
+        max-width: none;
+        margin: 0;
+        padding: 2rem;
+      }
+
+      .content-list-page {
+        width: 100%;
+        min-width: 0;
       }
 
       /* ---- Navigation ---- */
@@ -453,6 +501,13 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         font-weight: 600;
       }
 
+      .shell:not(.shell-admin) .shell-language {
+        justify-content: center;
+        border-top: 0;
+        margin-top: 16px;
+        padding: 0;
+      }
+
       /* Logout */
       .shell-logout-btn {
         display: flex;
@@ -619,6 +674,33 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         border-collapse: collapse;
       }
 
+      .table-scroll {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+      }
+
+      .data-table {
+        width: 100%;
+      }
+
+      .shell-card-wide-list .data-table th,
+      .shell-card-wide-list .data-table td {
+        white-space: nowrap;
+      }
+
+      .shell-card-wide-list .data-table .cell-long {
+        width: clamp(14rem, 24vw, 24rem);
+        min-width: 14rem;
+        max-width: 28rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .shell-card-wide-list .data-table .row {
+        flex-wrap: nowrap;
+      }
+
       th {
         padding: 10px 12px 10px 0;
         text-align: left;
@@ -699,6 +781,197 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         text-transform: uppercase;
       }
       .editor-section-title { margin: -8px 0 2px; font-size: 1.2rem; font-weight: 600; }
+
+      /* ========================================
+         Rich Editor Toolbar — Premium Design
+         Glassmorphism-inspired, icon-friendly
+         ======================================== */
+      .rich-editor-toolbar {
+        display: grid;
+        gap: 16px;
+        margin-top: -4px;
+        padding: 20px;
+        border: 1px solid rgba(65, 201, 180, 0.18);
+        border-radius: var(--radius-lg);
+        background: linear-gradient(135deg, rgba(65, 201, 180, 0.04) 0%, rgba(255,255,255,0.85) 50%, rgba(65, 201, 180, 0.03) 100%);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 2px 12px rgba(65, 201, 180, 0.06), 0 1px 3px rgba(0,0,0,0.03);
+        position: relative;
+        overflow: hidden;
+      }
+      .rich-editor-toolbar::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--accent) 0%, #7dd3c8 40%, #b4e4dc 70%, var(--accent) 100%);
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        opacity: 0.7;
+      }
+      .rich-editor-toolbar-heading {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: baseline;
+        padding-top: 2px;
+      }
+      .rich-editor-toolbar-heading p { margin: 0; }
+      .rich-editor-toolbar-title {
+        font-size: 0.92rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--accent) 0%, #2a7a6e 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.01em;
+      }
+      .rich-editor-groups {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .rich-editor-group {
+        min-width: 0;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: var(--radius-sm);
+        background: var(--panel);
+        transition: all 0.22s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+      }
+      .rich-editor-group:hover {
+        border-left-color: var(--accent-hover);
+        box-shadow: 0 2px 8px rgba(65, 201, 180, 0.1);
+        transform: translateY(-1px);
+      }
+      .rich-editor-group legend {
+        padding: 2px 8px;
+        color: var(--accent-hover);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        background: var(--accent-light);
+        border-radius: var(--radius-pill);
+      }
+      .rich-editor-group-wide { grid-column: 1 / -1; }
+      .rich-editor-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .rich-editor-actions .button {
+        min-width: 38px;
+        min-height: 36px;
+        padding: 6px 12px;
+        white-space: nowrap;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+        color: var(--ink-secondary);
+        font-weight: 600;
+        font-size: 0.84rem;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+      .rich-editor-actions .button::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(65,201,180,0.12) 0%, rgba(65,201,180,0.04) 100%);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        border-radius: inherit;
+      }
+      .rich-editor-actions .button:hover {
+        border-color: var(--accent-border);
+        color: var(--accent-hover);
+        box-shadow: 0 2px 8px rgba(65,201,180,0.15);
+        transform: translateY(-1px);
+      }
+      .rich-editor-actions .button:hover::before {
+        opacity: 1;
+      }
+      .rich-editor-actions .button:active {
+        transform: translateY(0) scale(0.96);
+        box-shadow: 0 1px 2px rgba(65,201,180,0.1);
+      }
+      .rich-editor-group-label {
+        margin: 14px 0 8px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line-light);
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 650;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .rich-editor-upload-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .rich-editor-upload-button {
+        display: inline-flex;
+        width: auto;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .rich-editor-upload-button input { display: none; }
+      /* Color picker swatch styles */
+      .rich-editor-color-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      .rich-editor-color-swatch {
+        appearance: none;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid var(--line);
+        cursor: pointer;
+        padding: 0;
+        transition: all 0.18s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      }
+      .rich-editor-color-swatch:hover {
+        transform: scale(1.2);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        border-color: var(--accent);
+      }
+      .rich-editor-color-swatch:active {
+        transform: scale(1.05);
+      }
+      .rich-editor-color-picker-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .rich-editor-color-picker-wrap input[type="color"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 32px;
+        height: 32px;
+        border: 2px solid var(--line);
+        border-radius: 50%;
+        cursor: pointer;
+        padding: 0;
+        background: transparent;
+        transition: all 0.18s ease;
+      }
+      .rich-editor-color-picker-wrap input[type="color"]:hover {
+        border-color: var(--accent);
+        transform: scale(1.1);
+      }
+      .rich-editor-color-picker-wrap input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+      .rich-editor-color-picker-wrap input[type="color"]::-webkit-color-swatch { border-radius: 50%; border: 0; }
 
       label {
         display: grid;
@@ -870,6 +1143,9 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         .shell-admin .shell-card {
           padding: 40px 20px 72px;
         }
+        .shell-admin .shell-card-wide-list {
+          padding: 2rem;
+        }
         .shell-admin .shell-nav {
           flex-direction: row;
           flex-wrap: wrap;
@@ -918,6 +1194,16 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         }
       }
 
+      @media (max-width: 620px) {
+        .rich-editor-toolbar-heading,
+        .rich-editor-upload-row {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .rich-editor-groups { grid-template-columns: minmax(0, 1fr); }
+        .rich-editor-group-wide { grid-column: auto; }
+      }
+
       /* ---- Scrollbar (webkit) ---- */
 
       ::-webkit-scrollbar {
@@ -953,23 +1239,49 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
           ${user ? `<p><span data-i18n="Signed in as">Signed in as</span> ${escapeHtml(user.displayName)}.</p>` : `<p data-i18n="Sign in to manage posts and generated fragments.">Sign in to manage posts and generated fragments.</p>`}
         </div>
         ${nav}
+        ${user ? "" : languageSwitcher}
       </header>
-      <section class="shell-card">${protectedBody}</section>
+      <section class="shell-card${useWideLayout ? " shell-card-wide-list" : ""}">${enhancedBody}</section>
     </main>
     <script>
       const adminI18n = ${JSON.stringify(adminTranslations)};
-      const locale = localStorage.getItem("hybrid-static-cms-locale") || "en";
+      const supportedLocales = new Set(["en", "ja", "zh"]);
+      const savedLocale = localStorage.getItem("hybrid-static-cms-locale") || "en";
+      const locale = supportedLocales.has(savedLocale) ? savedLocale : "en";
+      const originalText = new WeakMap();
+      const originalAttributes = new WeakMap();
+      const baseTitle = ${JSON.stringify(title)};
+      function translatedText(source, dictionary, value) {
+        if (dictionary[source]) return dictionary[source];
+        const count = source.match(/^(\()?([0-9]+) (articles|pages|submissions|items)(\))?$/);
+        if (count && dictionary[count[3]]) {
+          const translated = count[2] + " " + dictionary[count[3]];
+          return (count[1] || "") + translated + (count[4] || "");
+        }
+        const pagination = source.match(/^Page ([0-9]+) of ([0-9]+) \(([0-9]+) total\)$/);
+        if (pagination && dictionary.total) {
+          return value === "ja"
+            ? pagination[1] + " / " + pagination[2] + "ページ（合計" + pagination[3] + "件）"
+            : "第" + pagination[1] + "页，共" + pagination[2] + "页（总计" + pagination[3] + "条）";
+        }
+        const required = source.match(/^(.+) is required\.$/);
+        if (required) return value === "ja" ? required[1] + "は必須です。" : required[1] + "为必填项。";
+        const duplicateSlug = source.match(/^Slug "(.+)" is already in use\.$/);
+        if (duplicateSlug) return value === "ja" ? "スラッグ「" + duplicateSlug[1] + "」はすでに使用されています。" : "别名“" + duplicateSlug[1] + "”已被使用。";
+        const proposalStatus = source.match(/^This proposal is already (.+)\.$/);
+        if (proposalStatus) {
+          const status = dictionary[proposalStatus[1]] || proposalStatus[1];
+          return value === "ja" ? "この提案はすでに" + status + "です。" : "此提案已经是“" + status + "”状态。";
+        }
+        return source;
+      }
+      let activeLocale = locale;
+      window.adminTranslate = (source) => activeLocale === "en" ? source : translatedText(source, adminI18n[activeLocale] || {}, activeLocale);
       function applyAdminLocale(value) {
+        activeLocale = value;
         const dictionary = adminI18n[value] || {};
         document.documentElement.lang = value === "zh" ? "zh-CN" : value;
-        document.querySelectorAll("[data-i18n]").forEach((node) => {
-          const key = node.getAttribute("data-i18n");
-          if (!key || !dictionary[key]) return;
-          const textNode = [...node.childNodes].find((child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim());
-          if (textNode) textNode.textContent = "\\n            " + dictionary[key] + "\\n          ";
-          else node.textContent = dictionary[key];
-        });
-        document.title = (dictionary[${JSON.stringify(title)}] || ${JSON.stringify(title)}) + " | " + ${JSON.stringify(config.appName)};
+        document.title = (dictionary[baseTitle] || baseTitle) + " | " + ${JSON.stringify(config.appName)};
         document.querySelectorAll("[data-locale]").forEach((button) => button.classList.toggle("active", button.dataset.locale === value));
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
         const ignored = new Set(["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA"]);
@@ -979,9 +1291,33 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
           if (!ignored.has(current.parentElement?.tagName || "")) textNodes.push(current);
         }
         textNodes.forEach((node) => {
-          const original = node.textContent || "";
-          const key = original.trim();
-          if (key && dictionary[key]) node.textContent = original.replace(key, dictionary[key]);
+          if (!originalText.has(node)) originalText.set(node, node.textContent || "");
+          const original = originalText.get(node) || "";
+          const source = original.trim();
+          if (!source) return;
+          const explicitKey = node.parentElement?.getAttribute("data-i18n") || "";
+          const translated = value === "en"
+            ? source
+            : explicitKey && dictionary[explicitKey]
+              ? dictionary[explicitKey]
+              : translatedText(source, dictionary, value);
+          node.textContent = original.replace(source, translated);
+        });
+        document.querySelectorAll("[placeholder], [title], [aria-label]").forEach((node) => {
+          if (!originalAttributes.has(node)) {
+            originalAttributes.set(node, Object.fromEntries(["placeholder", "title", "aria-label"].map((name) => [name, node.getAttribute(name)])));
+          }
+          const originals = originalAttributes.get(node);
+          ["placeholder", "title", "aria-label"].forEach((name) => {
+            const source = originals[name];
+            if (source) node.setAttribute(name, value === "en" ? source : translatedText(source, dictionary, value));
+          });
+        });
+        document.querySelectorAll("time[data-i18n-date]").forEach((node) => {
+          const date = new Date(node.dateTime);
+          if (!Number.isNaN(date.getTime())) {
+            node.textContent = new Intl.DateTimeFormat(value === "zh" ? "zh-CN" : value === "ja" ? "ja-JP" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date);
+          }
         });
       }
       applyAdminLocale(locale);
@@ -993,8 +1329,9 @@ export function adminLayout(title: string, user: SessionUser | null, body: strin
         .sort((left, right) => right.path.length - left.path.length);
       matches[0]?.link.classList.add("active");
       document.querySelectorAll("[data-locale]").forEach((button) => button.addEventListener("click", () => {
-        localStorage.setItem("hybrid-static-cms-locale", button.dataset.locale || "en");
-        location.reload();
+        const nextLocale = supportedLocales.has(button.dataset.locale) ? button.dataset.locale : "en";
+        localStorage.setItem("hybrid-static-cms-locale", nextLocale);
+        applyAdminLocale(nextLocale);
       }));
     </script>
   </body>

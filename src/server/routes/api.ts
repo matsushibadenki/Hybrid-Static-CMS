@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { requestIp, writeAuditLog } from "../../core/audit";
-import { slugify } from "../../core/content";
+import { escapeHtml, slugify } from "../../core/content";
 import { verifyRecaptchaToken } from "../../core/security";
 import {
   createForm,
@@ -8,22 +8,35 @@ import {
   deleteForm,
   getFormBySlug,
   listForms,
+  validateFormSubmission,
   updateForm,
 } from "../../core/forms";
 import { deleteMedia, listMedia, uploadMedia } from "../../core/media";
 import { createPage, deletePage, getPageBySlug, listPages, updatePage } from "../../core/pages";
-import { createPost, deletePost, getPostBySlug, listPosts, updatePost } from "../../core/posts";
+import { createPost, deletePost, getPostById, getPostBySlug, listPosts, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
 import { getMenuBySlug, listMenus } from "../../core/menus";
 import { getPublishedBlockBySlug, listBlocks } from "../../core/blocks";
 import { createAiFileProposal } from "../../core/aiProposals";
 import { hasPermission, requireApiPermission } from "../../core/permissions";
-import { consumeFormSubmissionRateLimit } from "../../core/formRateLimit";
+import { consumeFormSubmissionRateLimit, consumeSubmissionRateLimit } from "../../core/formRateLimit";
 import { config } from "../../core/config";
 import { sendFormSubmissionEmail } from "../../core/email";
 import { createOperatorNotification } from "../../core/notifications";
+import { AppValidationError } from "../../core/validation";
+import { publicTranslations } from "../../core/i18n";
+import { createPendingComment } from "../../core/comments";
+import { getPostPermalinkPattern } from "../../core/settings";
+import { postPermalinkPath } from "../../core/permalinks";
+import { scheduleTimestampForStorage } from "../../core/scheduling";
 
 export const apiRoutes = new Hono();
+
+function optionalRelationId(payload: Record<string, unknown>, key: string) {
+  if (!(key in payload)) return undefined;
+  const id = Number(payload[key]);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
 
 apiRoutes.use("/*", requireApiPermission());
 
@@ -31,7 +44,11 @@ apiRoutes.get("/posts", async (c) => {
   const page = Number(c.req.query("page") ?? 1);
   const limit = Number(c.req.query("limit") ?? 10);
   const category = c.req.query("category");
-  const status = c.req.query("status") ?? "published";
+  const requestedStatus = c.req.query("status") ?? "published";
+  const status = ["draft", "published", "scheduled", "any"].includes(requestedStatus) &&
+    (requestedStatus === "published" || hasPermission(c.get("sessionUser"), "posts.read"))
+    ? requestedStatus
+    : "published";
   const search = c.req.query("q");
 
   const data = await listPosts({ page, limit, category, status, search });
@@ -49,7 +66,11 @@ apiRoutes.get("/posts/:slug", async (c) => {
 apiRoutes.get("/pages", async (c) => {
   const page = Number(c.req.query("page") ?? 1);
   const limit = Number(c.req.query("limit") ?? 10);
-  const status = c.req.query("status") ?? "published";
+  const requestedStatus = c.req.query("status") ?? "published";
+  const status = ["draft", "published", "scheduled", "any"].includes(requestedStatus) &&
+    (requestedStatus === "published" || hasPermission(c.get("sessionUser"), "pages.read"))
+    ? requestedStatus
+    : "published";
   const search = c.req.query("q");
 
   const data = await listPages({ page, limit, status, search });
@@ -76,7 +97,11 @@ apiRoutes.get("/media", async (c) => {
 });
 
 apiRoutes.get("/forms", async (c) => {
-  const status = (c.req.query("status") ?? "published") as "published" | "draft" | "any";
+  const requestedStatus = c.req.query("status") ?? "published";
+  const status = (["draft", "published", "any"].includes(requestedStatus) &&
+    (requestedStatus === "published" || hasPermission(c.get("sessionUser"), "forms.read"))
+    ? requestedStatus
+    : "published") as "published" | "draft" | "any";
   const items = await listForms(status);
   return c.json({ items });
 });
@@ -124,7 +149,8 @@ apiRoutes.post("/posts", async (c) => {
   }
 
   const payload = await c.req.json();
-  if (payload.status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
+  const status = payload.status ?? "draft";
+  if (status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
   const post = await createPost(
     {
       title: payload.title,
@@ -132,7 +158,7 @@ apiRoutes.post("/posts", async (c) => {
       excerpt: payload.excerpt,
       bodyMd: payload.bodyMd,
       bodyHtml: payload.bodyHtml,
-      status: payload.status ?? "draft",
+      status,
       seoTitle: payload.seoTitle,
       seoDescription: payload.seoDescription,
       seoCanonicalUrl: payload.seoCanonicalUrl,
@@ -140,9 +166,10 @@ apiRoutes.post("/posts", async (c) => {
       seoKeywords: payload.seoKeywords,
       seoNoindex: Boolean(payload.seoNoindex),
       seoNofollow: Boolean(payload.seoNofollow),
-      publishedAt: payload.publishedAt ?? null,
+      publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
       categorySlugs: payload.categorySlugs ?? [],
       tagSlugs: payload.tagSlugs ?? [],
+      seriesId: optionalRelationId(payload, "seriesId"),
     },
     user.id,
   );
@@ -166,14 +193,15 @@ apiRoutes.put("/posts/:id", async (c) => {
   }
 
   const payload = await c.req.json();
-  if (payload.status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
+  const status = payload.status ?? "draft";
+  if (status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
   const post = await updatePost(Number(c.req.param("id")), {
     title: payload.title,
     slug: payload.slug || slugify(payload.title),
     excerpt: payload.excerpt,
     bodyMd: payload.bodyMd,
     bodyHtml: payload.bodyHtml,
-    status: payload.status ?? "draft",
+    status,
     seoTitle: payload.seoTitle,
     seoDescription: payload.seoDescription,
     seoCanonicalUrl: payload.seoCanonicalUrl,
@@ -181,9 +209,10 @@ apiRoutes.put("/posts/:id", async (c) => {
     seoKeywords: payload.seoKeywords,
     seoNoindex: Boolean(payload.seoNoindex),
     seoNofollow: Boolean(payload.seoNofollow),
-    publishedAt: payload.publishedAt ?? null,
+    publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
     categorySlugs: payload.categorySlugs ?? [],
     tagSlugs: payload.tagSlugs ?? [],
+    seriesId: optionalRelationId(payload, "seriesId"),
   }, user.id);
 
   await writeAuditLog({
@@ -224,7 +253,8 @@ apiRoutes.post("/pages", async (c) => {
   }
 
   const payload = await c.req.json();
-  if (payload.status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
+  const status = payload.status ?? "draft";
+  if (status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
   const page = await createPage(
     {
       title: payload.title,
@@ -232,7 +262,7 @@ apiRoutes.post("/pages", async (c) => {
       excerpt: payload.excerpt,
       bodyMd: payload.bodyMd,
       bodyHtml: payload.bodyHtml,
-      status: payload.status ?? "draft",
+      status,
       seoTitle: payload.seoTitle,
       seoDescription: payload.seoDescription,
       seoCanonicalUrl: payload.seoCanonicalUrl,
@@ -240,7 +270,8 @@ apiRoutes.post("/pages", async (c) => {
       seoKeywords: payload.seoKeywords,
       seoNoindex: Boolean(payload.seoNoindex),
       seoNofollow: Boolean(payload.seoNofollow),
-      publishedAt: payload.publishedAt ?? null,
+      pageGroupId: optionalRelationId(payload, "pageGroupId"),
+      publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
     },
     user.id,
   );
@@ -264,14 +295,15 @@ apiRoutes.put("/pages/:id", async (c) => {
   }
 
   const payload = await c.req.json();
-  if (payload.status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
+  const status = payload.status ?? "draft";
+  if (status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
   const page = await updatePage(Number(c.req.param("id")), {
     title: payload.title,
     slug: payload.slug || slugify(payload.title),
     excerpt: payload.excerpt,
     bodyMd: payload.bodyMd,
     bodyHtml: payload.bodyHtml,
-    status: payload.status ?? "draft",
+    status,
     seoTitle: payload.seoTitle,
     seoDescription: payload.seoDescription,
     seoCanonicalUrl: payload.seoCanonicalUrl,
@@ -279,7 +311,8 @@ apiRoutes.put("/pages/:id", async (c) => {
     seoKeywords: payload.seoKeywords,
     seoNoindex: Boolean(payload.seoNoindex),
     seoNofollow: Boolean(payload.seoNofollow),
-    publishedAt: payload.publishedAt ?? null,
+    pageGroupId: optionalRelationId(payload, "pageGroupId"),
+    publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
   }, user.id);
 
   await writeAuditLog({
@@ -326,16 +359,23 @@ apiRoutes.post("/media", async (c) => {
     return c.json({ error: "File is required" }, 400);
   }
 
-  const media = await uploadMedia(file, altText, user.id);
-  await writeAuditLog({
-    actorUserId: user.id,
-    action: "media.upload",
-    targetType: "media",
-    targetId: media?.id ?? null,
-    summary: `Uploaded media "${media?.originalName ?? file.name}".`,
-    ipAddress: requestIp(c),
-  });
-  return c.json(media, 201);
+  try {
+    const media = await uploadMedia(file, altText, user.id);
+    await writeAuditLog({
+      actorUserId: user.id,
+      action: "media.upload",
+      targetType: "media",
+      targetId: media?.id ?? null,
+      summary: `Uploaded media "${media?.originalName ?? file.name}".`,
+      ipAddress: requestIp(c),
+    });
+    return c.json(media, 201);
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.json({ error: error.message }, 400);
+    }
+    throw error;
+  }
 });
 
 apiRoutes.delete("/media/:id", async (c) => {
@@ -431,7 +471,46 @@ apiRoutes.delete("/forms/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+apiRoutes.post("/comments/:postId/submit", async (c) => {
+  const publicCopy = publicTranslations[config.publicLocale];
+  const post = await getPostById(Number(c.req.param("postId")));
+  if (!post || post.status !== "published" || !post.commentsEnabled) return c.json({ error: publicCopy.commentsClosed }, 403);
+
+  const clientKey = requestIp(c) ?? "untrusted-client";
+  if (!(await consumeSubmissionRateLimit("comment", post.id, clientKey))) {
+    c.header("Retry-After", String(config.formRateLimitWindowSeconds));
+    return c.json({ error: publicCopy.tooManySubmissions }, 429);
+  }
+  const contentLength = Number(c.req.header("content-length") ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > 65_536) return c.json({ error: publicCopy.submissionTooLarge }, 413);
+
+  const formData = await c.req.formData();
+  const recaptchaAction = `comment_submit_${post.id}`;
+  const verification = await verifyRecaptchaToken(String(formData.get("recaptchaToken") ?? ""), recaptchaAction, requestIp(c));
+  if (!verification.ok) {
+    await writeAuditLog({ actorUserId: null, action: "comment.submit.blocked", targetType: "post", targetId: post.id, summary: `Blocked a comment submission for post "${post.title}".`, ipAddress: requestIp(c) });
+    return c.html(`<p>${escapeHtml(publicCopy.spamSubmissionFailed)}</p>`, 400);
+  }
+
+  try {
+    const commentId = await createPendingComment(post.id, {
+      authorName: String(formData.get("authorName") ?? ""),
+      authorEmail: String(formData.get("authorEmail") ?? ""),
+      body: String(formData.get("body") ?? ""),
+    });
+    await writeAuditLog({ actorUserId: null, action: "comment.submit", targetType: "post_comment", targetId: commentId, summary: `Received a comment awaiting approval for post "${post.title}".`, ipAddress: requestIp(c) });
+    await createOperatorNotification({ level: "info", action: "comment.submit", message: `A new comment on "${post.title}" is awaiting approval.` }).catch(() => undefined);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.html(`<p>${escapeHtml(publicCopy.commentInvalid)}</p>`, 400);
+    throw error;
+  }
+
+  const returnPath = postPermalinkPath(post, await getPostPermalinkPattern());
+  return c.html(`<main style="max-width:640px;margin:10vh auto;padding:24px;font-family:sans-serif"><h1>${escapeHtml(publicCopy.commentReceived)}</h1><p>${escapeHtml(publicCopy.commentPending)}</p><p><a href="${escapeHtml(returnPath)}#comments">${escapeHtml(publicCopy.backToArticle)}</a></p></main>`, 202);
+});
+
 apiRoutes.post("/forms/:slug/submit", async (c) => {
+  const publicCopy = publicTranslations[config.publicLocale];
   const form = await getFormBySlug(c.req.param("slug"), "published");
   if (!form) {
     return c.json({ error: "Not found" }, 404);
@@ -447,7 +526,11 @@ apiRoutes.post("/forms/:slug/submit", async (c) => {
       ipAddress: requestIp(c),
     });
     c.header("Retry-After", String(config.formRateLimitWindowSeconds));
-    return c.json({ error: "Too many submissions. Please try again later." }, 429);
+    return c.json({ error: publicCopy.tooManySubmissions }, 429);
+  }
+  const contentLength = Number(c.req.header("content-length") ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > 1_048_576) {
+    return c.json({ error: publicCopy.submissionTooLarge }, 413);
   }
   const formData = await c.req.formData();
   const recaptchaToken = String(formData.get("recaptchaToken") ?? "");
@@ -462,12 +545,16 @@ apiRoutes.post("/forms/:slug/submit", async (c) => {
       summary: `Blocked submission for form "${form.title}" due to failed reCAPTCHA verification (${verification.reasons.join(", ") || "unknown"}).`,
       ipAddress: requestIp(c),
     });
-    return c.html("<p>Spam protection could not verify your submission. Please try again.</p>", 400);
+    return c.html(`<p>${escapeHtml(publicCopy.spamSubmissionFailed)}</p>`, 400);
   }
-  const payload: Record<string, string> = {};
-  for (const field of form.fields) {
-    const raw = formData.get(field.name);
-    payload[field.name] = String(raw ?? "");
+  let payload: Record<string, string>;
+  try {
+    payload = validateFormSubmission(form, formData);
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.html(`<p>${escapeHtml(error.message)}</p>`, 400);
+    }
+    throw error;
   }
   await createFormSubmission(form.id, payload);
   try {
@@ -503,5 +590,5 @@ apiRoutes.post("/forms/:slug/submit", async (c) => {
     summary: `Received submission for form "${form.title}".`,
     ipAddress: requestIp(c),
   });
-  return c.html(`<p>${form.successMessage}</p>`);
+  return c.html(`<p>${escapeHtml(form.successMessage)}</p>`);
 });

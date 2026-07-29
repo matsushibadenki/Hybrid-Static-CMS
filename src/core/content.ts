@@ -9,6 +9,14 @@ export function slugify(value: string) {
     .replace(/-+/g, "-");
 }
 
+export function buildScopedSlug(rawSlug: string, title: string, parentSlug?: string) {
+  const manualSlug = rawSlug.trim();
+  if (manualSlug) return manualSlug;
+  const generatedSlug = slugify(title);
+  if (!generatedSlug) return "";
+  return parentSlug ? `${parentSlug}-${generatedSlug}` : generatedSlug;
+}
+
 export function renderMarkdownLike(markdown: string) {
   const paragraphs = markdown
     .split(/\n{2,}/)

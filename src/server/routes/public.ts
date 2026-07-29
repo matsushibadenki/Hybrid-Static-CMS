@@ -1,10 +1,14 @@
 import path from "node:path";
+import { realpath, stat } from "node:fs/promises";
 import { Context, Hono } from "hono";
 import { config } from "../../core/config";
 import { getPageBySlug } from "../../core/pages";
 import { getPostBySlug } from "../../core/posts";
 import { renderPage, renderPost } from "../../core/renderer";
 import { verifyPreviewToken } from "../../core/previews";
+import { getPostSeriesNavigation } from "../../core/series";
+import { getPostPermalinkPattern } from "../../core/settings";
+import { listApprovedCommentsForPosts } from "../../core/comments";
 
 export const publicRoutes = new Hono();
 
@@ -15,10 +19,18 @@ async function sendFile(c: Context, relativePath: string) {
     return c.notFound();
   }
   const fullPath = path.join(config.publicHtmlDir, normalized);
-  const file = Bun.file(fullPath);
-  if (!(await file.exists())) {
+  let publicRoot: string;
+  let resolvedPath: string;
+  try {
+    [publicRoot, resolvedPath] = await Promise.all([realpath(config.publicHtmlDir), realpath(fullPath)]);
+  } catch {
     return c.notFound();
   }
+  if (resolvedPath !== publicRoot && !resolvedPath.startsWith(`${publicRoot}${path.sep}`)) {
+    return c.notFound();
+  }
+  if (!(await stat(resolvedPath)).isFile()) return c.notFound();
+  const file = Bun.file(resolvedPath);
   const extension = path.extname(normalized).toLowerCase();
   const contentTypes: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -58,7 +70,9 @@ publicRoutes.get("/preview/:type/:slug", async (c) => {
   if (!(await verifyPreviewToken(token, previewType, slug))) return c.text("Preview link is invalid or expired.", 403);
   if (type === "post") {
     const post = await getPostBySlug(slug, "any");
-    return post ? c.html(renderPost(post)) : c.notFound();
+    if (!post) return c.notFound();
+    const comments = await listApprovedCommentsForPosts([post.id]);
+    return c.html(renderPost(post, await getPostSeriesNavigation(post.id), await getPostPermalinkPattern(), comments.get(post.id) ?? []));
   }
   const page = await getPageBySlug(slug, "any");
   return page ? c.html(await renderPage(page)) : c.notFound();

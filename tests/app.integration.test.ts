@@ -22,4 +22,10 @@ describe("application integration smoke tests", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("/login");
   });
+
+  test("does not expose the media library to anonymous API clients", async () => {
+    const response = await app.request("http://localhost/cms-api/media");
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Unauthorized" });
+  });
 });

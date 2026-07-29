@@ -21,4 +21,16 @@ describe("permissions", () => {
     expect(hasPermission(agent, "ai.propose")).toBe(true);
     expect(hasPermission(agent, "ai.review")).toBe(false);
   });
+
+  test("limits permalink changes to owners and administrators", () => {
+    expect(hasPermission({ roles: ["owner"] }, "settings.manage")).toBe(true);
+    expect(hasPermission({ roles: ["admin"] }, "settings.manage")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "settings.manage")).toBe(false);
+  });
+
+  test("allows editors to moderate comments without granting access to viewers", () => {
+    expect(hasPermission({ roles: ["editor"] }, "comments.manage")).toBe(true);
+    expect(hasPermission({ roles: ["viewer"] }, "comments.read")).toBe(false);
+    expect(hasPermission({ roles: ["author"] }, "comments.manage")).toBe(false);
+  });
 });

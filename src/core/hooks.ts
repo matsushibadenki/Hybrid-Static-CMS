@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { customApiRoutes, registerAdminLink, registerApiRoute } from "./extensions";
 import { config } from "./config";
+import { logWarn } from "./logger";
 
 export type HookName = "beforeRender" | "afterRender" | "audit";
 export type HookHandler = (payload: Record<string, unknown>) => void | Promise<void>;
@@ -21,7 +22,7 @@ export async function emitHook(name: HookName, payload: Record<string, unknown>)
     try {
       await handler(payload);
     } catch (error) {
-      console.warn(`Plugin hook ${name} failed:`, error);
+      logWarn("plugin.hook_failed", `Plugin hook ${name} failed.`, { hook: name, error });
     }
   }
 }
@@ -41,7 +42,7 @@ export async function loadPlugins() {
         await module.default({ registerHook, emitHook, registerApiRoute, registerAdminLink });
       }
     } catch (error) {
-      console.warn(`Plugin ${file} could not be loaded:`, error);
+      logWarn("plugin.load_failed", `Plugin ${file} could not be loaded.`, { plugin: file, error });
     }
   }
 }

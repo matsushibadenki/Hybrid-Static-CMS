@@ -1,4 +1,6 @@
 import { sql } from "./db";
+import { logWarn, writeLog } from "./logger";
+import { sendOperatorAlert } from "./operatorAlerts";
 
 export type OperatorNotification = {
   id: number;
@@ -21,10 +23,25 @@ function normalize(row: Record<string, unknown>): OperatorNotification {
 }
 
 export async function createOperatorNotification(input: { level: OperatorNotification["level"]; action: string; message: string }) {
-  await sql`
-    insert into operator_notifications (level, action, message)
-    values (${input.level}, ${input.action}, ${input.message})
-  `;
+  const alertLevel = input.level === "warning" ? "warn" : input.level === "success" ? "info" : input.level;
+  writeLog(alertLevel, input.action, input.message);
+  try {
+    await sql`
+      insert into operator_notifications (level, action, message)
+      values (${input.level}, ${input.action}, ${input.message})
+    `;
+  } finally {
+    void sendOperatorAlert({
+      level: alertLevel,
+      action: input.action,
+      message: input.message,
+    }).catch((error) => {
+      logWarn("operator_alert.delivery_failed", "Operator alert webhook delivery failed.", {
+        action: input.action,
+        error,
+      });
+    });
+  }
 }
 
 export async function listOperatorNotifications(limit = 30, unreadOnly = false) {

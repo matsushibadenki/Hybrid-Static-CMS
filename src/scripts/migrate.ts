@@ -23,8 +23,10 @@ for (const file of files) {
 
   const statement = await readFile(path.join(migrationsDir, file), "utf8");
   console.log(`Applying ${file}`);
-  await sql.unsafe(statement);
-  await sql`insert into migrations (name) values (${file})`;
+  await sql.begin(async (trx) => {
+    await trx.unsafe(statement);
+    await trx`insert into migrations (name) values (${file})`;
+  });
 }
 
 console.log("Migrations complete.");

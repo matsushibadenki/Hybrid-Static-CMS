@@ -1,4 +1,4 @@
-import { sql } from "./db";
+import { bigintArray, sql } from "./db";
 import { AppValidationError, isUniqueConstraintError, requireNonEmpty, validateSlug } from "./validation";
 
 export type PageGroupRecord = { id: number; title: string; slug: string; description: string | null; pageCount: number; createdAt: string; updatedAt: string };
@@ -40,6 +40,11 @@ export async function listPageGroupMembers(groupId: number) { return sql`select 
 export async function getPageGroupId(pageId: number) {
   const rows = await sql`select group_id from page_group_members where page_id = ${pageId} limit 1`;
   return rows[0] ? Number(rows[0].group_id) : null;
+}
+export async function listPageGroupAssignments(pageIds: number[]) {
+  if (pageIds.length === 0) return new Map<number, number>();
+  const rows = await sql`select page_id, group_id from page_group_members where page_id = any(${bigintArray(pageIds)})`;
+  return new Map(rows.map((row) => [Number(row.page_id), Number(row.group_id)]));
 }
 export async function assignPageToGroup(groupId: number, pageId: number, position: number) { await sql`insert into page_group_members (page_id, group_id, position) values (${pageId}, ${groupId}, ${Math.max(0, position)}) on conflict (page_id) do update set group_id = excluded.group_id, position = excluded.position`; await sql`update page_groups set updated_at = now() where id = ${groupId}`; }
 export async function removePageFromGroup(pageId: number) { await sql`delete from page_group_members where page_id = ${pageId}`; }

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { config } from "./config";
@@ -11,6 +11,18 @@ import { renderMenuArtifacts } from "./menus";
 import { expandPublishedBlocks } from "./blocks";
 import { emitHook } from "./hooks";
 import type { PageRecord, PostRecord } from "./types";
+import { listPostSeriesNavigation, type SeriesNavigation } from "./series";
+import { publicTranslations } from "./i18n";
+import { postArtifactRelativePath, postPermalinkPath, type PostPermalinkPattern } from "./permalinks";
+import { getPostPermalinkPattern } from "./settings";
+import { listApprovedCommentsForPosts, type PostCommentRecord } from "./comments";
+
+const publicCopy = publicTranslations[config.publicLocale];
+const publicDateLocale = config.publicLocale === "zh" ? "zh-CN" : config.publicLocale === "ja" ? "ja-JP" : "en-US";
+
+function publicDate(value: string, options: Intl.DateTimeFormatOptions = { dateStyle: "medium" }) {
+  return new Date(value).toLocaleDateString(publicDateLocale, options);
+}
 
 type SeoMeta = {
   title: string;
@@ -43,15 +55,12 @@ function googleFontLinks() {
   `;
 }
 
-function postPublicPath(slug: string) {
-  return `/cms/posts/${slug}.html`;
-}
-
 function pagePublicPath(slug: string) {
   return `/cms/pages/${slug}.html`;
 }
 
 async function writeArtifact(filePath: string, content: string) {
+  await mkdir(path.dirname(filePath), { recursive: true });
   const temporaryPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${randomUUID()}.tmp`);
   try {
     await writeFile(temporaryPath, content, "utf8");
@@ -62,17 +71,17 @@ async function writeArtifact(filePath: string, content: string) {
   }
 }
 
-function card(post: PostRecord, variant: "lead" | "compact" = "compact") {
-  const href = postPublicPath(post.slug);
+function card(post: PostRecord, variant: "lead" | "compact" = "compact", permalinkPattern: PostPermalinkPattern = "post_name") {
+  const href = postPermalinkPath(post, permalinkPattern);
   return `
     <article class="hybrid-static-cms-card magazine-card magazine-card--${variant}">
       <div class="hybrid-static-cms-card__meta">
-        <span>${escapeHtml(post.publishedAt ? new Date(post.publishedAt).toLocaleDateString("en-US", { dateStyle: "medium" }) : "Draft")}</span>
+        <span>${escapeHtml(post.publishedAt ? publicDate(post.publishedAt) : publicCopy.draft)}</span>
         ${post.categories[0] ? `<span>${escapeHtml(post.categories[0])}</span>` : ""}
       </div>
       <h3 class="magazine-card__title"><a href="${href}">${escapeHtml(post.title)}</a></h3>
       ${post.excerpt ? `<p>${escapeHtml(post.excerpt)}</p>` : ""}
-      <a class="magazine-card__read" href="${href}">Read story <span aria-hidden="true">↗</span></a>
+      <a class="magazine-card__read" href="${href}">${publicCopy.readStory} <span aria-hidden="true">↗</span></a>
     </article>
   `;
 }
@@ -91,7 +100,7 @@ function pageTemplate(meta: SeoMeta, body: string) {
   const jsonLd = meta.jsonLd ? `<script type="application/ld+json">${safeJsonLd(meta.jsonLd)}</script>` : "";
   const robots = meta.robots ? `<meta name="robots" content="${escapeHtml(meta.robots)}" />` : "";
   const fallback = `<!doctype html>
-<html lang="en">
+<html lang="${config.publicLocale === "zh" ? "zh-CN" : config.publicLocale}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -146,6 +155,7 @@ function pageTemplate(meta: SeoMeta, body: string) {
         --bg: #ffffff;
         --panel: #ffffff;
         --ink: #333333;
+        --on-ink: #ffffff;
         --ink-secondary: #555555;
         --muted: #999999;
         --line: #ebebeb;
@@ -459,13 +469,62 @@ function pageTemplate(meta: SeoMeta, body: string) {
         color: var(--ink);
       }
 
-      .magazine-prose__body > p:first-child::first-letter {
+      .series-pager {
+        border-top: 1px solid var(--line);
+        margin-top: 48px;
+        padding-top: 24px;
+      }
+
+      .series-pager__header {
+        align-items: end;
+        display: flex;
+        gap: 16px;
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+
+      .series-pager__label {
         color: var(--accent);
-        float: left;
-        font-size: 3.4rem;
-        line-height: 0.82;
-        margin: 6px 6px 0 0;
+        font-family: var(--font-sans);
+        font-size: 0.72rem;
         font-weight: 700;
+        letter-spacing: 0.08em;
+        margin: 0 0 4px;
+        text-transform: uppercase;
+      }
+
+      .series-pager__title { font-size: 1.15rem; margin: 0; }
+      .series-pager__position { color: var(--ink-muted); font-size: 0.82rem; white-space: nowrap; }
+      .series-pager__steps { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+      .series-pager__direction {
+        border: 1px solid var(--line);
+        color: var(--ink);
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+        padding: 12px 14px;
+      }
+      .series-pager__direction--next { text-align: right; }
+      .series-pager__direction-label { color: var(--ink-muted); font-size: 0.72rem; }
+      .series-pager__direction-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .series-pager__direction--disabled { border-color: transparent; }
+      .series-pager__pages { align-items: center; display: flex; gap: 5px; list-style: none; margin: 0; padding: 0; }
+      .series-pager__pages a, .series-pager__pages span {
+        align-items: center;
+        display: inline-flex;
+        font-size: 0.78rem;
+        height: 30px;
+        justify-content: center;
+        min-width: 30px;
+        padding: 0 7px;
+      }
+      .series-pager__pages a { background: var(--line-light); color: var(--ink-secondary); }
+      .series-pager__pages a:hover { background: var(--accent-light); color: var(--accent); }
+      .series-pager__pages [aria-current="page"] { background: var(--ink); color: var(--on-ink); font-weight: 700; }
+
+      @media (max-width: 720px) {
+        .series-pager__steps { grid-template-columns: 1fr 1fr; }
+        .series-pager__pages { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
       }
 
       .magazine-prose__body h1,
@@ -564,6 +623,18 @@ function pageTemplate(meta: SeoMeta, body: string) {
       .magazine-prose__body .text-size-xlarge { font-size: 1.6em; }
       .magazine-prose__body ruby { ruby-position: over; }
       .magazine-prose__body rt { color: var(--accent-hover); font-family: var(--font-sans); font-size: .48em; letter-spacing: .04em; }
+      .post-comments { border-top: 1px solid var(--line); margin-top: 48px; padding-top: 28px; }
+      .post-comments__title { font-size: 1.2rem; margin: 0 0 20px; }
+      .post-comments__list { display: grid; gap: 18px; list-style: none; margin: 0 0 28px; padding: 0; }
+      .post-comment { border-bottom: 1px solid var(--line); padding-bottom: 18px; }
+      .post-comment__meta { color: var(--muted); font-size: .78rem; margin: 0 0 6px; }
+      .post-comment__body { margin: 0; white-space: pre-wrap; }
+      .post-comment-form { background: var(--line-light); display: grid; gap: 14px; padding: 20px; }
+      .post-comment-form label { display: grid; font-size: .82rem; font-weight: 600; gap: 6px; }
+      .post-comment-form input, .post-comment-form textarea { background: var(--panel); border: 1px solid var(--line); color: var(--ink); font: inherit; padding: 10px 12px; width: 100%; }
+      .post-comment-form textarea { min-height: 120px; resize: vertical; }
+      .post-comment-form button { background: var(--ink); border: 0; color: var(--on-ink); cursor: pointer; font: inherit; justify-self: start; padding: 10px 18px; }
+      .post-comments__closed, .post-comments__empty, .post-comment-form__note { color: var(--muted); font-size: .82rem; }
       .material-symbols-outlined { font-family: "Material Symbols Outlined"; font-weight: normal; font-style: normal; font-size: 1.2em; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; word-wrap: normal; direction: ltr; font-feature-settings: "liga"; -webkit-font-feature-settings: "liga"; -webkit-font-smoothing: antialiased; }
       .magazine-empty { border-top: 1px solid var(--line); color: var(--muted); padding-top: 20px; }
 
@@ -592,13 +663,14 @@ function pageTemplate(meta: SeoMeta, body: string) {
       </header>
       <div class="magazine-rule"></div>
       ${body}
-      <footer class="magazine-footer">${escapeHtml(config.appName)} · Built with Hybrid-Static-CMS</footer>
+      <footer class="magazine-footer">${escapeHtml(config.appName)} · ${publicCopy.builtWith}</footer>
     </main>
   </body>
 </html>`;
   try {
     const template = readFileSync(path.join(config.templateDir, "page.html"), "utf8");
     return template
+      .replaceAll("{{lang}}", config.publicLocale === "zh" ? "zh-CN" : config.publicLocale)
       .replaceAll("{{title}}", escapeHtml(meta.title))
       .replaceAll("{{description}}", description)
       .replaceAll("{{canonical}}", canonical)
@@ -616,36 +688,36 @@ function pageTemplate(meta: SeoMeta, body: string) {
   }
 }
 
-function renderList(title: string, posts: PostRecord[], pagination?: { page: number; totalPages: number }) {
-  const cards = posts.map((post, index) => card(post, index === 0 ? "lead" : "compact")).join("");
+function renderList(title: string, posts: PostRecord[], pagination?: { page: number; totalPages: number }, permalinkPattern: PostPermalinkPattern = "post_name") {
+  const cards = posts.map((post, index) => card(post, index === 0 ? "lead" : "compact", permalinkPattern)).join("");
   const pager =
     pagination && pagination.totalPages > 1
-      ? `<nav class="magazine-pagination" aria-label="Post pages">${Array.from({ length: pagination.totalPages }, (_, index) => {
+      ? `<nav class="magazine-pagination" aria-label="${publicCopy.postPages}">${Array.from({ length: pagination.totalPages }, (_, index) => {
           const page = index + 1;
-          return `<a href="/cms/posts/page/${page}.html">Page ${page}</a>`;
+          return `<a href="/cms/posts/page/${page}.html">${publicCopy.page} ${page}</a>`;
         }).join("")}</nav>`
       : "";
 
   return pageTemplate(
     {
       title,
-      description: `Published content list for ${config.appName}.`,
+      description: `${publicCopy.posts} - ${config.appName}`,
       canonicalUrl: `${config.appUrl}/cms/posts/list.html`,
     },
     `<header class="magazine-page-header">
-      <div><p class="magazine-page-header__eyebrow">The editorial index</p></div>
-      <div><h1 class="magazine-page-header__title">${escapeHtml(title)}</h1><p class="magazine-page-header__deck">Stories, notes, and considered things from ${escapeHtml(config.appName)}.</p></div>
+      <div><p class="magazine-page-header__eyebrow">${publicCopy.editorialIndex}</p></div>
+      <div><h1 class="magazine-page-header__title">${escapeHtml(title)}</h1><p class="magazine-page-header__deck">${publicCopy.postIndexDescription} · ${escapeHtml(config.appName)}</p></div>
     </header>
-    <section class="hybrid-static-cms-list magazine-index">${cards || '<p class="magazine-empty">No posts published yet.</p>'}</section>${pager}`,
+    <section class="hybrid-static-cms-list magazine-index">${cards || `<p class="magazine-empty">${publicCopy.noPosts}</p>`}</section>${pager}`,
   );
 }
 
-function renderFragment(posts: PostRecord[]) {
+function renderFragment(posts: PostRecord[], permalinkPattern: PostPermalinkPattern = "post_name") {
   if (posts.length === 0) {
-    return `<div class="hybrid-static-cms-fragment"><p>No posts published yet.</p></div>`;
+    return `<div class="hybrid-static-cms-fragment"><p>${publicCopy.noPosts}</p></div>`;
   }
 
-  return `<div class="hybrid-static-cms-fragment magazine-index">${posts.map((post) => card(post)).join("")}</div>`;
+  return `<div class="hybrid-static-cms-fragment magazine-index">${posts.map((post) => card(post, "compact", permalinkPattern)).join("")}</div>`;
 }
 
 export async function renderPage(page: PageRecord) {
@@ -673,7 +745,7 @@ export async function renderPage(page: PageRecord) {
     `
       <article class="hybrid-static-cms-page magazine-prose">
         <header class="magazine-prose__header">
-          <p class="magazine-kicker">CMS managed page</p>
+          <p class="magazine-kicker">${publicCopy.managedPage}</p>
           <h1 class="magazine-prose__title">${escapeHtml(page.title)}</h1>
           ${page.excerpt ? `<p class="magazine-prose__deck">${escapeHtml(page.excerpt)}</p>` : ""}
         </header>
@@ -689,11 +761,11 @@ function renderPageIndex(pages: PageRecord[]) {
       (page) => `
         <article class="hybrid-static-cms-card magazine-card magazine-card--compact">
           <div class="hybrid-static-cms-card__meta">
-            <span>${escapeHtml(page.publishedAt ? new Date(page.publishedAt).toLocaleDateString("en-US") : "Draft")}</span>
+            <span>${escapeHtml(page.publishedAt ? publicDate(page.publishedAt) : publicCopy.draft)}</span>
           </div>
           <h3 class="magazine-card__title"><a href="${pagePublicPath(page.slug)}">${escapeHtml(page.title)}</a></h3>
           ${page.excerpt ? `<p>${escapeHtml(page.excerpt)}</p>` : ""}
-          <a class="magazine-card__read" href="${pagePublicPath(page.slug)}">Open page <span aria-hidden="true">↗</span></a>
+          <a class="magazine-card__read" href="${pagePublicPath(page.slug)}">${publicCopy.openPage} <span aria-hidden="true">↗</span></a>
         </article>
       `,
     )
@@ -701,20 +773,78 @@ function renderPageIndex(pages: PageRecord[]) {
 
   return pageTemplate(
     {
-      title: "CMS Managed Pages",
-      description: `CMS-managed pages published by ${config.appName}.`,
+      title: publicCopy.pages,
+      description: `${publicCopy.pages} - ${config.appName}`,
       canonicalUrl: `${config.appUrl}/cms/pages/index.html`,
     },
     `<header class="magazine-page-header">
-      <div><p class="magazine-page-header__eyebrow">The static desk</p></div>
-      <div><h1 class="magazine-page-header__title">Pages</h1><p class="magazine-page-header__deck">Long-form pages published with ${escapeHtml(config.appName)}.</p></div>
+      <div><p class="magazine-page-header__eyebrow">${publicCopy.staticDesk}</p></div>
+      <div><h1 class="magazine-page-header__title">${publicCopy.pages}</h1><p class="magazine-page-header__deck">${publicCopy.pageIndexDescription} ${escapeHtml(config.appName)}</p></div>
     </header>
-    <section class="hybrid-static-cms-list magazine-index">${cards || '<p class="magazine-empty">No pages published yet.</p>'}</section>`,
+    <section class="hybrid-static-cms-list magazine-index">${cards || `<p class="magazine-empty">${publicCopy.noPages}</p>`}</section>`,
   );
 }
 
-export function renderPost(post: PostRecord) {
-  const canonicalUrl = post.seoCanonicalUrl || `${config.appUrl}${postPublicPath(post.slug)}`;
+function renderSeriesPagination(post: PostRecord, series: SeriesNavigation | null, permalinkPattern: PostPermalinkPattern) {
+  if (!series || series.posts.length < 2) return "";
+  const currentIndex = series.posts.findIndex((item) => item.id === post.id);
+  if (currentIndex < 0) return "";
+  const previous = series.posts[currentIndex - 1];
+  const next = series.posts[currentIndex + 1];
+  const visibleIndexes = new Set([0, series.posts.length - 1]);
+  for (let index = Math.max(0, currentIndex - 2); index <= Math.min(series.posts.length - 1, currentIndex + 2); index += 1) {
+    visibleIndexes.add(index);
+  }
+  const indexes = [...visibleIndexes].sort((left, right) => left - right);
+  let lastIndex = -1;
+  const pages = indexes.map((index) => {
+    const gap = lastIndex >= 0 && index - lastIndex > 1 ? `<li><span aria-hidden="true">…</span></li>` : "";
+    lastIndex = index;
+    const item = series.posts[index];
+    const page = index + 1;
+    const control = index === currentIndex
+      ? `<span aria-current="page" aria-label="${publicCopy.currentArticle}: ${escapeHtml(item.title)}">${page}</span>`
+      : `<a href="${postPermalinkPath(item, permalinkPattern)}" aria-label="${publicCopy.openArticle} ${page}: ${escapeHtml(item.title)}" title="${escapeHtml(item.title)}">${page}</a>`;
+    return `${gap}<li>${control}</li>`;
+  }).join("");
+  const previousControl = previous
+    ? `<a class="series-pager__direction" href="${postPermalinkPath(previous, permalinkPattern)}"><span class="series-pager__direction-label">← ${publicCopy.previous}</span><span class="series-pager__direction-title">${escapeHtml(previous.title)}</span></a>`
+    : `<span class="series-pager__direction series-pager__direction--disabled" aria-hidden="true"></span>`;
+  const nextControl = next
+    ? `<a class="series-pager__direction series-pager__direction--next" href="${postPermalinkPath(next, permalinkPattern)}"><span class="series-pager__direction-label">${publicCopy.next} →</span><span class="series-pager__direction-title">${escapeHtml(next.title)}</span></a>`
+    : `<span class="series-pager__direction series-pager__direction--disabled" aria-hidden="true"></span>`;
+  return `
+    <nav class="series-pager" aria-label="${publicCopy.seriesNavigation}">
+      <header class="series-pager__header">
+        <div><p class="series-pager__label">${publicCopy.series}</p><h2 class="series-pager__title">${escapeHtml(series.title)}</h2></div>
+        <span class="series-pager__position">${currentIndex + 1} / ${series.posts.length}</span>
+      </header>
+      <div class="series-pager__steps">
+        ${previousControl}
+        <ol class="series-pager__pages">${pages}</ol>
+        ${nextControl}
+      </div>
+    </nav>`;
+}
+
+function renderCommentSection(post: PostRecord, comments: PostCommentRecord[]) {
+  const commentsHtml = comments.length > 0
+    ? `<ol class="post-comments__list">${comments.map((comment) => `<li class="post-comment"><p class="post-comment__meta"><strong>${escapeHtml(comment.authorName)}</strong> · ${escapeHtml(publicDate(comment.createdAt))}</p><p class="post-comment__body">${escapeHtml(comment.body)}</p></li>`).join("")}</ol>`
+    : `<p class="post-comments__empty">${escapeHtml(publicCopy.noComments)}</p>`;
+  if (!post.commentsEnabled) {
+    return `<section class="post-comments" id="comments"><h2 class="post-comments__title">${escapeHtml(publicCopy.comments)}</h2>${commentsHtml}<p class="post-comments__closed">${escapeHtml(publicCopy.commentsClosed)}</p></section>`;
+  }
+  const recaptchaAction = `comment_submit_${post.id}`;
+  const recaptchaMarkup = config.recaptchaSiteKey && config.recaptchaSecretKey
+    ? `<input type="hidden" name="recaptchaToken" value="" />
+      <script src="https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(config.recaptchaSiteKey)}"></script>
+      <script>(()=>{const form=document.currentScript?.closest(".post-comments")?.querySelector("form");if(!form||!window.grecaptcha)return;const field=form.querySelector('input[name="recaptchaToken"]');let submitting=false;form.addEventListener("submit",async(event)=>{if(submitting)return;event.preventDefault();submitting=true;const button=form.querySelector('button[type="submit"]');if(button)button.disabled=true;try{const token=await new Promise((resolve,reject)=>window.grecaptcha.ready(()=>window.grecaptcha.execute(${JSON.stringify(config.recaptchaSiteKey)},{action:${JSON.stringify(recaptchaAction)}}).then(resolve).catch(reject)));if(field)field.value=token;form.submit();}catch{ submitting=false;if(button)button.disabled=false;}});})();</script>`
+    : "";
+  return `<section class="post-comments" id="comments"><h2 class="post-comments__title">${escapeHtml(publicCopy.comments)}</h2>${commentsHtml}<form class="post-comment-form" method="post" action="${config.cmsApiPrefix}/comments/${post.id}/submit"><label>${escapeHtml(publicCopy.commentName)}<input name="authorName" maxlength="80" autocomplete="name" required /></label><label>${escapeHtml(publicCopy.commentEmail)}<input type="email" name="authorEmail" maxlength="254" autocomplete="email" required /></label><label>${escapeHtml(publicCopy.commentBody)}<textarea name="body" maxlength="4000" required></textarea></label>${recaptchaMarkup}<p class="post-comment-form__note">${escapeHtml(publicCopy.commentModerationNote)}</p><button type="submit">${escapeHtml(publicCopy.submitComment)}</button></form></section>`;
+}
+
+export function renderPost(post: PostRecord, series: SeriesNavigation | null = null, permalinkPattern: PostPermalinkPattern = "post_name", comments: PostCommentRecord[] = []) {
+  const canonicalUrl = post.seoCanonicalUrl || `${config.appUrl}${postPermalinkPath(post, permalinkPattern)}`;
   const robots = [post.seoNoindex ? "noindex" : "index", post.seoNofollow ? "nofollow" : "follow"].join(", ");
   return pageTemplate(
     {
@@ -740,26 +870,28 @@ export function renderPost(post: PostRecord) {
       <article class="hybrid-static-cms-prose magazine-prose">
         <header class="magazine-prose__header">
         <p class="magazine-kicker">
-          ${escapeHtml(post.publishedAt ? new Date(post.publishedAt).toLocaleDateString("en-US") : "Draft")}
-          ${post.authorName ? ` · By ${escapeHtml(post.authorName)}` : ""}
+          ${escapeHtml(post.publishedAt ? publicDate(post.publishedAt) : publicCopy.draft)}
+          ${post.authorName ? ` · ${publicCopy.by} ${escapeHtml(post.authorName)}` : ""}
         </p>
         <h1 class="magazine-prose__title">${escapeHtml(post.title)}</h1>
         ${post.excerpt ? `<p class="magazine-prose__deck">${escapeHtml(post.excerpt)}</p>` : ""}
         </header>
         <div class="magazine-prose__body">${post.bodyHtml}</div>
+        ${renderSeriesPagination(post, series, permalinkPattern)}
+        ${renderCommentSection(post, comments)}
       </article>
     `,
   );
 }
 
-function renderRss(posts: PostRecord[]) {
+function renderRss(posts: PostRecord[], permalinkPattern: PostPermalinkPattern) {
   const items = posts
     .map(
       (post) => `
       <item>
         <title>${escapeHtml(post.title)}</title>
-        <link>${config.appUrl}/cms-api/posts/${escapeHtml(post.slug)}</link>
-        <guid>${config.appUrl}/cms-api/posts/${escapeHtml(post.slug)}</guid>
+        <link>${escapeHtml(post.seoCanonicalUrl || config.appUrl + postPermalinkPath(post, permalinkPattern))}</link>
+        <guid>${escapeHtml(post.seoCanonicalUrl || config.appUrl + postPermalinkPath(post, permalinkPattern))}</guid>
         <description>${escapeHtml(post.excerpt ?? "")}</description>
         <pubDate>${post.publishedAt ? new Date(post.publishedAt).toUTCString() : new Date().toUTCString()}</pubDate>
       </item>`,
@@ -777,10 +909,10 @@ function renderRss(posts: PostRecord[]) {
 </rss>`;
 }
 
-function renderSitemap(posts: PostRecord[], pages: PageRecord[]) {
+function renderSitemap(posts: PostRecord[], pages: PageRecord[], permalinkPattern: PostPermalinkPattern) {
   const postItems = posts.filter((post) => !post.seoNoindex).map((post) => {
     const lastmod = post.updatedAt ? new Date(post.updatedAt).toISOString() : new Date().toISOString();
-    return `<url><loc>${escapeHtml(post.seoCanonicalUrl || config.appUrl + postPublicPath(post.slug))}</loc><lastmod>${lastmod}</lastmod><changefreq>monthly</changefreq></url>`;
+    return `<url><loc>${escapeHtml(post.seoCanonicalUrl || config.appUrl + postPermalinkPath(post, permalinkPattern))}</loc><lastmod>${lastmod}</lastmod><changefreq>monthly</changefreq></url>`;
   });
   const pageItems = pages.filter((page) => !page.seoNoindex).map((page) => {
     const lastmod = page.updatedAt ? new Date(page.updatedAt).toISOString() : new Date().toISOString();
@@ -854,11 +986,11 @@ Sitemap: ${config.appUrl}/sitemap.xml
 `;
 }
 
-function renderLlmsTxt(posts: PostRecord[], pages: PageRecord[]) {
+function renderLlmsTxt(posts: PostRecord[], pages: PageRecord[], permalinkPattern: PostPermalinkPattern) {
   const visiblePosts = posts.filter((post) => !post.seoNoindex).slice(0, 20);
   const visiblePages = pages.filter((page) => !page.seoNoindex).slice(0, 20);
 
-  const postLinks = visiblePosts.map((post) => `- ${post.title}: ${config.appUrl}${postPublicPath(post.slug)}`).join("\n");
+  const postLinks = visiblePosts.map((post) => `- ${post.title}: ${config.appUrl}${postPermalinkPath(post, permalinkPattern)}`).join("\n");
   const pageLinks = visiblePages.map((page) => `- ${page.title}: ${config.appUrl}${pagePublicPath(page.slug)}`).join("\n");
 
   return `# ${config.appName}
@@ -905,10 +1037,26 @@ ${pageLinks || "- No published page URLs are currently available."}
 `;
 }
 
-function renderEmbedScript() {
+export function renderEmbedScript(permalinkPattern: PostPermalinkPattern = "post_name") {
   return `(() => {
   const nodes = document.querySelectorAll("[data-hybrid-static-cms-posts]");
   if (!nodes.length) return;
+  const permalinkPattern = ${JSON.stringify(permalinkPattern)};
+  const postPath = (post) => {
+    const slug = encodeURIComponent(String(post.slug || ""));
+    if (permalinkPattern === "numeric") return "/cms/posts/" + encodeURIComponent(String(post.id)) + ".html";
+    if (permalinkPattern === "category") {
+      const category = encodeURIComponent(String(post.categories?.[0] || "uncategorized"));
+      return "/cms/posts/category/" + category + "/" + slug + ".html";
+    }
+    if (permalinkPattern === "year_month") {
+      const date = new Date(post.publishedAt || post.updatedAt || 0);
+      const year = String(date.getUTCFullYear()).padStart(4, "0");
+      const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+      return "/cms/posts/" + year + "/" + month + "/" + slug + ".html";
+    }
+    return "/cms/posts/" + slug + ".html";
+  };
 
   const mount = async (node) => {
     const limit = node.getAttribute("data-limit") || "5";
@@ -918,33 +1066,100 @@ function renderEmbedScript() {
 
     const response = await fetch("${config.cmsApiPrefix}/posts?" + params.toString());
     if (!response.ok) {
-      node.innerHTML = "<p>Unable to load posts.</p>";
+      const message = document.createElement("p");
+      message.textContent = "Unable to load posts.";
+      node.replaceChildren(message);
       return;
     }
 
     const data = await response.json();
-    node.innerHTML = data.items.map((post) => {
-      const excerpt = post.excerpt ? "<p>" + post.excerpt + "</p>" : "";
-      return '<article class="hybrid-static-cms-embed-card">' +
-        '<h3><a href="/cms/posts/' + post.slug + '.html">' + post.title + '</a></h3>' +
-        excerpt +
-      '</article>';
-    }).join("");
+    const fragment = document.createDocumentFragment();
+    for (const post of data.items) {
+      const article = document.createElement("article");
+      article.className = "hybrid-static-cms-embed-card";
+      const heading = document.createElement("h3");
+      const link = document.createElement("a");
+      link.href = postPath(post);
+      link.textContent = String(post.title ?? "");
+      heading.append(link);
+      article.append(heading);
+      if (post.excerpt) {
+        const excerpt = document.createElement("p");
+        excerpt.textContent = String(post.excerpt);
+        article.append(excerpt);
+      }
+      fragment.append(article);
+    }
+    node.replaceChildren(fragment);
   };
 
   nodes.forEach((node) => {
     mount(node).catch(() => {
-      node.innerHTML = "<p>Unable to load posts.</p>";
+      const message = document.createElement("p");
+      message.textContent = "Unable to load posts.";
+      node.replaceChildren(message);
     });
   });
 })();`;
 }
 
+async function listAllPublishedPosts() {
+  const first = await listPosts({ page: 1, limit: 50, status: "published" });
+  const items = [...first.items];
+  for (let page = 2; items.length < first.total; page += 1) {
+    const result = await listPosts({ page, limit: 50, status: "published" });
+    if (result.items.length === 0) break;
+    items.push(...result.items);
+  }
+  return { ...first, items };
+}
+
+async function listAllPublishedPages() {
+  const first = await listPages({ page: 1, limit: 50, status: "published" });
+  const items = [...first.items];
+  for (let page = 2; items.length < first.total; page += 1) {
+    const result = await listPages({ page, limit: 50, status: "published" });
+    if (result.items.length === 0) break;
+    items.push(...result.items);
+  }
+  return { ...first, items };
+}
+
+const postArtifactManifest = ".post-artifacts.json";
+
+async function readPostArtifactManifest() {
+  try {
+    const parsed = JSON.parse(await readFile(path.join(config.cmsOutputDir, postArtifactManifest), "utf8"));
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function isManagedPostArtifact(relativePath: string) {
+  const normalized = path.posix.normalize(relativePath);
+  return normalized === relativePath && normalized.startsWith("posts/") && normalized.endsWith(".html") && !normalized.includes("../");
+}
+
+async function removeObsoletePostArtifacts(currentPaths: string[], legacyPaths: string[]) {
+  const previousPaths = await readPostArtifactManifest();
+  const current = new Set(currentPaths);
+  const obsolete = new Set([...(previousPaths.length > 0 ? previousPaths : legacyPaths)].filter((item) => !current.has(item)));
+  for (const relativePath of obsolete) {
+    if (!isManagedPostArtifact(relativePath)) continue;
+    await unlink(path.join(config.cmsOutputDir, ...relativePath.split("/"))).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+  }
+  await writeArtifact(path.join(config.cmsOutputDir, postArtifactManifest), `${JSON.stringify(currentPaths.sort(), null, 2)}\n`);
+}
+
 export async function renderPublishedArtifacts() {
   await emitHook("beforeRender", { outputDir: config.cmsOutputDir });
+  const permalinkPattern = await getPostPermalinkPattern();
   const latest = await listPosts({ page: 1, limit: 5, status: "published" });
-  const full = await listPosts({ page: 1, limit: 100, status: "published" });
-  const pages = await listPages({ page: 1, limit: 100, status: "published" });
+  const full = await listAllPublishedPosts();
+  const pages = await listAllPublishedPages();
   const totalPages = Math.max(1, Math.ceil(full.total / config.defaultPageSize));
   const pageDir = path.join(config.cmsOutputDir, "posts", "page");
   const cmsPageDir = path.join(config.cmsOutputDir, "pages");
@@ -953,28 +1168,37 @@ export async function renderPublishedArtifacts() {
   await mkdir(pageDir, { recursive: true });
   await mkdir(cmsPageDir, { recursive: true });
 
-  await writeArtifact(path.join(config.cmsOutputDir, "posts", "latest.html"), renderFragment(latest.items));
-  await writeArtifact(path.join(config.cmsOutputDir, "posts", "list.html"), renderList("All Posts", full.items));
+  await writeArtifact(path.join(config.cmsOutputDir, "posts", "latest.html"), renderFragment(latest.items, permalinkPattern));
+  await writeArtifact(path.join(config.cmsOutputDir, "posts", "list.html"), renderList("All Posts", full.items, undefined, permalinkPattern));
 
   for (let page = 1; page <= totalPages; page += 1) {
     const paged = await listPosts({ page, limit: config.defaultPageSize, status: "published" });
-    const html = renderList("Published Posts", paged.items, { page, totalPages });
+    const html = renderList("Published Posts", paged.items, { page, totalPages }, permalinkPattern);
     await writeArtifact(path.join(pageDir, `${page}.html`), html);
   }
 
-  await writeArtifact(path.join(config.cmsOutputDir, "posts", "rss.xml"), renderRss(full.items));
+  await writeArtifact(path.join(config.cmsOutputDir, "posts", "rss.xml"), renderRss(full.items, permalinkPattern));
+  const seriesNavigation = await listPostSeriesNavigation(full.items.map((post) => post.id));
+  const commentsByPost = await listApprovedCommentsForPosts(full.items.map((post) => post.id));
+  const currentPostArtifacts: string[] = [];
   for (const post of full.items) {
-    await writeArtifact(path.join(config.cmsOutputDir, "posts", `${post.slug}.html`), renderPost(post));
+    const relativePath = postArtifactRelativePath(post, permalinkPattern);
+    currentPostArtifacts.push(relativePath);
+    await writeArtifact(path.join(config.cmsOutputDir, ...relativePath.split("/")), renderPost(post, seriesNavigation.get(post.id) ?? null, permalinkPattern, commentsByPost.get(post.id) ?? []));
   }
   await writeArtifact(path.join(cmsPageDir, "index.html"), renderPageIndex(pages.items));
   for (const page of pages.items) {
     await writeArtifact(path.join(cmsPageDir, `${page.slug}.html`), await renderPage(page));
   }
-  await writeArtifact(path.join(config.publicHtmlDir, "sitemap.xml"), renderSitemap(full.items, pages.items));
+  await writeArtifact(path.join(config.publicHtmlDir, "sitemap.xml"), renderSitemap(full.items, pages.items, permalinkPattern));
   await writeArtifact(path.join(config.publicHtmlDir, "robots.txt"), renderRobotsTxt());
-  await writeArtifact(path.join(config.publicHtmlDir, "llms.txt"), renderLlmsTxt(full.items, pages.items));
-  await writeArtifact(path.join(config.cmsOutputDir, "embed.js"), renderEmbedScript());
+  await writeArtifact(path.join(config.publicHtmlDir, "llms.txt"), renderLlmsTxt(full.items, pages.items, permalinkPattern));
+  await writeArtifact(path.join(config.cmsOutputDir, "embed.js"), renderEmbedScript(permalinkPattern));
   await renderFormArtifacts();
   await renderMenuArtifacts();
+  const legacyPostArtifacts = permalinkPattern === "post_name"
+    ? []
+    : full.items.map((post) => postArtifactRelativePath(post, "post_name"));
+  await removeObsoletePostArtifacts(currentPostArtifacts, legacyPostArtifacts);
   await emitHook("afterRender", { outputDir: config.cmsOutputDir });
 }

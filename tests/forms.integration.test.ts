@@ -11,7 +11,7 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("form submissio
     try {
       const formRows = await sql`
         insert into forms (title, slug, status, submit_label, success_message)
-        values ('Integration Form', ${slug}, 'published', 'Send', 'Received')
+        values ('Integration Form', ${slug}, 'published', 'Send', 'Received<script>alert(1)</script>')
         returning id
       `;
       formId = Number(formRows[0].id);
@@ -24,7 +24,15 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("form submissio
       body.set("message", "integration payload");
       const response = await app.request(`http://localhost/cms-api/forms/${slug}/submit`, { method: "POST", body });
       expect(response.status).toBe(200);
-      expect(await response.text()).toContain("Received");
+      const responseHtml = await response.text();
+      expect(responseHtml).toContain("Received&lt;script&gt;");
+      expect(responseHtml).not.toContain("<script>");
+
+      const missingRequired = await app.request(`http://localhost/cms-api/forms/${slug}/submit`, {
+        method: "POST",
+        body: new FormData(),
+      });
+      expect(missingRequired.status).toBe(400);
 
       const submissions = await sql`
         select payload_json

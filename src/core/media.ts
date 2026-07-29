@@ -4,6 +4,8 @@ import sanitizeHtml from "sanitize-html";
 import { config } from "./config";
 import { slugify } from "./content";
 import { sql } from "./db";
+import type { UserRole } from "./types";
+import { AppValidationError } from "./validation";
 
 export type MediaRecord = {
   id: number;
@@ -15,6 +17,24 @@ export type MediaRecord = {
   publicUrl: string;
   uploadedAt: string;
   uploaderName: string | null;
+};
+
+export type MediaUploadPolicySettings = {
+  globalMaxUploadBytes: number;
+  siteQuotaBytes: number;
+  userQuotaBytes: number;
+  allowedRoles: ReadonlySet<UserRole>;
+  roleQuotaBytes: Partial<Record<UserRole, number>>;
+  roleMaxUploadBytes: Partial<Record<UserRole, number>>;
+};
+
+export type MediaStorageUsage = {
+  siteUsedBytes: number;
+  siteQuotaBytes: number;
+  userUsedBytes: number;
+  userQuotaBytes: number;
+  maxUploadBytes: number;
+  uploadAllowed: boolean;
 };
 
 const allowedMimeTypes = new Set([
@@ -70,7 +90,7 @@ export function sanitizeSvgContent(value: string) {
   });
 
   if (!/<svg(?:\s|>)/i.test(sanitized)) {
-    throw new Error("The SVG file does not contain a valid SVG root element.");
+    throw new AppValidationError("The SVG file does not contain a valid SVG root element.");
   }
   return sanitized;
 }
@@ -102,7 +122,7 @@ async function validateFileContent(file: File) {
     (file.type === "audio/mpeg" && (containsAscii(header, "ID3") || startsWithBytes(header, [0xff, 0xfb]) || startsWithBytes(header, [0xff, 0xf3])));
 
   if (!valid) {
-    throw new Error("The file content does not match its declared media type.");
+    throw new AppValidationError("The file content does not match its declared media type.");
   }
 }
 
@@ -170,6 +190,100 @@ function safeStoredName(fileName: string) {
   return `${Date.now()}-${crypto.randomUUID()}-${base}${ext}`;
 }
 
+export function formatByteSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = units[0];
+  for (let index = 1; index < units.length && value >= 1024; index += 1) {
+    value /= 1024;
+    unit = units[index];
+  }
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${unit}`;
+}
+
+function mostPermissiveQuota(roles: readonly UserRole[], limits: Partial<Record<UserRole, number>>, fallback: number) {
+  const configured = roles.map((role) => limits[role]).filter((value): value is number => value !== undefined);
+  if (configured.length === 0) return fallback;
+  if (configured.includes(0)) return 0;
+  return Math.max(...configured);
+}
+
+export function resolveMediaUploadPolicy(
+  roles: readonly UserRole[],
+  settings: MediaUploadPolicySettings = {
+    globalMaxUploadBytes: config.maxUploadBytes,
+    siteQuotaBytes: config.mediaSiteQuotaBytes,
+    userQuotaBytes: config.mediaUserQuotaBytes,
+    allowedRoles: config.mediaUploadAllowedRoles,
+    roleQuotaBytes: config.mediaRoleQuotaBytes,
+    roleMaxUploadBytes: config.mediaRoleMaxUploadBytes,
+  },
+) {
+  const uploadAllowed = roles.some((role) => settings.allowedRoles.has(role));
+  const configuredRoleMaximums = roles
+    .map((role) => settings.roleMaxUploadBytes[role])
+    .filter((value): value is number => value !== undefined && value > 0);
+  const roleMaximum = configuredRoleMaximums.length ? Math.max(...configuredRoleMaximums) : settings.globalMaxUploadBytes;
+  return {
+    uploadAllowed,
+    maxUploadBytes: Math.min(settings.globalMaxUploadBytes, roleMaximum),
+    siteQuotaBytes: settings.siteQuotaBytes,
+    userQuotaBytes: mostPermissiveQuota(roles, settings.roleQuotaBytes, settings.userQuotaBytes),
+  };
+}
+
+function storageState(usedBytes: number, quotaBytes: number) {
+  return {
+    usedBytes,
+    quotaBytes,
+    remainingBytes: quotaBytes > 0 ? Math.max(0, quotaBytes - usedBytes) : null,
+    percentage: quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0,
+  };
+}
+
+export function mediaStorageState(usage: MediaStorageUsage) {
+  return {
+    site: storageState(usage.siteUsedBytes, usage.siteQuotaBytes),
+    user: storageState(usage.userUsedBytes, usage.userQuotaBytes),
+    maxUploadBytes: usage.maxUploadBytes,
+    uploadAllowed: usage.uploadAllowed,
+  };
+}
+
+async function userRolesAndUsage(userId: number) {
+  const roleRows = await sql`
+    select r.name
+    from user_roles ur
+    join roles r on r.id = ur.role_id
+    where ur.user_id = ${userId}
+  `;
+  const usageRows = await sql`
+    select
+      coalesce(sum(size_bytes), 0)::bigint as site_used_bytes,
+      coalesce(sum(size_bytes) filter (where uploaded_by = ${userId}), 0)::bigint as user_used_bytes
+    from media_files
+  `;
+  return {
+    roles: roleRows.map((row) => String(row.name) as UserRole),
+    siteUsedBytes: Number(usageRows[0]?.site_used_bytes ?? 0),
+    userUsedBytes: Number(usageRows[0]?.user_used_bytes ?? 0),
+  };
+}
+
+export async function getMediaStorageUsage(userId: number): Promise<MediaStorageUsage> {
+  const current = await userRolesAndUsage(userId);
+  const policy = resolveMediaUploadPolicy(current.roles);
+  return {
+    siteUsedBytes: current.siteUsedBytes,
+    siteQuotaBytes: policy.siteQuotaBytes,
+    userUsedBytes: current.userUsedBytes,
+    userQuotaBytes: policy.userQuotaBytes,
+    maxUploadBytes: policy.maxUploadBytes,
+    uploadAllowed: policy.uploadAllowed,
+  };
+}
+
 export async function listMedia() {
   const rows = await sql`
     select
@@ -213,50 +327,85 @@ export async function getMediaById(id: number) {
 
 export async function uploadMedia(file: File, altText: string, userId: number) {
   if (!file.name) {
-    throw new Error("A file name is required.");
+    throw new AppValidationError("A file name is required.");
   }
   if (file.size <= 0) {
-    throw new Error("The uploaded file is empty.");
+    throw new AppValidationError("The uploaded file is empty.");
   }
   if (file.size > config.maxUploadBytes) {
-    throw new Error(`The uploaded file exceeds the ${Math.ceil(config.maxUploadBytes / 1024 / 1024)} MB limit.`);
+    throw new AppValidationError(`The uploaded file exceeds the ${Math.ceil(config.maxUploadBytes / 1024 / 1024)} MB limit.`);
   }
   if (!isAllowedMimeType(file.type)) {
-    throw new Error(`Unsupported file type: ${file.type || "unknown"}`);
+    throw new AppValidationError(`Unsupported file type: ${file.type || "unknown"}`);
   }
   await validateFileContent(file);
 
   const content = file.type === "image/svg+xml" ? new Blob([sanitizeSvgContent(await file.text())], { type: file.type }) : file;
-
-  await mkdir(config.cmsUploadDir, { recursive: true });
-
   const storedName = safeStoredName(file.name);
   const destination = path.join(config.cmsUploadDir, storedName);
-  await Bun.write(destination, content);
-
   const publicUrl = `/cms/uploads/${storedName}`;
-  const rows = await sql`
-    insert into media_files (
-      original_name,
-      stored_name,
-      mime_type,
-      size_bytes,
-      alt_text,
-      uploaded_by,
-      public_url
-    ) values (
-      ${file.name},
-      ${storedName},
-      ${file.type},
-      ${content.size},
-      ${altText || null},
-      ${userId},
-      ${publicUrl}
-    )
-    returning id
-  `;
+  let wroteFile = false;
 
-  return getMediaById(Number(rows[0].id));
+  try {
+    const id = await sql.begin(async (trx) => {
+      await trx`select pg_advisory_xact_lock(861724501)`;
+      const roleRows = await trx`
+        select r.name
+        from user_roles ur
+        join roles r on r.id = ur.role_id
+        where ur.user_id = ${userId}
+      `;
+      const roles = roleRows.map((row) => String(row.name) as UserRole);
+      const policy = resolveMediaUploadPolicy(roles);
+      if (!policy.uploadAllowed) throw new AppValidationError("Your role is not allowed to upload media.");
+      if (content.size > policy.maxUploadBytes) throw new AppValidationError("The uploaded file exceeds the limit for your role.");
+
+      const usageRows = await trx`
+        select
+          coalesce(sum(size_bytes), 0)::bigint as site_used_bytes,
+          coalesce(sum(size_bytes) filter (where uploaded_by = ${userId}), 0)::bigint as user_used_bytes
+        from media_files
+      `;
+      const siteUsedBytes = Number(usageRows[0]?.site_used_bytes ?? 0);
+      const userUsedBytes = Number(usageRows[0]?.user_used_bytes ?? 0);
+      if (policy.siteQuotaBytes > 0 && siteUsedBytes + content.size > policy.siteQuotaBytes) {
+        throw new AppValidationError("The site media storage quota would be exceeded.");
+      }
+      if (policy.userQuotaBytes > 0 && userUsedBytes + content.size > policy.userQuotaBytes) {
+        throw new AppValidationError("Your media storage quota would be exceeded.");
+      }
+
+      await mkdir(config.cmsUploadDir, { recursive: true });
+      await Bun.write(destination, content);
+      wroteFile = true;
+
+      const rows = await trx`
+        insert into media_files (
+          original_name,
+          stored_name,
+          mime_type,
+          size_bytes,
+          alt_text,
+          uploaded_by,
+          public_url
+        ) values (
+          ${file.name},
+          ${storedName},
+          ${file.type},
+          ${content.size},
+          ${altText || null},
+          ${userId},
+          ${publicUrl}
+        )
+        returning id
+      `;
+      return Number(rows[0].id);
+    });
+    return getMediaById(id);
+  } catch (error) {
+    if (wroteFile) await unlink(destination).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function deleteMedia(id: number) {

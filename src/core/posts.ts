@@ -32,6 +32,8 @@ function normalizePost(row: Record<string, unknown>): PostRecord {
     authorName: (row.author_name as string | null) ?? null,
     categories: Array.isArray(row.categories) ? (row.categories as string[]) : [],
     tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    commentsPolicy: row.comments_policy as PostRecord["commentsPolicy"],
+    commentsEnabled: Boolean(row.comments_enabled),
   };
 }
 
@@ -48,14 +50,14 @@ function validatePostInput(input: PostInput) {
   validateScheduledState(input.status, input.publishedAt);
 }
 
-async function ensureTerms(type: "category" | "tag", slugs: string[]) {
+async function ensureTerms(type: "category" | "tag", slugs: string[], trx: typeof sql) {
   if (slugs.length === 0) {
     return;
   }
 
   const table = type === "category" ? "categories" : "tags";
   for (const slug of slugs) {
-    await sql.unsafe(
+    await trx.unsafe(
       `insert into ${table} (name, slug) values ($1, $2) on conflict (slug) do nothing`,
       [slug, slug],
     );
@@ -67,7 +69,7 @@ async function syncTerms(postId: number, categorySlugs: string[], tagSlugs: stri
   await trx`delete from post_tags where post_id = ${postId}`;
 
   if (categorySlugs.length > 0) {
-    await ensureTerms("category", categorySlugs);
+    await ensureTerms("category", categorySlugs, trx);
     await trx`
       insert into post_categories (post_id, category_id)
       select ${postId}, id from categories
@@ -76,13 +78,28 @@ async function syncTerms(postId: number, categorySlugs: string[], tagSlugs: stri
   }
 
   if (tagSlugs.length > 0) {
-    await ensureTerms("tag", tagSlugs);
+    await ensureTerms("tag", tagSlugs, trx);
     await trx`
       insert into post_tags (post_id, tag_id)
       select ${postId}, id from tags
       where slug = any(${trx.array(tagSlugs)})
     `;
   }
+}
+
+async function syncSeries(postId: number, seriesId: number | null, trx: typeof sql) {
+  if (!seriesId) {
+    await trx`delete from post_series where post_id = ${postId}`;
+    return;
+  }
+  const result = await trx`
+    insert into post_series (post_id, series_id, position)
+    select ${postId}, id, 0 from series where id = ${seriesId}
+    on conflict (post_id) do update set
+      series_id = excluded.series_id,
+      position = case when post_series.series_id = excluded.series_id then post_series.position else 0 end
+  `;
+  if (result.count === 0) throw new AppValidationError("Selected series does not exist.");
 }
 
 const basePostQuery = `
@@ -104,9 +121,16 @@ const basePostQuery = `
     p.published_at,
     p.updated_at,
     p.author_id,
+    p.comments_policy,
+    case
+      when exists (select 1 from post_series eps where eps.post_id = p.id) then
+        coalesce((select es.comments_enabled from post_series eps join series es on es.id = eps.series_id where eps.post_id = p.id limit 1), false)
+        and p.comments_policy <> 'disabled'
+      else p.comments_policy = 'enabled'
+    end as comments_enabled,
     u.display_name as author_name,
-    coalesce(array_agg(distinct c.slug) filter (where c.slug is not null), '{}') as categories,
-    coalesce(array_agg(distinct t.slug) filter (where t.slug is not null), '{}') as tags
+    coalesce(array_agg(distinct c.slug order by c.slug) filter (where c.slug is not null), '{}') as categories,
+    coalesce(array_agg(distinct t.slug order by t.slug) filter (where t.slug is not null), '{}') as tags
   from posts p
   left join users u on u.id = p.author_id
   left join post_categories pc on pc.post_id = p.id
@@ -257,6 +281,7 @@ export async function createPost(input: PostInput, authorId: number) {
 
       const postId = Number(rows[0].id);
       await syncTerms(postId, categorySlugs, tagSlugs, trx as typeof sql);
+      if (input.seriesId) await syncSeries(postId, input.seriesId, trx as typeof sql);
       return postId;
     });
   } catch (error) {
@@ -295,11 +320,15 @@ export async function updatePost(id: number, input: PostInput, actorUserId?: num
           seo_keywords = ${input.seoKeywords ?? null},
           seo_noindex = ${input.seoNoindex ?? false},
           seo_nofollow = ${input.seoNofollow ?? false},
+          scheduled_publish_attempts = 0,
+          scheduled_publish_next_retry_at = null,
+          scheduled_publish_last_error = null,
           updated_at = now()
         where id = ${id}
       `;
 
       await syncTerms(id, categorySlugs, tagSlugs, trx as typeof sql);
+      if (input.seriesId !== undefined) await syncSeries(id, input.seriesId, trx as typeof sql);
     });
   } catch (error) {
     if (isUniqueConstraintError(error)) {
@@ -317,4 +346,10 @@ export async function updatePost(id: number, input: PostInput, actorUserId?: num
 
 export async function deletePost(id: number) {
   await sql`delete from posts where id = ${id}`;
+}
+
+export async function setPostCommentsPolicy(id: number, policy: PostRecord["commentsPolicy"]) {
+  if (!["inherit", "enabled", "disabled"].includes(policy)) throw new AppValidationError("Select a valid comment setting.");
+  await sql`update posts set comments_policy = ${policy}, updated_at = now() where id = ${id}`;
+  return getPostById(id);
 }

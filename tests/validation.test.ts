@@ -15,4 +15,8 @@ describe("validation", () => {
     expect(() => validateScheduledState("scheduled", "")).toThrow(AppValidationError);
     expect(() => validateScheduledState("draft", "")).not.toThrow();
   });
+
+  test("rejects unknown publication states", () => {
+    expect(() => validateScheduledState("private", null)).toThrow(AppValidationError);
+  });
 });

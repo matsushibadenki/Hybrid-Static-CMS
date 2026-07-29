@@ -8,6 +8,7 @@ import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
 import { healthRoutes } from "./routes/health";
 import { customApiRoutes } from "../core/extensions";
+import { reportOperationalEvent } from "../core/operatorAlerts";
 
 export function createApp() {
   const app = new Hono();
@@ -21,7 +22,16 @@ export function createApp() {
   app.route(config.cmsApiPrefix, customApiRoutes);
   app.get("/", (c) => c.redirect("/index.html"));
   app.onError((error, c) => {
-    console.error(error);
+    void reportOperationalEvent({
+      level: "error",
+      action: "http.unhandled_error",
+      message: "An unhandled request error returned HTTP 500.",
+      context: {
+        error,
+        method: c.req.method,
+        path: new URL(c.req.url).pathname,
+      },
+    });
     return c.text("Internal Server Error", 500);
   });
   return app;

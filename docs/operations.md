@@ -27,6 +27,7 @@ The current codebase includes:
 - Optional Google reCAPTCHA v3 verification for public form submissions
 - CSRF protection for authenticated admin and API mutations
 - Media picker buttons in post and page editing for image, video, audio, and PDF snippets
+- Transaction-safe site, user, and role media quotas with control-panel usage reporting
 - Revision history for posts and pages, including restore through the normal validation and publishing flow
 - Automatic pre-restore snapshots and rollback links for file snapshot restoration
 - Basic Body HTML authoring toolbar for common formatting and links
@@ -71,6 +72,14 @@ Form submissions can be exported from each form's edit screen as a UTF-8 CSV. Au
 
 SMTP notification errors are visible in operator notifications and audit logs under `form.submit.email_failed`. Monitor these entries if form mail is operationally important; the public submission is retained even when delivery fails.
 
+Application runtime events use the shared structured logger. Keep `LOG_FORMAT=json`
+in production and configure the process manager to retain and rotate standard
+output. Set `OPERATOR_ALERT_WEBHOOK_URL` when errors must also reach an external
+incident channel. The webhook is additive: dashboard notifications and audit
+records remain the local source of truth. See
+[Structured logging and operator alerts](./structured-logging.md) for signature
+verification and redaction behavior.
+
 For authenticated JSON API mutations, send the token from the current session in the `X-CSRF-Token` header. Public form submissions under `/cms-api/forms/:slug/submit` remain available to visitors and use the optional reCAPTCHA v3 protection instead.
 
 The current codebase does not yet include:
@@ -90,6 +99,14 @@ When a post is created, updated, or deleted:
 This means installation users should know:
 
 - publish operations trigger file writes
+- only content with the `published` status receives a generated public page; drafts remain database-only
+- the editor's **Publish and generate page** action changes the item to `published`, sets its publication time to now, and regenerates all public artifacts
+- scheduled content is generated when the scheduler changes it to `published`
+- scheduled publication uses `SCHEDULE_TIME_ZONE`; failed artifact generation returns affected content to `scheduled` and retries with an increasing delay
+- scheduler failures and later recovery are recorded in audit logs and operator notifications
+- **Regenerate fragments** rebuilds all currently published posts and fixed pages and reports success or failure in the control panel
+- approved comments are embedded into generated article HTML; comment approval, deletion, and availability changes trigger regeneration
+- commenter email addresses remain private in public HTML but are personal data stored in PostgreSQL and database backups
 - `CMS_OUTPUT_DIR` must be writable
 - `CMS_UPLOAD_DIR` must be writable
 - artifact collisions should be avoided by reserving the `/cms` namespace
@@ -102,12 +119,14 @@ This means installation users should know:
 - Set `COOKIE_SECURE=true` when serving through HTTPS if automatic detection is not sufficient
 - Set `TRUST_PROXY=true` only behind a proxy you control; otherwise forwarded client-IP headers are ignored
 - Enable `TWO_FACTOR_ENABLED=true` with a protected Base32 `TWO_FACTOR_SECRET` for an additional login factor
-- Configure `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` before exposing public forms
+- Configure `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` before exposing public forms or article comments
 - Restrict direct server access
 - Put the app behind HTTPS
 - Limit database access to the app host
 - Monitor app logs and database health
+- Verify the operator alert receiver with a controlled test error before relying on it for incident response
 - Back up PostgreSQL and generated uploads
+- Set media quotas appropriate for available disk space and verify the media usage panel after changes
 - Confirm `/cms` does not conflict with existing site paths
 - Verify `robots.txt` and `llms.txt` match the intended AI access policy
 

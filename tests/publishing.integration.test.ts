@@ -6,6 +6,8 @@ import { renderPublishedArtifacts } from "../src/core/renderer";
 import { sql } from "../src/core/db";
 import { config } from "../src/core/config";
 import path from "node:path";
+import { assignPostToSeries, createSeries, deleteSeries } from "../src/core/series";
+import { getPostPermalinkPattern, setPostPermalinkPattern } from "../src/core/settings";
 
 const slug = `integration-post-${crypto.randomUUID()}`;
 let userId: number | null = null;
@@ -42,6 +44,85 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("publishing int
       if (postId) await deletePost(postId);
       if (userId) await sql`delete from users where id = ${userId}`;
       await unlink(artifact).catch(() => undefined);
+    }
+  });
+
+  test("renders ordered navigation between published posts in the same series", async () => {
+    const testId = crypto.randomUUID();
+    const firstSlug = `series-first-${testId}`;
+    const secondSlug = `series-second-${testId}`;
+    const firstArtifact = path.join(config.cmsOutputDir, "posts", `${firstSlug}.html`);
+    const secondArtifact = path.join(config.cmsOutputDir, "posts", `${secondSlug}.html`);
+    let localUserId: number | null = null;
+    let localSeriesId: number | null = null;
+    let firstPostId: number | null = null;
+    let secondPostId: number | null = null;
+    try {
+      localUserId = await createUser({
+        email: `series-publisher-${testId}@example.test`,
+        password: "integration-password-123",
+        displayName: "Series Publisher",
+        roles: ["owner"],
+      });
+      const series = await createSeries({ title: "Integration Series", slug: `integration-series-${testId}` });
+      localSeriesId = series?.id ?? null;
+      const first = await createPost({ title: "Series First", slug: firstSlug, bodyHtml: "<p>First</p>", status: "published" }, localUserId);
+      const second = await createPost({ title: "Series Second", slug: secondSlug, bodyHtml: "<p>Second</p>", status: "published" }, localUserId);
+      firstPostId = first?.id ?? null;
+      secondPostId = second?.id ?? null;
+      if (!localSeriesId || !firstPostId || !secondPostId) throw new Error("Series fixture creation failed.");
+      await assignPostToSeries(localSeriesId, firstPostId, 0);
+      await assignPostToSeries(localSeriesId, secondPostId, 1);
+
+      await renderPublishedArtifacts();
+      const html = await Bun.file(secondArtifact).text();
+      expect(html).toContain("Integration Series");
+      expect(html).toContain(`/cms/posts/${firstSlug}.html`);
+      expect(html).toContain("2 / 2");
+    } finally {
+      if (firstPostId) await deletePost(firstPostId);
+      if (secondPostId) await deletePost(secondPostId);
+      if (localSeriesId) await deleteSeries(localSeriesId);
+      if (localUserId) await sql`delete from users where id = ${localUserId}`;
+      await unlink(firstArtifact).catch(() => undefined);
+      await unlink(secondArtifact).catch(() => undefined);
+    }
+  });
+
+  test("regenerates article paths and removes the previous permalink artifact", async () => {
+    const testId = crypto.randomUUID();
+    const permalinkSlug = `permalink-${testId}`;
+    const publishedAt = "2026-07-22T10:00:00.000Z";
+    const flatArtifact = path.join(config.cmsOutputDir, "posts", `${permalinkSlug}.html`);
+    const datedArtifact = path.join(config.cmsOutputDir, "posts", "2026", "07", `${permalinkSlug}.html`);
+    const previousPattern = await getPostPermalinkPattern();
+    let localUserId: number | null = null;
+    let localPostId: number | null = null;
+    try {
+      localUserId = await createUser({
+        email: `permalink-publisher-${testId}@example.test`,
+        password: "integration-password-123",
+        displayName: "Permalink Publisher",
+        roles: ["owner"],
+      });
+      await setPostPermalinkPattern("post_name");
+      const post = await createPost({ title: "Permalink Test", slug: permalinkSlug, bodyHtml: "<p>Permalink</p>", status: "published", publishedAt }, localUserId);
+      localPostId = post?.id ?? null;
+      await renderPublishedArtifacts();
+      expect(await Bun.file(flatArtifact).exists()).toBe(true);
+
+      await setPostPermalinkPattern("year_month");
+      await renderPublishedArtifacts();
+      expect(await Bun.file(datedArtifact).exists()).toBe(true);
+      expect(await Bun.file(datedArtifact).text()).toContain(`/cms/posts/2026/07/${permalinkSlug}.html`);
+      expect(await Bun.file(flatArtifact).exists()).toBe(false);
+    } finally {
+      if (localPostId) await deletePost(localPostId);
+      if (localUserId) await sql`delete from users where id = ${localUserId}`;
+      await setPostPermalinkPattern(previousPattern);
+      await renderPublishedArtifacts().catch(() => undefined);
+      await unlink(flatArtifact).catch(() => undefined);
+      await unlink(datedArtifact).catch(() => undefined);
     }
   });
 });

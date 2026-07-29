@@ -60,12 +60,14 @@ Generated files include:
 
 - `public_html/cms/posts/latest.html`
 - `public_html/cms/posts/list.html`
-- `public_html/cms/posts/{slug}.html`
+- Article files under `public_html/cms/posts/` using the selected structure described in [Post permalinks](permalinks.md)
 - `public_html/cms/posts/page/{n}.html`
 - `public_html/cms/posts/rss.xml`
 - `public_html/sitemap.xml`
 - `public_html/robots.txt`
 - `public_html/llms.txt`
+
+Published posts assigned to a series include previous, next, and numbered article navigation based on the series membership `position`. Draft and scheduled sibling posts are excluded from public navigation.
 
 ### 2. JavaScript embedding
 
@@ -85,6 +87,10 @@ GET /cms-api/posts
 GET /cms-api/posts/:slug
 GET /cms-api/search?q=...
 ```
+
+Anonymous API requests only receive published posts, pages, forms, menus, and blocks. Draft filtering parameters are honored only for signed-in users with the matching read permission. Media-library enumeration requires the `media.read` permission; published media URLs remain directly usable by generated content.
+
+Public static-file delivery resolves real paths and refuses hidden path segments, directories, and symbolic links that leave `PUBLIC_HTML_DIR`.
 
 ## Current MVP boundaries
 
@@ -107,7 +113,4 @@ Included now:
 - Static fragment generation
 - Embed script generation
 
-Planned next:
-
-- AI proposal workflow with approval gates
-- Plugin hooks
+Also included are role-based permissions, AI proposal approval gates, plugin hooks, series, page groups, revisions, scheduled publishing, backup and restore workflows, and public-form abuse protection.

@@ -17,21 +17,24 @@ import {
   renderFormSubmissionsCsv,
   updateForm,
 } from "../../core/forms";
-import { adminLayout } from "../../core/layout";
+import { adminDate, adminLayout } from "../../core/layout";
 import {
   deleteMedia,
+  formatByteSize,
+  getMediaStorageUsage,
   isAudioMedia,
   isImageMedia,
   isPdfMedia,
   isVideoMedia,
   listMedia,
   mediaEmbedSnippet,
+  mediaStorageState,
   uploadMedia,
 } from "../../core/media";
 import { createPage, deletePage, getPageById, listPages, updatePage } from "../../core/pages";
-import { createPost, deletePost, getPostById, listPosts, updatePost } from "../../core/posts";
+import { createPost, deletePost, getPostById, listPosts, setPostCommentsPolicy, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
-import { slugify, escapeHtml } from "../../core/content";
+import { buildScopedSlug, slugify, escapeHtml } from "../../core/content";
 import { createManagedUser, getUserById, listUsers, managedRoles, resetUserPassword, revokeUserSessions, setUserActive, updateUserProfile } from "../../core/users";
 import { hasPermission, requireAdminPermission } from "../../core/permissions";
 import { config } from "../../core/config";
@@ -42,20 +45,20 @@ import { createBlock, deleteBlock, getBlockById, listBlocks, updateBlock } from 
 import { getAiFileProposal, getAiProposalDiff, listAiFileProposals, reviewAiFileProposal } from "../../core/aiProposals";
 import { listOperatorNotifications, markOperatorNotificationRead } from "../../core/notifications";
 import { createPreviewToken } from "../../core/previews";
-import { assignPostToSeries, createSeries, deleteSeries, getPostSeriesId, getSeriesById, listSeries, listSeriesPosts, removePostFromSeries, updateSeries } from "../../core/series";
-import { assignPageToGroup, createPageGroup, deletePageGroup, getPageGroupById, getPageGroupId, listPageGroupMembers, listPageGroups, removePageFromGroup, updatePageGroup } from "../../core/pageGroups";
+import { assignPostToSeries, createSeries, deleteSeries, getPostSeriesId, getSeriesById, listPostSeriesAssignments, listSeries, listSeriesPosts, removePostFromSeries, updateSeries } from "../../core/series";
+import { assignPageToGroup, createPageGroup, deletePageGroup, getPageGroupById, getPageGroupId, listPageGroupAssignments, listPageGroupMembers, listPageGroups, removePageFromGroup, updatePageGroup } from "../../core/pageGroups";
 import type { FormFieldRecord, UserRole } from "../../core/types";
+import { getPostPermalinkPattern, setPostPermalinkPattern } from "../../core/settings";
+import { isPostPermalinkPattern, postPermalinkExample, postPermalinkPath, postPermalinkPatterns } from "../../core/permalinks";
+import { approveComment, deleteComment, listComments } from "../../core/comments";
+import { scheduleTimestampForInput, scheduleTimestampForStorage } from "../../core/scheduling";
+import { logError } from "../../core/logger";
 
 function splitCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
-}
-
-function autoScopedSlug(rawSlug: string, title: string, parentSlug?: string) {
-  const slug = rawSlug.trim() || slugify(title);
-  return rawSlug.trim() || !parentSlug ? slug : `${parentSlug}-${slug}`;
 }
 
 function noticeCard(message: string, tone: "success" | "error" = "success") {
@@ -84,6 +87,35 @@ function queryNotice(c: { req: { query: (key: string) => string | undefined } })
         : "");
   }
   return "";
+}
+
+const permalinkPatternLabels = {
+  post_name: { title: "Post name", description: "Short and readable. This is the existing default structure." },
+  year_month: { title: "Year and month", description: "Places articles under their publication year and month." },
+  category: { title: "Category and post name", description: "Uses the first category, with uncategorized as the fallback." },
+  numeric: { title: "Numeric ID", description: "Uses the stable database ID and does not change when a slug changes." },
+} as const;
+
+function permalinkSettingsForm(current: (typeof postPermalinkPatterns)[number], notice = "") {
+  const options = postPermalinkPatterns.map((pattern) => {
+    const item = permalinkPatternLabels[pattern];
+    return `
+      <label style="display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; align-items:start; padding:18px; border:1px solid var(--line);">
+        <input style="width:auto; margin-top:4px;" type="radio" name="pattern" value="${pattern}" ${pattern === current ? "checked" : ""} />
+        <span><strong style="display:block; margin-bottom:4px;">${item.title}</strong><span class="meta" style="display:block; margin-bottom:8px;">${item.description}</span><code>${postPermalinkExample(pattern)}</code></span>
+      </label>`;
+  }).join("");
+  return `${notice}
+    <section class="editor-section">
+      <p class="editor-section-kicker">Publishing</p>
+      <h2 class="editor-section-title">Post permalink structure</h2>
+      <p class="meta">Choose the public URL structure for generated article pages. Existing posts keep their slugs; only generated paths and internal links change.</p>
+      <form method="post" action="${config.controlPanelPath}/settings/permalinks" class="form-grid" style="margin-top:20px;">
+        <fieldset style="border:0; padding:0; margin:0;" class="form-grid"><legend class="sr-only">Post permalink structure</legend>${options}</fieldset>
+        <div style="padding:14px 16px; border-left:3px solid var(--accent); background:var(--accent-light);"><strong>Before changing</strong><p class="meta" style="margin:4px 0 0;">Update external links and redirects when changing an established site. Explicit canonical URLs remain unchanged.</p></div>
+        <div class="row"><button class="button button-primary" type="submit">Save permalink structure and regenerate</button></div>
+      </form>
+    </section>`;
 }
 
 function userForm(action: string, values: { email?: string; displayName?: string; roles?: string[]; password?: string } = {}, includePassword = true) {
@@ -147,6 +179,15 @@ function pageValuesFromForm(form: FormData) {
   };
 }
 
+function applyPublishAndGenerateAction(form: FormData, values: { status: string; publishedAt: string }) {
+  const publishAndGenerate = form.get("submitAction") === "publish_generate";
+  if (publishAndGenerate) {
+    values.status = "published";
+    values.publishedAt = new Date().toISOString();
+  }
+  return publishAndGenerate;
+}
+
 function formValuesFromForm(form: FormData) {
   return {
     title: String(form.get("title") ?? ""),
@@ -161,40 +202,118 @@ function formValuesFromForm(form: FormData) {
 
 function richEditorTools(uploadUrl?: string) {
   return `
-    <div data-rich-editor data-target="textarea[name=bodyHtml]" style="margin-top:-8px;">
-      <div class="row" style="gap:8px;">
-        <button class="button" type="button" data-prefix="<strong>" data-suffix="</strong>"><strong>B</strong></button>
-        <button class="button" type="button" data-prefix="<em>" data-suffix="</em>"><em>I</em></button>
-        <button class="button" type="button" data-prefix="<s>" data-suffix="</s>"><s>S</s></button>
-        <button class="button" type="button" data-prefix="<blockquote>" data-suffix="</blockquote>">Quote</button>
-        <button class="button" type="button" data-prefix="<ul>\n  <li>" data-suffix="</li>\n</ul>">Bullets</button>
-        <button class="button" type="button" data-prefix="<ol>\n  <li>" data-suffix="</li>\n</ol>">Numbered</button>
-        <button class="button" type="button" data-prefix="<h1>" data-suffix="</h1>">H1</button>
-        <button class="button" type="button" data-prefix="<h2>" data-suffix="</h2>">H2</button>
-        <button class="button" type="button" data-prefix="<h3>" data-suffix="</h3>">H3</button>
-        <button class="button" type="button" data-prefix="<h4>" data-suffix="</h4>">H4</button>
-        <button class="button" type="button" data-font-size="small">A-</button>
-        <button class="button" type="button" data-font-size="normal">A</button>
-        <button class="button" type="button" data-font-size="large">A+</button>
-        <button class="button" type="button" data-font-size="xlarge">A++</button>
-        <button class="button" type="button" data-ruby>Ruby</button>
-        <button class="button" type="button" data-align="left">Left</button>
-        <button class="button" type="button" data-align="center">Center</button>
-        <button class="button" type="button" data-align="right">Right</button>
-        <button class="button" type="button" data-align="justify">Justify</button>
-        <button class="button" type="button" data-link>Link</button>
-        <button class="button" type="button" data-prefix="<pre><code>" data-suffix="</code></pre>">Code</button>
-        <button class="button" type="button" data-prefix="<hr />" data-suffix="">Rule</button>
-        <button class="button" type="button" data-prefix="\\(" data-suffix="\\)">Math</button>
-        <button class="button" type="button" data-prefix="\\[\n" data-suffix="\n\\]">Math block</button>
-        <button class="button" type="button" data-prefix="<pre><code class=&quot;language-mermaid&quot;>graph TD\n  A[Start] --> B[End]" data-suffix="</code></pre>">Mermaid</button>
+    <div class="rich-editor-toolbar" data-rich-editor data-target="textarea[name=bodyHtml]">
+      <div class="rich-editor-toolbar-heading">
+        <p class="rich-editor-toolbar-title" data-i18n="HTML formatting tools">HTML formatting tools</p>
+        <p class="meta" data-i18n="Select text in the HTML field, then choose a formatting action.">Select text in the HTML field, then choose a formatting action.</p>
       </div>
-      ${uploadUrl ? `<div class="row" style="margin-top:10px; align-items:center;"><label class="button" style="display:inline-flex; cursor:pointer;">Upload file <input type="file" data-editor-upload accept="image/*,video/*,audio/*,application/pdf,text/plain" style="display:none;" /></label><span class="meta" data-upload-status>Images, video, audio, PDF, and text files</span></div>` : ""}
+      <div class="rich-editor-groups">
+        <fieldset class="rich-editor-group">
+          <legend data-i18n="Text formatting">Text formatting</legend>
+          <div class="rich-editor-actions">
+            <button class="button" type="button" data-prefix="<strong>" data-suffix="</strong>" title="Bold" aria-label="Bold"><strong>B</strong></button>
+            <button class="button" type="button" data-prefix="<em>" data-suffix="</em>" title="Italic" aria-label="Italic"><em>I</em></button>
+            <button class="button" type="button" data-prefix="<u>" data-suffix="</u>" title="Underline" aria-label="Underline" data-i18n="Underline"><u>U</u></button>
+            <button class="button" type="button" data-prefix="<s>" data-suffix="</s>" title="Strikethrough" aria-label="Strikethrough"><s>S</s></button>
+            <button class="button" type="button" data-prefix="<mark>" data-suffix="</mark>" title="Highlight" aria-label="Highlight" data-i18n="Highlight">⬛HL</button>
+            <button class="button" type="button" data-prefix="<sub>" data-suffix="</sub>" title="Subscript" aria-label="Subscript" data-i18n="Subscript">X₂</button>
+            <button class="button" type="button" data-prefix="<sup>" data-suffix="</sup>" title="Superscript" aria-label="Superscript" data-i18n="Superscript">X²</button>
+            <button class="button" type="button" data-ruby data-i18n="Ruby">Ruby</button>
+          </div>
+          <p class="rich-editor-group-label" data-i18n="Text size">Text size</p>
+          <div class="rich-editor-actions">
+            <button class="button" type="button" data-font-size="small" data-i18n="A-">A-</button>
+            <button class="button" type="button" data-font-size="normal">A</button>
+            <button class="button" type="button" data-font-size="large" data-i18n="A+">A+</button>
+            <button class="button" type="button" data-font-size="xlarge" data-i18n="A++">A++</button>
+          </div>
+          <p class="rich-editor-group-label" data-i18n="Text color">Text color</p>
+          <div class="rich-editor-color-row">
+            <button type="button" class="rich-editor-color-swatch" data-text-color="#e0544e" style="background:#e0544e;" title="Red" aria-label="Red"></button>
+            <button type="button" class="rich-editor-color-swatch" data-text-color="#e67e22" style="background:#e67e22;" title="Orange" aria-label="Orange"></button>
+            <button type="button" class="rich-editor-color-swatch" data-text-color="#f1c40f" style="background:#f1c40f;" title="Yellow" aria-label="Yellow"></button>
+            <button type="button" class="rich-editor-color-swatch" data-text-color="#27ae60" style="background:#27ae60;" title="Green" aria-label="Green"></button>
+            <button type="button" class="rich-editor-color-swatch" data-text-color="#2980b9" style="background:#2980b9;" title="Blue" aria-label="Blue"></button>
+            <button type="button" class="rich-editor-color-swatch" data-text-color="#8e44ad" style="background:#8e44ad;" title="Purple" aria-label="Purple"></button>
+            <button type="button" class="rich-editor-color-swatch" data-text-color="#1abc9c" style="background:#1abc9c;" title="Teal" aria-label="Teal"></button>
+            <button type="button" class="rich-editor-color-swatch" data-text-color="#333333" style="background:#333333;" title="Dark" aria-label="Dark"></button>
+            <span class="rich-editor-color-picker-wrap"><input type="color" value="#41C9B4" data-text-color-picker title="Custom color" aria-label="Custom color" /><button type="button" class="button" data-apply-custom-color data-i18n="Apply">Apply</button></span>
+          </div>
+        </fieldset>
+
+        <fieldset class="rich-editor-group">
+          <legend data-i18n="Headings and structure">Headings and structure</legend>
+          <div class="rich-editor-actions">
+            <button class="button" type="button" data-prefix="<h1>" data-suffix="</h1>">H1</button>
+            <button class="button" type="button" data-prefix="<h2>" data-suffix="</h2>">H2</button>
+            <button class="button" type="button" data-prefix="<h3>" data-suffix="</h3>">H3</button>
+            <button class="button" type="button" data-prefix="<h4>" data-suffix="</h4>">H4</button>
+            <button class="button" type="button" data-prefix="<h5>" data-suffix="</h5>">H5</button>
+            <button class="button" type="button" data-prefix="<h6>" data-suffix="</h6>">H6</button>
+          </div>
+          <p class="rich-editor-group-label" data-i18n="Structure">Structure</p>
+          <div class="rich-editor-actions">
+            <button class="button" type="button" data-prefix="<p>" data-suffix="</p>" data-i18n="Paragraph">Paragraph</button>
+            <button class="button" type="button" data-prefix="<blockquote>" data-suffix="</blockquote>" data-i18n="Quote">Quote</button>
+            <button class="button" type="button" data-prefix="<hr />" data-suffix="" data-i18n="Rule">Rule</button>
+            <button class="button" type="button" data-insert-details data-i18n="Accordion">Accordion</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="rich-editor-group">
+          <legend data-i18n="Lists and alignment">Lists and alignment</legend>
+          <div class="rich-editor-actions">
+            <button class="button" type="button" data-prefix="<ul>\\n  <li>" data-suffix="</li>\\n</ul>" data-i18n="Bullets">Bullets</button>
+            <button class="button" type="button" data-prefix="<ol>\\n  <li>" data-suffix="</li>\\n</ol>" data-i18n="Numbered">Numbered</button>
+            <button class="button" type="button" data-insert-checklist data-i18n="Checklist">Checklist</button>
+            <button class="button" type="button" data-insert-deflist data-i18n="Definition list">Def list</button>
+          </div>
+          <p class="rich-editor-group-label" data-i18n="Alignment">Alignment</p>
+          <div class="rich-editor-actions">
+            <button class="button" type="button" data-align="left" data-i18n="Left">Left</button>
+            <button class="button" type="button" data-align="center" data-i18n="Center">Center</button>
+            <button class="button" type="button" data-align="right" data-i18n="Right">Right</button>
+            <button class="button" type="button" data-align="justify" data-i18n="Justify">Justify</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="rich-editor-group">
+          <legend data-i18n="Code and notation">Code and notation</legend>
+          <div class="rich-editor-actions">
+            <button class="button" type="button" data-prefix="<code>" data-suffix="</code>" data-i18n="Inline code">Inline</button>
+            <button class="button" type="button" data-prefix="<pre><code>" data-suffix="</code></pre>" data-i18n="Code">Code</button>
+            <button class="button" type="button" data-insert-table data-i18n="Table">Table</button>
+          </div>
+          <p class="rich-editor-group-label" data-i18n="Math and diagrams">Math & diagrams</p>
+          <div class="rich-editor-actions">
+            <button class="button" type="button" data-prefix="\\\\(" data-suffix="\\\\)" data-i18n="Math">Math</button>
+            <button class="button" type="button" data-prefix="\\\\[\\n" data-suffix="\\n\\\\]" data-i18n="Math block">Math block</button>
+            <button class="button" type="button" data-prefix="<pre><code class=&quot;language-mermaid&quot;>graph TD\\n  A[Start] --> B[End]" data-suffix="</code></pre>" data-i18n="Mermaid">Mermaid</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="rich-editor-group rich-editor-group-wide">
+          <legend data-i18n="Links and files">Links & embeds</legend>
+          <div class="rich-editor-upload-row">
+            <div class="rich-editor-actions">
+              <button class="button" type="button" data-link data-i18n="Link">Link</button>
+              <button class="button" type="button" data-insert-image data-i18n="Image">Image</button>
+              <button class="button" type="button" data-insert-video data-i18n="Video">Video</button>
+              <button class="button" type="button" data-insert-iframe data-i18n="Embed iframe">Embed</button>
+              <button class="button" type="button" data-insert-footnote data-i18n="Footnote">Footnote</button>
+              ${uploadUrl ? `<label class="button rich-editor-upload-button" data-i18n="Upload file">Upload file <input type="file" data-editor-upload accept="image/*,video/*,audio/*,application/pdf,text/plain" /></label>` : ""}
+            </div>
+            ${uploadUrl ? `<span class="meta" data-upload-status data-i18n="Images, video, audio, PDF, and text files">Images, video, audio, PDF, and text files</span>` : ""}
+          </div>
+        </fieldset>
+      </div>
     </div>
     <script>
+      const adminText = (source) => window.adminTranslate?.(source) || source;
       document.querySelectorAll("[data-rich-editor]").forEach((toolbar) => {
         const target = document.querySelector(toolbar.dataset.target);
         if (!target) return;
+        /* --- Prefix/Suffix wrap buttons --- */
         toolbar.querySelectorAll("button[data-prefix]").forEach((button) => {
           button.addEventListener("click", () => {
             const prefix = button.dataset.prefix || "";
@@ -208,6 +327,7 @@ function richEditorTools(uploadUrl?: string) {
             target.selectionEnd = start + prefix.length + selected.length;
           });
         });
+        /* --- Alignment buttons --- */
         toolbar.querySelectorAll("button[data-align]").forEach((button) => {
           button.addEventListener("click", () => {
             const align = button.dataset.align || "left";
@@ -221,6 +341,7 @@ function richEditorTools(uploadUrl?: string) {
             target.selectionEnd = start + replacement.length;
           });
         });
+        /* --- Font size buttons --- */
         toolbar.querySelectorAll("button[data-font-size]").forEach((button) => {
           button.addEventListener("click", () => {
             const size = button.dataset.fontSize || "normal";
@@ -234,11 +355,40 @@ function richEditorTools(uploadUrl?: string) {
             target.selectionEnd = start + replacement.length;
           });
         });
+        /* --- Text color swatches --- */
+        toolbar.querySelectorAll("[data-text-color]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const color = button.dataset.textColor;
+            const start = target.selectionStart ?? target.value.length;
+            const end = target.selectionEnd ?? start;
+            const selected = target.value.slice(start, end) || "text";
+            const replacement = '<span style="color:' + color + '">' + selected + '</span>';
+            target.value = target.value.slice(0, start) + replacement + target.value.slice(end);
+            target.focus();
+            target.selectionStart = start;
+            target.selectionEnd = start + replacement.length;
+          });
+        });
+        /* --- Custom color picker + Apply --- */
+        toolbar.querySelector("[data-apply-custom-color]")?.addEventListener("click", () => {
+          const picker = toolbar.querySelector("[data-text-color-picker]");
+          if (!picker) return;
+          const color = picker.value;
+          const start = target.selectionStart ?? target.value.length;
+          const end = target.selectionEnd ?? start;
+          const selected = target.value.slice(start, end) || "text";
+          const replacement = '<span style="color:' + color + '">' + selected + '</span>';
+          target.value = target.value.slice(0, start) + replacement + target.value.slice(end);
+          target.focus();
+          target.selectionStart = start;
+          target.selectionEnd = start + replacement.length;
+        });
+        /* --- Ruby --- */
         toolbar.querySelector("button[data-ruby]")?.addEventListener("click", () => {
           const start = target.selectionStart ?? target.value.length;
           const end = target.selectionEnd ?? start;
           const selected = target.value.slice(start, end) || "漢字";
-          const reading = window.prompt("Reading", "かんじ");
+          const reading = window.prompt(adminText("Reading"), "かんじ");
           if (!reading) return;
           const safeReading = reading.replace(/[<>]/g, "");
           const replacement = '<ruby>' + selected + '<rp>(</rp><rt>' + safeReading + '</rt><rp>)</rp></ruby>';
@@ -247,6 +397,7 @@ function richEditorTools(uploadUrl?: string) {
           target.selectionStart = start;
           target.selectionEnd = start + replacement.length;
         });
+        /* --- Link --- */
         toolbar.querySelector("button[data-link]")?.addEventListener("click", () => {
           const url = window.prompt("URL", "https://");
           if (!url) return;
@@ -259,27 +410,116 @@ function richEditorTools(uploadUrl?: string) {
           target.selectionStart = start;
           target.selectionEnd = start + replacement.length;
         });
+        /* --- Image embed --- */
+        toolbar.querySelector("button[data-insert-image]")?.addEventListener("click", () => {
+          const url = window.prompt(adminText("Image URL"), "https://");
+          if (!url) return;
+          const alt = window.prompt(adminText("Alt text"), "") || "";
+          const start = target.selectionStart ?? target.value.length;
+          const snippet = '<img src="' + url.replaceAll('"', '') + '" alt="' + alt.replaceAll('"', '') + '" />';
+          target.value = target.value.slice(0, start) + snippet + target.value.slice(start);
+          target.focus();
+          target.selectionStart = target.selectionEnd = start + snippet.length;
+        });
+        /* --- Video embed --- */
+        toolbar.querySelector("button[data-insert-video]")?.addEventListener("click", () => {
+          const url = window.prompt(adminText("Video URL"), "https://");
+          if (!url) return;
+          const start = target.selectionStart ?? target.value.length;
+          const snippet = '<video controls src="' + url.replaceAll('"', '') + '"></video>';
+          target.value = target.value.slice(0, start) + snippet + target.value.slice(start);
+          target.focus();
+          target.selectionStart = target.selectionEnd = start + snippet.length;
+        });
+        /* --- iframe embed --- */
+        toolbar.querySelector("button[data-insert-iframe]")?.addEventListener("click", () => {
+          const url = window.prompt(adminText("Embed URL (YouTube, etc.)"), "https://www.youtube.com/embed/");
+          if (!url) return;
+          const start = target.selectionStart ?? target.value.length;
+          const snippet = '<iframe src="' + url.replaceAll('"', '') + '" width="560" height="315" frameborder="0" allowfullscreen loading="lazy"></iframe>';
+          target.value = target.value.slice(0, start) + snippet + target.value.slice(start);
+          target.focus();
+          target.selectionStart = target.selectionEnd = start + snippet.length;
+        });
+        /* --- Footnote --- */
+        toolbar.querySelector("button[data-insert-footnote]")?.addEventListener("click", () => {
+          const id = window.prompt(adminText("Footnote ID (number or label)"), "1");
+          if (!id) return;
+          const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "");
+          const start = target.selectionStart ?? target.value.length;
+          const end = target.selectionEnd ?? start;
+          const selected = target.value.slice(start, end);
+          const refSnippet = '<sup><a href="#fn-' + safeId + '" id="fnref-' + safeId + '">[' + safeId + ']</a></sup>';
+          const noteSnippet = '\\n<p id="fn-' + safeId + '"><small>[' + safeId + '] ' + (selected || adminText("Footnote text")) + ' <a href="#fnref-' + safeId + '">↩</a></small></p>';
+          target.value = target.value.slice(0, start) + refSnippet + target.value.slice(end) + noteSnippet;
+          target.focus();
+          target.selectionStart = target.selectionEnd = start + refSnippet.length;
+        });
+        /* --- Accordion / Details --- */
+        toolbar.querySelector("button[data-insert-details]")?.addEventListener("click", () => {
+          const summary = window.prompt(adminText("Summary text"), adminText("Click to expand"));
+          if (!summary) return;
+          const start = target.selectionStart ?? target.value.length;
+          const end = target.selectionEnd ?? start;
+          const selected = target.value.slice(start, end) || adminText("Content here...");
+          const replacement = '<details>\\n  <summary>' + summary.replace(/[<>]/g, '') + '</summary>\\n  <p>' + selected + '</p>\\n</details>';
+          target.value = target.value.slice(0, start) + replacement + target.value.slice(end);
+          target.focus();
+          target.selectionStart = start;
+          target.selectionEnd = start + replacement.length;
+        });
+        /* --- Checklist --- */
+        toolbar.querySelector("button[data-insert-checklist]")?.addEventListener("click", () => {
+          const start = target.selectionStart ?? target.value.length;
+          const end = target.selectionEnd ?? start;
+          const selected = target.value.slice(start, end) || adminText("Item");
+          const snippet = '<ul class="checklist">\\n  <li><input type="checkbox" disabled /> ' + selected + '</li>\\n  <li><input type="checkbox" disabled /> </li>\\n</ul>';
+          target.value = target.value.slice(0, start) + snippet + target.value.slice(end);
+          target.focus();
+          target.selectionStart = start;
+          target.selectionEnd = start + snippet.length;
+        });
+        /* --- Definition list --- */
+        toolbar.querySelector("button[data-insert-deflist]")?.addEventListener("click", () => {
+          const start = target.selectionStart ?? target.value.length;
+          const end = target.selectionEnd ?? start;
+          const selected = target.value.slice(start, end) || adminText("Term");
+          const snippet = '<dl>\\n  <dt>' + selected + '</dt>\\n  <dd>' + adminText("Definition") + '</dd>\\n</dl>';
+          target.value = target.value.slice(0, start) + snippet + target.value.slice(end);
+          target.focus();
+          target.selectionStart = start;
+          target.selectionEnd = start + snippet.length;
+        });
+        /* --- Table --- */
+        toolbar.querySelector("button[data-insert-table]")?.addEventListener("click", () => {
+          const start = target.selectionStart ?? target.value.length;
+          const snippet = '<table>\\n  <thead>\\n    <tr>\\n      <th>' + adminText("Header") + ' 1</th>\\n      <th>' + adminText("Header") + ' 2</th>\\n      <th>' + adminText("Header") + ' 3</th>\\n    </tr>\\n  </thead>\\n  <tbody>\\n    <tr>\\n      <td></td>\\n      <td></td>\\n      <td></td>\\n    </tr>\\n    <tr>\\n      <td></td>\\n      <td></td>\\n      <td></td>\\n    </tr>\\n  </tbody>\\n</table>';
+          target.value = target.value.slice(0, start) + snippet + target.value.slice(start);
+          target.focus();
+          target.selectionStart = target.selectionEnd = start + snippet.length;
+        });
+        /* --- File upload --- */
         toolbar.querySelector("[data-editor-upload]")?.addEventListener("change", async (event) => {
           const input = event.currentTarget;
           const file = input.files?.[0];
           if (!file) return;
           const status = toolbar.querySelector("[data-upload-status]");
-          if (status) status.textContent = "Uploading...";
+          if (status) status.textContent = adminText("Uploading...");
           const data = new FormData();
           data.append("file", file);
           data.append("altText", file.name);
           try {
             const response = await fetch("${escapeHtml(uploadUrl ?? "")}", { method: "POST", body: data, credentials: "same-origin" });
             const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error || "Upload failed.");
+            if (!response.ok) throw new Error(payload.error || adminText("Upload failed."));
             const start = target.selectionStart ?? target.value.length;
             const snippet = payload.snippet || payload.url;
             target.value = target.value.slice(0, start) + snippet + target.value.slice(start);
             target.focus();
             target.selectionStart = target.selectionEnd = start + snippet.length;
-            if (status) status.textContent = "Uploaded and inserted: " + payload.name;
+            if (status) status.textContent = adminText("Uploaded and inserted") + ": " + payload.name;
           } catch (error) {
-            if (status) status.textContent = error.message || "Upload failed.";
+            if (status) status.textContent = error.message || adminText("Upload failed.");
           } finally {
             input.value = "";
           }
@@ -357,7 +597,7 @@ function postForm(action: string, values?: Record<string, string>, series: Await
           <option value="scheduled" ${values?.status === "scheduled" ? "selected" : ""}>Scheduled</option>
         </select>
         </label>
-        <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /></label>
+        <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /><span class="meta"><span data-i18n="Schedule timezone">Schedule timezone</span>: <code>${escapeHtml(config.scheduleTimeZone)}</code></span></label>
         </div>
       </details>
       <details class="editor-section editor-section-compact editor-collapsible">
@@ -372,8 +612,10 @@ function postForm(action: string, values?: Record<string, string>, series: Await
         <label class="checkbox-label"><input type="checkbox" name="seoNofollow" value="true" ${values?.seoNofollow === "true" ? "checked" : ""} /> <span>Prevent link following (nofollow)</span></label>
         </div>
       </details>
+      <p class="meta">Only published content has a generated public page. Drafts are saved without a public file, and scheduled content is generated when it is published.</p>
       <div class="row">
-        <button class="button button-primary" type="submit">Save post</button>
+        <button class="button" type="submit" name="submitAction" value="save">Save post</button>
+        <button class="button button-primary" type="submit" name="submitAction" value="publish_generate">Publish and generate page</button>
       </div>
     </form>
     ${slugAutomationScript()}
@@ -411,7 +653,7 @@ function pageForm(action: string, values?: Record<string, string>, groups: Await
           <option value="scheduled" ${values?.status === "scheduled" ? "selected" : ""}>Scheduled</option>
         </select>
         </label>
-        <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /></label>
+        <label>Published at <input type="datetime-local" name="publishedAt" value="${escapeHtml(values?.publishedAt ?? "")}" /><span class="meta"><span data-i18n="Schedule timezone">Schedule timezone</span>: <code>${escapeHtml(config.scheduleTimeZone)}</code></span></label>
         </div>
       </details>
       <details class="editor-section editor-section-compact editor-collapsible">
@@ -426,8 +668,10 @@ function pageForm(action: string, values?: Record<string, string>, groups: Await
         <label class="checkbox-label"><input type="checkbox" name="seoNofollow" value="true" ${values?.seoNofollow === "true" ? "checked" : ""} /> <span>Prevent link following (nofollow)</span></label>
         </div>
       </details>
+      <p class="meta">Only published content has a generated public page. Drafts are saved without a public file, and scheduled content is generated when it is published.</p>
       <div class="row">
-        <button class="button button-primary" type="submit">Save page</button>
+        <button class="button" type="submit" name="submitAction" value="save">Save page</button>
+        <button class="button button-primary" type="submit" name="submitAction" value="publish_generate">Publish and generate page</button>
       </div>
     </form>
     ${slugAutomationScript()}
@@ -682,7 +926,7 @@ adminRoutes.get("/users", async (c) => {
             <td><strong>${escapeHtml(item.displayName)}</strong><br /><span class="meta">${escapeHtml(item.email)}</span></td>
             <td>${item.roles.map((role) => `<span style="display:inline-block; margin:2px 4px 2px 0; padding:3px 10px; border-radius:100px; background:rgba(65,201,180,0.1); color:#2a7a6e; font-size:0.8rem; font-weight:500;">${escapeHtml(role)}</span>`).join("") || "-"}</td>
             <td>${item.isActive ? "Active" : "Inactive"}</td>
-            <td>${item.lastLoginAt ? escapeHtml(new Date(item.lastLoginAt).toLocaleString("en-US")) : "Never"}</td>
+            <td>${item.lastLoginAt ? adminDate(item.lastLoginAt) : "Never"}</td>
             <td>
               <div class="row">
                 ${(canManageOwners || !item.roles.includes("owner")) ? `<a class="button" href="${config.controlPanelPath}/users/${item.id}/edit">Edit</a>` : ""}
@@ -833,7 +1077,7 @@ adminRoutes.get("/", async (c) => {
     <div class="grid" style="margin-top:20px;">
       <article>
         <h2>Operator notifications</h2>
-        ${notifications.map((notification) => `<div style="padding:12px 0; border-bottom:1px solid rgba(31,41,51,0.12);"><p style="margin:0 0 6px;">${escapeHtml(notification.message)}</p><p class="meta">${new Date(notification.createdAt).toLocaleString("en-US")} · ${escapeHtml(notification.action)}</p><form method="post" action="${config.controlPanelPath}/notifications/${notification.id}/read"><button class="button" type="submit">Mark as read</button></form></div>`).join("") || "<p class='meta'>No unread notifications.</p>"}
+        ${notifications.map((notification) => `<div style="padding:12px 0; border-bottom:1px solid rgba(31,41,51,0.12);"><p style="margin:0 0 6px;">${escapeHtml(notification.message)}</p><p class="meta">${adminDate(notification.createdAt)} · ${escapeHtml(notification.action)}</p><form method="post" action="${config.controlPanelPath}/notifications/${notification.id}/read"><button class="button" type="submit">Mark as read</button></form></div>`).join("") || "<p class='meta'>No unread notifications.</p>"}
       </article>
       <article>
         <h2>Recent content</h2>
@@ -846,7 +1090,7 @@ adminRoutes.get("/", async (c) => {
                   <tr>
                     <td><a href="${config.controlPanelPath}/posts/${post.id}/edit">${escapeHtml(post.title)}</a></td>
                     <td>${escapeHtml(post.status)}</td>
-                    <td>${new Date(post.updatedAt).toLocaleString("en-US")}</td>
+                    <td>${adminDate(post.updatedAt)}</td>
                   </tr>`,
               )
               .join("")}
@@ -876,6 +1120,39 @@ adminRoutes.post("/notifications/:id/read", async (c) => {
   return c.redirect(config.controlPanelPath);
 });
 
+adminRoutes.get("/settings/permalinks", async (c) => {
+  const current = await getPostPermalinkPattern();
+  return c.html(adminLayout("Permalink Settings", c.get("sessionUser"), permalinkSettingsForm(current, queryNotice(c))));
+});
+
+adminRoutes.post("/settings/permalinks", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const requested = String((await c.req.formData()).get("pattern") ?? "");
+  const previous = await getPostPermalinkPattern();
+  if (!isPostPermalinkPattern(requested)) {
+    return c.html(adminLayout("Permalink Settings", user, permalinkSettingsForm(previous, noticeCard("Select a valid permalink structure.", "error"))), 400);
+  }
+  try {
+    await setPostPermalinkPattern(requested);
+    await renderPublishedArtifacts();
+  } catch (error) {
+    await setPostPermalinkPattern(previous);
+    await renderPublishedArtifacts().catch(() => undefined);
+    const message = error instanceof Error ? error.message : "Unable to update permalink structure.";
+    return c.html(adminLayout("Permalink Settings", user, permalinkSettingsForm(previous, noticeCard(message, "error"))), 500);
+  }
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "settings.permalink_update",
+    targetType: "setting",
+    targetId: null,
+    summary: `Changed post permalink structure from "${previous}" to "${requested}" and regenerated public artifacts.`,
+    ipAddress: requestIp(c),
+  });
+  return c.redirect(`${config.controlPanelPath}/settings/permalinks?success=${encodeURIComponent("Permalink structure saved and public pages regenerated.")}`);
+});
+
 adminRoutes.get("/posts", async (c) => {
   const user = c.get("sessionUser");
   const q = c.req.query("q") ?? "";
@@ -883,9 +1160,10 @@ adminRoutes.get("/posts", async (c) => {
   const category = c.req.query("category") ?? "";
   const posts = await listPosts({ page: 1, limit: 50, status, category: category || undefined, search: q || undefined });
   const series = await listSeries();
+  const permalinkPattern = await getPostPermalinkPattern();
   const seriesById = new Map(series.map((item) => [item.id, item.title]));
-  const postSeriesIds = new Map(await Promise.all(posts.items.map(async (post) => [post.id, await getPostSeriesId(post.id)] as const)));
-  const body = `
+  const postSeriesIds = await listPostSeriesAssignments(posts.items.map((post) => post.id));
+  const body = `<div class="content-list-page">
     ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;">
       <a class="button button-primary" href="${config.controlPanelPath}/posts/new">New post</a>
@@ -906,19 +1184,23 @@ adminRoutes.get("/posts", async (c) => {
         <button class="button" type="submit">Filter</button>
       </div>
     </form>
-    <table>
-      <thead><tr><th>Title</th><th>Status</th><th>Series</th><th>Categories</th><th>Updated</th><th>Actions</th></tr></thead>
+    <table class="data-table">
+      <thead><tr><th>Title</th><th>Status</th><th>Series</th><th>Comments</th><th>Categories</th><th>Generated page</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${posts.items
           .map(
             (post) => `
               <tr>
-                <td><a href="${config.controlPanelPath}/posts/${post.id}/edit">${escapeHtml(post.title)}</a></td>
+                <td class="cell-long"><a href="${config.controlPanelPath}/posts/${post.id}/edit">${escapeHtml(post.title)}</a></td>
                 <td>${escapeHtml(post.status)}</td>
                 <td>${escapeHtml(seriesById.get(postSeriesIds.get(post.id) ?? 0) ?? "No series")}</td>
-                <td>${escapeHtml(post.categories.join(", "))}</td>
-                <td>${new Date(post.updatedAt).toLocaleString("en-US")}</td>
-                <td>
+                <td><form method="post" action="${config.controlPanelPath}/posts/${post.id}/comments-policy" class="row"><select name="commentsPolicy" aria-label="Comment setting"><option value="inherit" ${post.commentsPolicy === "inherit" ? "selected" : ""}>Inherit series setting</option><option value="enabled" ${post.commentsPolicy === "enabled" ? "selected" : ""}>Allow comments</option><option value="disabled" ${post.commentsPolicy === "disabled" ? "selected" : ""}>Disallow comments</option></select><button class="button" type="submit">Save</button></form><span class="meta">${post.commentsEnabled ? "Comments enabled" : "Comments disabled"}</span></td>
+                <td class="cell-long">${escapeHtml(post.categories.join(", "))}</td>
+                <td class="cell-long">${post.status === "published"
+                  ? `<a href="${escapeHtml(postPermalinkPath(post, permalinkPattern))}" target="_blank" rel="noopener noreferrer">Open generated page <span aria-hidden="true">↗</span></a><br /><code>${escapeHtml(postPermalinkPath(post, permalinkPattern))}</code>`
+                  : `<span class="meta">Not generated</span>`}</td>
+                <td>${adminDate(post.updatedAt)}</td>
+                <td class="cell-actions">
                   <div class="row">
                     <a class="button" href="${config.controlPanelPath}/posts/${post.id}/edit">Edit</a>
                     <form method="post" action="${config.controlPanelPath}/posts/${post.id}/delete">
@@ -931,9 +1213,47 @@ adminRoutes.get("/posts", async (c) => {
           .join("")}
       </tbody>
     </table>
-  `;
+  </div>`;
 
-  return c.html(adminLayout("Posts", user, body));
+  return c.html(adminLayout("Posts", user, body, "wide-list"));
+});
+
+adminRoutes.post("/posts/:id/comments-policy", async (c) => {
+  const form = await c.req.formData();
+  const policy = String(form.get("commentsPolicy") ?? "inherit") as "inherit" | "enabled" | "disabled";
+  try {
+    await setPostCommentsPolicy(Number(c.req.param("id")), policy);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.redirect(`${config.controlPanelPath}/posts?error=${encodeURIComponent(error.message)}`);
+    throw error;
+  }
+  await renderPublishedArtifacts();
+  await writeAuditLog({ actorUserId: c.get("sessionUser")?.id ?? null, action: "post.comments_policy", targetType: "post", targetId: c.req.param("id"), summary: `Changed comment policy for post #${c.req.param("id")} to ${policy}.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/posts?success=${encodeURIComponent("Comment setting saved.")}`);
+});
+
+adminRoutes.get("/comments", async (c) => {
+  const status = c.req.query("status") === "approved" ? "approved" : c.req.query("status") === "pending" ? "pending" : "any";
+  const comments = await listComments(status);
+  const body = `${queryNotice(c)}<form method="get" action="${config.controlPanelPath}/comments" class="row" style="margin-bottom:20px"><label>Status<select name="status"><option value="any" ${status === "any" ? "selected" : ""}>Any status</option><option value="pending" ${status === "pending" ? "selected" : ""}>Pending</option><option value="approved" ${status === "approved" ? "selected" : ""}>Approved</option></select></label><button class="button" type="submit">Filter</button></form><table><thead><tr><th>Article</th><th>Author</th><th>Comment</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>${comments.map((comment) => `<tr><td class="cell-long">${escapeHtml(comment.postTitle)}</td><td class="cell-long"><strong>${escapeHtml(comment.authorName)}</strong><br><span class="meta">${escapeHtml(comment.authorEmail)}</span></td><td class="cell-long">${escapeHtml(comment.body)}</td><td>${escapeHtml(comment.status)}</td><td>${adminDate(comment.createdAt)}</td><td class="cell-actions"><div class="row">${comment.status === "pending" ? `<form method="post" action="${config.controlPanelPath}/comments/${comment.id}/approve"><button class="button button-primary" type="submit">Approve</button></form>` : ""}<form method="post" action="${config.controlPanelPath}/comments/${comment.id}/delete"><button class="button" type="submit">Delete</button></form></div></td></tr>`).join("") || `<tr><td colspan="6">No comments found.</td></tr>`}</tbody></table>`;
+  return c.html(adminLayout("Comments", c.get("sessionUser"), body));
+});
+
+adminRoutes.post("/comments/:id/approve", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  await approveComment(Number(c.req.param("id")), user.id);
+  await renderPublishedArtifacts();
+  await writeAuditLog({ actorUserId: user.id, action: "comment.approve", targetType: "post_comment", targetId: c.req.param("id"), summary: `Approved comment #${c.req.param("id")}.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/comments?success=${encodeURIComponent("Comment approved.")}`);
+});
+
+adminRoutes.post("/comments/:id/delete", async (c) => {
+  const user = c.get("sessionUser");
+  await deleteComment(Number(c.req.param("id")));
+  await renderPublishedArtifacts();
+  await writeAuditLog({ actorUserId: user?.id ?? null, action: "comment.delete", targetType: "post_comment", targetId: c.req.param("id"), summary: `Deleted comment #${c.req.param("id")}.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/comments?success=${encodeURIComponent("Comment deleted.")}`);
 });
 
 adminRoutes.get("/posts/new", async (c) => {
@@ -949,9 +1269,10 @@ adminRoutes.post("/posts", async (c) => {
 
   const form = await c.req.formData();
   const values = postValuesFromForm(form);
+  const publishAndGenerate = applyPublishAndGenerateAction(form, values);
   const series = await listSeries();
   const selectedSeries = series.find((item) => item.id === Number(form.get("seriesId")));
-  values.slug = autoScopedSlug(values.slug, values.title, selectedSeries?.slug);
+  values.slug = buildScopedSlug(values.slug, values.title, selectedSeries?.slug);
   let post;
   try {
     if (values.status !== "draft" && !hasPermission(user, "posts.publish")) throw new AppValidationError("You do not have permission to publish posts.");
@@ -963,7 +1284,7 @@ adminRoutes.post("/posts", async (c) => {
         bodyMd: values.bodyMd,
         bodyHtml: values.bodyHtml,
         status: values.status as "draft" | "published" | "scheduled",
-        publishedAt: values.publishedAt || null,
+        publishedAt: scheduleTimestampForStorage(values.publishedAt, config.scheduleTimeZone),
         categorySlugs: splitCsv(form.get("categories")),
         tagSlugs: splitCsv(form.get("tags")),
         seoTitle: values.seoTitle,
@@ -973,11 +1294,10 @@ adminRoutes.post("/posts", async (c) => {
         seoKeywords: values.seoKeywords,
         seoNoindex: values.seoNoindex === "true",
         seoNofollow: values.seoNofollow === "true",
+        seriesId: selectedSeries?.id ?? null,
       },
       user.id,
     );
-    const seriesId = Number(form.get("seriesId"));
-    if (seriesId > 0 && post) await assignPostToSeries(seriesId, post.id, 0);
   } catch (error) {
     if (error instanceof AppValidationError) {
       return c.html(adminLayout("New Post", user, noticeCard(error.message, "error") + postForm(`${config.controlPanelPath}/posts`, values, series)), 400);
@@ -994,7 +1314,8 @@ adminRoutes.post("/posts", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/posts/${post?.id ?? ""}/edit?success=${encodeURIComponent("Post saved.")}`);
+  const success = publishAndGenerate ? "Post published and generated." : "Post saved.";
+  return c.redirect(`${config.controlPanelPath}/posts/${post?.id ?? ""}/edit?success=${encodeURIComponent(success)}`);
 });
 
 adminRoutes.post("/posts/media/upload", async (c) => {
@@ -1034,7 +1355,7 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
         bodyMd: post.bodyMd ?? "",
         bodyHtml: post.bodyHtml ?? "",
         status: post.status,
-        publishedAt: post.publishedAt ? new Date(post.publishedAt).toISOString().slice(0, 16) : "",
+        publishedAt: scheduleTimestampForInput(post.publishedAt, config.scheduleTimeZone),
         categories: post.categories.join(", "),
         tags: post.tags.join(", "),
         seoTitle: post.seoTitle ?? "",
@@ -1063,6 +1384,7 @@ adminRoutes.post("/posts/:id", async (c) => {
   const mediaItems = await listMedia();
   const series = await listSeries();
   const values = postValuesFromForm(form);
+  const publishAndGenerate = applyPublishAndGenerateAction(form, values);
   try {
     if (values.status !== "draft" && !hasPermission(user, "posts.publish")) throw new AppValidationError("You do not have permission to publish posts.");
     await updatePost(Number(c.req.param("id")), {
@@ -1072,7 +1394,7 @@ adminRoutes.post("/posts/:id", async (c) => {
       bodyMd: values.bodyMd,
       bodyHtml: values.bodyHtml,
       status: values.status as "draft" | "published" | "scheduled",
-      publishedAt: values.publishedAt || null,
+      publishedAt: scheduleTimestampForStorage(values.publishedAt, config.scheduleTimeZone),
       categorySlugs: splitCsv(form.get("categories")),
       tagSlugs: splitCsv(form.get("tags")),
       seoTitle: values.seoTitle,
@@ -1082,10 +1404,8 @@ adminRoutes.post("/posts/:id", async (c) => {
       seoKeywords: values.seoKeywords,
       seoNoindex: values.seoNoindex === "true",
       seoNofollow: values.seoNofollow === "true",
+      seriesId: Number(form.get("seriesId")) > 0 ? Number(form.get("seriesId")) : null,
     }, user?.id);
-    const seriesId = Number(form.get("seriesId"));
-    if (seriesId > 0) await assignPostToSeries(seriesId, Number(c.req.param("id")), 0);
-    else await removePostFromSeries(Number(c.req.param("id")));
   } catch (error) {
     if (error instanceof AppValidationError) {
       return c.html(
@@ -1117,7 +1437,8 @@ adminRoutes.post("/posts/:id", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit?success=${encodeURIComponent("Post updated.")}`);
+  const success = publishAndGenerate ? "Post published and generated." : "Post updated.";
+  return c.redirect(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit?success=${encodeURIComponent(success)}`);
 });
 
 adminRoutes.post("/posts/:id/delete", async (c) => {
@@ -1153,7 +1474,7 @@ adminRoutes.get("/posts/:id/revisions", async (c) => {
         ${revisions.map((revision) => {
           const snapshot = revision.snapshot as import("../../core/types").PostRecord;
           return `<tr>
-            <td>${new Date(revision.createdAt).toLocaleString("en-US")}</td>
+            <td>${adminDate(revision.createdAt)}</td>
             <td>${escapeHtml(revision.creatorName ?? "System")}</td>
             <td>${escapeHtml(snapshot.title)}</td>
             <td>${escapeHtml(snapshot.status)}</td>
@@ -1205,7 +1526,12 @@ adminRoutes.post("/posts/:id/revisions/:revisionId/restore", async (c) => {
 });
 
 adminRoutes.post("/render", async (c) => {
-  await renderPublishedArtifacts();
+  try {
+    await renderPublishedArtifacts();
+  } catch (error) {
+    logError("renderer.regeneration_failed", "Published artifact regeneration failed.", { error });
+    return c.redirect(`${config.controlPanelPath}/posts?error=${encodeURIComponent("Page generation failed. Check the application logs and output-directory permissions.")}`);
+  }
   await writeAuditLog({
     actorUserId: c.get("sessionUser")?.id ?? null,
     action: "renderer.regenerate",
@@ -1214,7 +1540,7 @@ adminRoutes.post("/render", async (c) => {
     summary: "Regenerated published CMS artifacts.",
     ipAddress: requestIp(c),
   });
-  return c.redirect(`${config.controlPanelPath}/posts`);
+  return c.redirect(`${config.controlPanelPath}/posts?success=${encodeURIComponent("Published pages regenerated successfully.")}`);
 });
 
 adminRoutes.get("/pages", async (c) => {
@@ -1224,8 +1550,8 @@ adminRoutes.get("/pages", async (c) => {
   const pages = await listPages({ page: 1, limit: 50, status, search: q || undefined });
   const groups = await listPageGroups();
   const groupById = new Map(groups.map((item) => [item.id, item.title]));
-  const pageGroupIds = new Map(await Promise.all(pages.items.map(async (page) => [page.id, await getPageGroupId(page.id)] as const)));
-  const body = `
+  const pageGroupIds = await listPageGroupAssignments(pages.items.map((page) => page.id));
+  const body = `<div class="content-list-page">
     ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;">
       <a class="button button-primary" href="${config.controlPanelPath}/pages/new">New page</a>
@@ -1242,18 +1568,18 @@ adminRoutes.get("/pages", async (c) => {
         <button class="button" type="submit">Filter</button>
       </div>
     </form>
-    <table>
+    <table class="data-table">
       <thead><tr><th>Title</th><th>Status</th><th>Page group</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${pages.items
           .map(
             (page) => `
               <tr>
-                <td><a href="${config.controlPanelPath}/pages/${page.id}/edit">${escapeHtml(page.title)}</a></td>
+                <td class="cell-long"><a href="${config.controlPanelPath}/pages/${page.id}/edit">${escapeHtml(page.title)}</a></td>
                 <td>${escapeHtml(page.status)}</td>
                 <td>${escapeHtml(groupById.get(pageGroupIds.get(page.id) ?? 0) ?? "No page group")}</td>
-                <td>${new Date(page.updatedAt).toLocaleString("en-US")}</td>
-                <td>
+                <td>${adminDate(page.updatedAt)}</td>
+                <td class="cell-actions">
                   <div class="row">
                     <a class="button" href="${config.controlPanelPath}/pages/${page.id}/edit">Edit</a>
                     <a class="button" href="/cms/pages/${page.slug}.html">View output</a>
@@ -1267,9 +1593,9 @@ adminRoutes.get("/pages", async (c) => {
           .join("")}
       </tbody>
     </table>
-  `;
+  </div>`;
 
-  return c.html(adminLayout("Pages", user, body));
+  return c.html(adminLayout("Pages", user, body, "wide-list"));
 });
 
 adminRoutes.get("/pages/new", async (c) => {
@@ -1310,10 +1636,10 @@ adminRoutes.get("/forms", async (c) => {
           .map(
             (form) => `
               <tr>
-                <td><a href="${config.controlPanelPath}/forms/${form.id}/edit">${escapeHtml(form.title)}</a></td>
+                <td class="cell-long"><a href="${config.controlPanelPath}/forms/${form.id}/edit">${escapeHtml(form.title)}</a></td>
                 <td>${escapeHtml(form.status)}</td>
                 <td>${form.fields.length}</td>
-                <td>
+                <td class="cell-actions">
                   <div class="row">
                     <a class="button" href="${config.controlPanelPath}/forms/${form.id}/edit">Edit</a>
                     <a class="button" href="/cms/forms/${form.slug}.html">View HTML</a>
@@ -1427,8 +1753,8 @@ adminRoutes.get("/forms/:id/edit", async (c) => {
               .map(
                 (submission) => `
                   <tr>
-                    <td>${new Date(submission.createdAt).toLocaleString("en-US")}</td>
-                    <td><code>${escapeHtml(JSON.stringify(submission.payload))}</code></td>
+                    <td>${adminDate(submission.createdAt)}</td>
+                    <td class="cell-long"><code>${escapeHtml(JSON.stringify(submission.payload))}</code></td>
                   </tr>`,
               )
               .join("") || "<tr><td colspan='2'>No submissions yet.</td></tr>"}
@@ -1471,8 +1797,8 @@ adminRoutes.post("/forms/:id", async (c) => {
                 .map(
                   (submission) => `
                     <tr>
-                      <td>${new Date(submission.createdAt).toLocaleString("en-US")}</td>
-                      <td><code>${escapeHtml(JSON.stringify(submission.payload))}</code></td>
+                      <td>${adminDate(submission.createdAt)}</td>
+                      <td class="cell-long"><code>${escapeHtml(JSON.stringify(submission.payload))}</code></td>
                     </tr>`,
                 )
                 .join("") || "<tr><td colspan='2'>No submissions yet.</td></tr>"}
@@ -1518,9 +1844,10 @@ adminRoutes.post("/pages", async (c) => {
 
   const form = await c.req.formData();
   const values = pageValuesFromForm(form);
+  const publishAndGenerate = applyPublishAndGenerateAction(form, values);
   const groups = await listPageGroups();
   const selectedGroup = groups.find((item) => item.id === Number(form.get("pageGroupId")));
-  values.slug = autoScopedSlug(values.slug, values.title, selectedGroup?.slug);
+  values.slug = buildScopedSlug(values.slug, values.title, selectedGroup?.slug);
   let page;
   try {
     if (values.status !== "draft" && !hasPermission(user, "pages.publish")) throw new AppValidationError("You do not have permission to publish pages.");
@@ -1532,7 +1859,7 @@ adminRoutes.post("/pages", async (c) => {
         bodyMd: values.bodyMd,
         bodyHtml: values.bodyHtml,
         status: values.status as "draft" | "published" | "scheduled",
-        publishedAt: values.publishedAt || null,
+        publishedAt: scheduleTimestampForStorage(values.publishedAt, config.scheduleTimeZone),
         seoTitle: values.seoTitle,
         seoDescription: values.seoDescription,
         seoCanonicalUrl: values.seoCanonicalUrl,
@@ -1540,11 +1867,10 @@ adminRoutes.post("/pages", async (c) => {
         seoKeywords: values.seoKeywords,
         seoNoindex: values.seoNoindex === "true",
         seoNofollow: values.seoNofollow === "true",
+        pageGroupId: selectedGroup?.id ?? null,
       },
       user.id,
     );
-    const groupId = Number(form.get("pageGroupId"));
-    if (groupId > 0 && page) await assignPageToGroup(groupId, page.id, 0);
   } catch (error) {
     if (error instanceof AppValidationError) {
       return c.html(adminLayout("New Page", user, noticeCard(error.message, "error") + pageForm(`${config.controlPanelPath}/pages`, values, groups)), 400);
@@ -1561,7 +1887,8 @@ adminRoutes.post("/pages", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/pages/${page?.id ?? ""}/edit?success=${encodeURIComponent("Page saved.")}`);
+  const success = publishAndGenerate ? "Page published and generated." : "Page saved.";
+  return c.redirect(`${config.controlPanelPath}/pages/${page?.id ?? ""}/edit?success=${encodeURIComponent(success)}`);
 });
 
 adminRoutes.get("/pages/:id/edit", async (c) => {
@@ -1585,7 +1912,7 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
         bodyMd: page.bodyMd ?? "",
         bodyHtml: page.bodyHtml ?? "",
         status: page.status,
-        publishedAt: page.publishedAt ? new Date(page.publishedAt).toISOString().slice(0, 16) : "",
+        publishedAt: scheduleTimestampForInput(page.publishedAt, config.scheduleTimeZone),
         seoTitle: page.seoTitle ?? "",
         seoDescription: page.seoDescription ?? "",
         seoCanonicalUrl: page.seoCanonicalUrl ?? "",
@@ -1612,6 +1939,7 @@ adminRoutes.post("/pages/:id", async (c) => {
   const mediaItems = await listMedia();
   const groups = await listPageGroups();
   const values = pageValuesFromForm(form);
+  const publishAndGenerate = applyPublishAndGenerateAction(form, values);
   try {
     if (values.status !== "draft" && !hasPermission(user, "pages.publish")) throw new AppValidationError("You do not have permission to publish pages.");
     await updatePage(Number(c.req.param("id")), {
@@ -1621,7 +1949,7 @@ adminRoutes.post("/pages/:id", async (c) => {
       bodyMd: values.bodyMd,
       bodyHtml: values.bodyHtml,
       status: values.status as "draft" | "published" | "scheduled",
-      publishedAt: values.publishedAt || null,
+      publishedAt: scheduleTimestampForStorage(values.publishedAt, config.scheduleTimeZone),
       seoTitle: values.seoTitle,
       seoDescription: values.seoDescription,
       seoCanonicalUrl: values.seoCanonicalUrl,
@@ -1629,10 +1957,8 @@ adminRoutes.post("/pages/:id", async (c) => {
       seoKeywords: values.seoKeywords,
       seoNoindex: values.seoNoindex === "true",
       seoNofollow: values.seoNofollow === "true",
+      pageGroupId: Number(form.get("pageGroupId")) > 0 ? Number(form.get("pageGroupId")) : null,
     }, user?.id);
-    const groupId = Number(form.get("pageGroupId"));
-    if (groupId > 0) await assignPageToGroup(groupId, Number(c.req.param("id")), 0);
-    else await removePageFromGroup(Number(c.req.param("id")));
   } catch (error) {
     if (error instanceof AppValidationError) {
       return c.html(
@@ -1664,7 +1990,8 @@ adminRoutes.post("/pages/:id", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
-  return c.redirect(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit?success=${encodeURIComponent("Page updated.")}`);
+  const success = publishAndGenerate ? "Page published and generated." : "Page updated.";
+  return c.redirect(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit?success=${encodeURIComponent(success)}`);
 });
 
 adminRoutes.post("/pages/:id/delete", async (c) => {
@@ -1700,7 +2027,7 @@ adminRoutes.get("/pages/:id/revisions", async (c) => {
         ${revisions.map((revision) => {
           const snapshot = revision.snapshot as import("../../core/types").PageRecord;
           return `<tr>
-            <td>${new Date(revision.createdAt).toLocaleString("en-US")}</td>
+            <td>${adminDate(revision.createdAt)}</td>
             <td>${escapeHtml(revision.creatorName ?? "System")}</td>
             <td>${escapeHtml(snapshot.title)}</td>
             <td>${escapeHtml(snapshot.status)}</td>
@@ -1752,15 +2079,16 @@ adminRoutes.post("/pages/:id/revisions/:revisionId/restore", async (c) => {
 adminRoutes.get("/series", async (c) => {
   const user = c.get("sessionUser");
   const series = await listSeries();
-  const body = `${queryNotice(c)}
+  const body = `<div class="content-list-page">${queryNotice(c)}
     <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:20px;">
       <div><p class="meta">Group related articles into an ordered editorial thread.</p></div>
       <a class="button button-primary" href="${config.controlPanelPath}/series/new">New series</a>
     </div>
-    <table><thead><tr><th>Series</th><th>Slug</th><th>Articles</th><th>Actions</th></tr></thead><tbody>
-      ${series.map((item) => `<tr><td><strong>${escapeHtml(item.title)}</strong><br><span class="meta">${escapeHtml(item.description ?? "")}</span></td><td><code>${escapeHtml(item.slug)}</code></td><td>${item.postCount}</td><td><div class="row"><a class="button" href="${config.controlPanelPath}/series/${item.id}/edit">Manage articles</a><form method="post" action="${config.controlPanelPath}/series/${item.id}/delete"><button class="button" type="submit">Delete</button></form></div></td></tr>`).join("") || "<tr><td colspan='4'>No series yet.</td></tr>"}
-    </tbody></table>`;
-  return c.html(adminLayout("Series", user, body));
+    <table class="data-table"><thead><tr><th>Series</th><th>Slug</th><th>Articles</th><th>Comments</th><th>Actions</th></tr></thead><tbody>
+      ${series.map((item) => `<tr><td class="cell-long"><strong>${escapeHtml(item.title)}</strong><br><span class="meta">${escapeHtml(item.description ?? "")}</span></td><td><code>${escapeHtml(item.slug)}</code></td><td>${item.postCount}</td><td>${item.commentsEnabled ? "Comments enabled" : "Comments disabled"}</td><td class="cell-actions"><div class="row"><a class="button" href="${config.controlPanelPath}/series/${item.id}/edit">Manage articles</a><form method="post" action="${config.controlPanelPath}/series/${item.id}/delete"><button class="button" type="submit">Delete</button></form></div></td></tr>`).join("") || "<tr><td colspan='5'>No series yet.</td></tr>"}
+    </tbody></table>
+  </div>`;
+  return c.html(adminLayout("Series", user, body, "wide-list"));
 });
 
 adminRoutes.get("/series/new", (c) => c.html(adminLayout("New Series", c.get("sessionUser"), `${queryNotice(c)}
@@ -1768,13 +2096,14 @@ adminRoutes.get("/series/new", (c) => c.html(adminLayout("New Series", c.get("se
     <label>Series title <input name="title" required placeholder="e.g. CMS development diary" /></label>
     <label>Slug <input name="slug" required placeholder="cms-development-diary" /></label>
     <label>Description <textarea name="description"></textarea></label>
+    <label class="checkbox-label"><input type="checkbox" name="commentsEnabled" value="true" /> <span>Enable comments for this series</span></label>
     <button class="button button-primary" type="submit">Create series</button>
   </form>`)));
 
 adminRoutes.post("/series", async (c) => {
   const form = await c.req.formData();
   try {
-    const item = await createSeries({ title: String(form.get("title") ?? ""), slug: String(form.get("slug") ?? ""), description: String(form.get("description") ?? "") });
+    const item = await createSeries({ title: String(form.get("title") ?? ""), slug: String(form.get("slug") ?? ""), description: String(form.get("description") ?? ""), commentsEnabled: form.has("commentsEnabled") });
     return c.redirect(`${config.controlPanelPath}/series/${item?.id ?? ""}/edit?success=${encodeURIComponent("Series created.")}`);
   } catch (error) {
     if (error instanceof AppValidationError) return c.html(adminLayout("New Series", c.get("sessionUser"), noticeCard(error.message, "error")), 400);
@@ -1796,6 +2125,8 @@ adminRoutes.get("/series/:id/edit", async (c) => {
         <label>Series title <input name="title" value="${escapeHtml(item.title)}" required /></label>
         <label>Slug <input name="slug" value="${escapeHtml(item.slug)}" required /></label>
         <label>Description <textarea name="description">${escapeHtml(item.description ?? "")}</textarea></label>
+        <label class="checkbox-label"><input type="checkbox" name="commentsEnabled" value="true" ${item.commentsEnabled ? "checked" : ""} /> <span>Enable comments for this series</span></label>
+        <p class="meta">Turning this off closes comments on every article in the series. When enabled, individual articles can still disallow comments from the post list.</p>
         <button class="button button-primary" type="submit">Save series</button>
       </form>
     </section>
@@ -1815,7 +2146,8 @@ adminRoutes.get("/series/:id/edit", async (c) => {
 adminRoutes.post("/series/:id", async (c) => {
   const form = await c.req.formData();
   try {
-    await updateSeries(Number(c.req.param("id")), { title: String(form.get("title") ?? ""), slug: String(form.get("slug") ?? ""), description: String(form.get("description") ?? "") });
+    await updateSeries(Number(c.req.param("id")), { title: String(form.get("title") ?? ""), slug: String(form.get("slug") ?? ""), description: String(form.get("description") ?? ""), commentsEnabled: form.has("commentsEnabled") });
+    await renderPublishedArtifacts();
     return c.redirect(`${config.controlPanelPath}/series/${c.req.param("id")}/edit?success=${encodeURIComponent("Series saved.")}`);
   } catch (error) {
     if (error instanceof AppValidationError) return c.redirect(`${config.controlPanelPath}/series/${c.req.param("id")}/edit?error=${encodeURIComponent(error.message)}`);
@@ -1827,23 +2159,29 @@ adminRoutes.post("/series/:id/posts", async (c) => {
   const form = await c.req.formData();
   const postId = Number(form.get("postId"));
   if (postId) await assignPostToSeries(Number(c.req.param("id")), postId, Number(form.get("position") ?? 0));
+  await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/series/${c.req.param("id")}/edit?success=${encodeURIComponent("Article assigned.")}`);
 });
 
 adminRoutes.post("/series/:id/posts/:postId/remove", async (c) => {
   await removePostFromSeries(Number(c.req.param("postId")));
+  await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/series/${c.req.param("id")}/edit?success=${encodeURIComponent("Article removed.")}`);
 });
 
 adminRoutes.post("/series/:id/delete", async (c) => {
   await deleteSeries(Number(c.req.param("id")));
+  await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/series?success=${encodeURIComponent("Series deleted.")}`);
 });
 
 adminRoutes.get("/page-groups", async (c) => {
   const groups = await listPageGroups();
-  const body = `${queryNotice(c)}<div class="row" style="justify-content:space-between; align-items:center; margin-bottom:20px;"><p class="meta">Organize fixed pages under a shared parent and order.</p><a class="button button-primary" href="${config.controlPanelPath}/page-groups/new">New page group</a></div><table><thead><tr><th>Group</th><th>Slug</th><th>Pages</th><th>Actions</th></tr></thead><tbody>${groups.map((item) => `<tr><td><strong>${escapeHtml(item.title)}</strong><br><span class="meta">${escapeHtml(item.description ?? "")}</span></td><td><code>${escapeHtml(item.slug)}</code></td><td>${item.pageCount}</td><td><div class="row"><a class="button" href="${config.controlPanelPath}/page-groups/${item.id}/edit">Manage pages</a><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/delete"><button class="button" type="submit">Delete</button></form></div></td></tr>`).join("") || "<tr><td colspan='4'>No page groups yet.</td></tr>"}</tbody></table>`;
-  return c.html(adminLayout("Page groups", c.get("sessionUser"), body));
+  const body = `<div class="content-list-page">${queryNotice(c)}
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:20px;"><p class="meta">Organize fixed pages under a shared parent and order.</p><a class="button button-primary" href="${config.controlPanelPath}/page-groups/new">New page group</a></div>
+    <table class="data-table"><thead><tr><th>Group</th><th>Slug</th><th>Pages</th><th>Actions</th></tr></thead><tbody>${groups.map((item) => `<tr><td class="cell-long"><strong>${escapeHtml(item.title)}</strong><br><span class="meta">${escapeHtml(item.description ?? "")}</span></td><td><code>${escapeHtml(item.slug)}</code></td><td>${item.pageCount}</td><td class="cell-actions"><div class="row"><a class="button" href="${config.controlPanelPath}/page-groups/${item.id}/edit">Manage pages</a><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/delete"><button class="button" type="submit">Delete</button></form></div></td></tr>`).join("") || "<tr><td colspan='4'>No page groups yet.</td></tr>"}</tbody></table>
+  </div>`;
+  return c.html(adminLayout("Page groups", c.get("sessionUser"), body, "wide-list"));
 });
 
 adminRoutes.get("/page-groups/new", (c) => c.html(adminLayout("New Page Group", c.get("sessionUser"), `<form method="post" action="${config.controlPanelPath}/page-groups" class="form-grid"><label>Group title <input name="title" required placeholder="e.g. Company information" /></label><label>Slug <input name="slug" required placeholder="company" /></label><label>Description <textarea name="description"></textarea></label><button class="button button-primary" type="submit">Create page group</button></form>`)));
@@ -1889,11 +2227,11 @@ adminRoutes.get("/menus", async (c) => {
       <thead><tr><th>Title</th><th>Slug</th><th>Status</th><th>Items</th><th>Actions</th></tr></thead>
       <tbody>
         ${menus.map((menu) => `<tr>
-          <td>${escapeHtml(menu.title)}</td>
+          <td class="cell-long">${escapeHtml(menu.title)}</td>
           <td><code>${escapeHtml(menu.slug)}</code></td>
           <td>${escapeHtml(menu.status)}</td>
           <td>${menu.items.length}</td>
-          <td><div class="row"><a class="button" href="${config.controlPanelPath}/menus/${menu.id}/edit">Edit</a><form method="post" action="${config.controlPanelPath}/menus/${menu.id}/delete"><button class="button" type="submit">Delete</button></form></div></td>
+          <td class="cell-actions"><div class="row"><a class="button" href="${config.controlPanelPath}/menus/${menu.id}/edit">Edit</a><form method="post" action="${config.controlPanelPath}/menus/${menu.id}/delete"><button class="button" type="submit">Delete</button></form></div></td>
         </tr>`).join("") || "<tr><td colspan='5'>No menus yet.</td></tr>"}
       </tbody>
     </table>
@@ -1978,11 +2316,11 @@ adminRoutes.get("/blocks", async (c) => {
       <thead><tr><th>Title</th><th>Slug</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${blocks.map((block) => `<tr>
-          <td>${escapeHtml(block.title)}</td>
+          <td class="cell-long">${escapeHtml(block.title)}</td>
           <td><code>${escapeHtml(block.slug)}</code></td>
           <td>${escapeHtml(block.status)}</td>
-          <td>${new Date(block.updatedAt).toLocaleString("en-US")}</td>
-          <td><div class="row"><a class="button" href="${config.controlPanelPath}/blocks/${block.id}/edit">Edit</a><form method="post" action="${config.controlPanelPath}/blocks/${block.id}/delete"><button class="button" type="submit">Delete</button></form></div></td>
+          <td>${adminDate(block.updatedAt)}</td>
+          <td class="cell-actions"><div class="row"><a class="button" href="${config.controlPanelPath}/blocks/${block.id}/edit">Edit</a><form method="post" action="${config.controlPanelPath}/blocks/${block.id}/delete"><button class="button" type="submit">Delete</button></form></div></td>
         </tr>`).join("") || "<tr><td colspan='5'>No blocks yet.</td></tr>"}
       </tbody>
     </table>
@@ -2048,7 +2386,7 @@ adminRoutes.get("/proposals", async (c) => {
     <h2>AI file proposals</h2>
     <p class="meta">AI agents can suggest public_html changes, but nothing is written until an operator reviews the diff and approves it.</p>
     <table><thead><tr><th>Created</th><th>Path</th><th>Reason</th><th>Actions</th></tr></thead><tbody>
-      ${proposals.map((proposal) => `<tr><td>${new Date(proposal.createdAt).toLocaleString("en-US")}</td><td><code>${escapeHtml(proposal.relativePath)}</code></td><td>${escapeHtml(proposal.reason)}</td><td><a class="button" href="${config.controlPanelPath}/proposals/${proposal.id}">Review</a></td></tr>`).join("") || "<tr><td colspan='4'>No pending proposals.</td></tr>"}
+      ${proposals.map((proposal) => `<tr><td>${adminDate(proposal.createdAt)}</td><td><code>${escapeHtml(proposal.relativePath)}</code></td><td>${escapeHtml(proposal.reason)}</td><td><a class="button" href="${config.controlPanelPath}/proposals/${proposal.id}">Review</a></td></tr>`).join("") || "<tr><td colspan='4'>No pending proposals.</td></tr>"}
     </tbody></table>
   `;
   return c.html(adminLayout("AI Proposals", user, body));
@@ -2101,23 +2439,37 @@ adminRoutes.post("/proposals/:id/reject", async (c) => {
 
 adminRoutes.get("/media", async (c) => {
   const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
   const items = await listMedia();
+  const usage = await getMediaStorageUsage(user.id);
+  const storage = mediaStorageState(usage);
+  const quotaLabel = (usedBytes: number, quotaBytes: number) =>
+    `${formatByteSize(usedBytes)} / ${quotaBytes > 0 ? formatByteSize(quotaBytes) : '<span data-i18n="Unlimited">Unlimited</span>'}`;
+  const uploadDisabled = storage.uploadAllowed ? "" : " disabled";
   const body = `
+    ${queryNotice(c)}
     <div class="grid">
       <article>
         <h2>Upload media</h2>
         <form method="post" action="${config.controlPanelPath}/media" enctype="multipart/form-data" class="form-grid">
-          <label>File <input type="file" name="file" required /></label>
-          <label>Alt text <input name="altText" placeholder="Helpful for images and embeds" /></label>
+          <label>File <input type="file" name="file" required${uploadDisabled} /></label>
+          <label>Alt text <input name="altText" placeholder="Helpful for images and embeds"${uploadDisabled} /></label>
           <div class="row">
-            <button class="button button-primary" type="submit">Upload file</button>
+            <button class="button button-primary" type="submit"${uploadDisabled}>Upload file</button>
           </div>
           <p class="meta">Allowed types: JPG, PNG, WebP, GIF, SVG, MP4, WebM, OGG video, MP3, M4A, OGG audio, WAV, PDF, TXT.</p>
         </form>
       </article>
       <aside>
-        <h2>Usage</h2>
-        <p>Uploaded files are published under the <code>/cms/uploads/</code> path so existing HTML and PHP pages can reference them directly. Posts and pages can now use image, video, audio, and PDF embed snippets from their edit screens.</p>
+        <h2>Storage usage</h2>
+        <dl style="display:grid;grid-template-columns:max-content minmax(0,1fr);gap:10px 16px;margin:0 0 16px;">
+          <dt class="meta">Site storage</dt><dd style="margin:0;">${quotaLabel(storage.site.usedBytes, storage.site.quotaBytes)}</dd>
+          <dt class="meta">Your storage</dt><dd style="margin:0;">${quotaLabel(storage.user.usedBytes, storage.user.quotaBytes)}</dd>
+          <dt class="meta">Per-file limit</dt><dd style="margin:0;">${formatByteSize(storage.maxUploadBytes)}</dd>
+          <dt class="meta">Upload status</dt><dd style="margin:0;">${storage.uploadAllowed ? "Upload allowed" : "Upload blocked by role policy"}</dd>
+        </dl>
+        <p class="meta">Storage quotas are calculated from media records in PostgreSQL.</p>
+        <p>Uploaded files are published under the <code>/cms/uploads/</code> path so existing HTML and PHP pages can reference them directly.</p>
       </aside>
     </div>
     <div style="margin-top:20px;">
@@ -2133,13 +2485,13 @@ adminRoutes.get("/media", async (c) => {
               return `
                 <tr>
                   <td>${preview}</td>
-                  <td>
+                  <td class="cell-long">
                     <strong>${escapeHtml(item.originalName)}</strong>
-                    <div class="meta">${item.sizeBytes} bytes</div>
+                    <div class="meta">${formatByteSize(item.sizeBytes)}</div>
                   </td>
                   <td>${escapeHtml(item.mimeType)}</td>
-                  <td><a href="${item.publicUrl}">${escapeHtml(item.publicUrl)}</a></td>
-                  <td>
+                  <td class="cell-long"><a href="${item.publicUrl}">${escapeHtml(item.publicUrl)}</a></td>
+                  <td class="cell-actions">
                     <div class="row">
                       <a class="button" href="${item.publicUrl}">Open</a>
                       <form method="post" action="${config.controlPanelPath}/media/${item.id}/delete">
@@ -2171,16 +2523,24 @@ adminRoutes.post("/media", async (c) => {
     return c.text("File is required", 400);
   }
 
-  await uploadMedia(file, altText, user.id);
-  await writeAuditLog({
-    actorUserId: user.id,
-    action: "media.upload",
-    targetType: "media",
-    targetId: file.name,
-    summary: `Uploaded media "${file.name}".`,
-    ipAddress: requestIp(c),
-  });
-  return c.redirect(`${config.controlPanelPath}/media`);
+  try {
+    const media = await uploadMedia(file, altText, user.id);
+    await writeAuditLog({
+      actorUserId: user.id,
+      action: "media.upload",
+      targetType: "media",
+      targetId: media?.id ?? file.name,
+      summary: `Uploaded media "${file.name}".`,
+      ipAddress: requestIp(c),
+    });
+    return c.redirect(`${config.controlPanelPath}/media?success=${encodeURIComponent("Media uploaded.")}`);
+  } catch (error) {
+    if (!(error instanceof AppValidationError)) {
+      logError("media.upload_failed", "Media upload failed.", { error, userId: user.id });
+    }
+    const message = error instanceof AppValidationError ? error.message : "Unable to upload media.";
+    return c.redirect(`${config.controlPanelPath}/media?error=${encodeURIComponent(message)}`);
+  }
 });
 
 adminRoutes.post("/media/:id/delete", async (c) => {
@@ -2218,7 +2578,7 @@ adminRoutes.get("/logs", async (c) => {
           .map(
             (item) => `
               <tr>
-                <td>${new Date(item.createdAt).toLocaleString("en-US")}</td>
+                <td>${adminDate(item.createdAt)}</td>
                 <td>${escapeHtml(item.actorDisplayName ?? "System")}</td>
                 <td>${escapeHtml(item.action)}</td>
                 <td>${escapeHtml(item.targetType)}${item.targetId ? `:${escapeHtml(item.targetId)}` : ""}</td>
@@ -2269,7 +2629,7 @@ adminRoutes.get("/snapshots", async (c) => {
             .map(
               (item) => `
                 <tr>
-                  <td>${new Date(item.createdAt).toLocaleString("en-US")}</td>
+                  <td>${adminDate(item.createdAt)}</td>
                   <td><code>${escapeHtml(item.relativePath)}</code></td>
                   <td>${escapeHtml(item.reason ?? "-")}</td>
                   <td><code>${escapeHtml(item.contentPreview)}</code></td>

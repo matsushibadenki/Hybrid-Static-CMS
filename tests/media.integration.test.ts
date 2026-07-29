@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createUser } from "../src/core/auth";
 import { sql } from "../src/core/db";
 import { config } from "../src/core/config";
-import { deleteMedia, uploadMedia } from "../src/core/media";
+import { deleteMedia, getMediaStorageUsage, uploadMedia } from "../src/core/media";
 import path from "node:path";
 
 const pngHeader = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -25,6 +25,9 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("media integrat
       storedName = media?.storedName ?? null;
       expect(media?.mimeType).toBe("image/png");
       expect(await Bun.file(path.join(config.cmsUploadDir, storedName ?? "")).exists()).toBe(true);
+      const usage = await getMediaStorageUsage(userId);
+      expect(usage.userUsedBytes).toBe(pngHeader.byteLength);
+      expect(usage.uploadAllowed).toBe(true);
 
       await deleteMedia(mediaId ?? 0);
       expect(await Bun.file(path.join(config.cmsUploadDir, storedName ?? "")).exists()).toBe(false);

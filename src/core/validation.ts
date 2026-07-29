@@ -26,6 +26,9 @@ export function validateSlug(slug: string, label = "Slug") {
 }
 
 export function validateScheduledState(status: string, publishedAt?: string | null) {
+  if (!new Set(["draft", "published", "scheduled"]).has(status)) {
+    throw new AppValidationError("Status must be draft, published, or scheduled.");
+  }
   if (status === "scheduled" && !String(publishedAt ?? "").trim()) {
     throw new AppValidationError("Scheduled content requires a publish date.");
   }

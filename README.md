@@ -40,13 +40,15 @@ Operator-facing notes now live under `docs/README.md`.
 - Media upload and library management under `/cms/uploads/*`
 - Post and page media helpers for image, video, audio, and PDF embeds
 - Google reCAPTCHA v3 support for public form submissions via `.env` keys
+- Moderated article comments with series-wide and per-post availability controls
 - PostgreSQL backup and restore CLI workflows using `pg_dump` and `psql`
 - SEO-aware static output with canonical URLs, meta descriptions, structured data, robots controls, and AI-friendly `llms.txt`
+- Structured JSON logs and optional signed operator-alert webhooks with secret redaction
 - Manual snapshot creation and restore for `public_html` files
 - Static renderer for:
   - `public_html/cms/posts/latest.html`
   - `public_html/cms/posts/list.html`
-  - `public_html/cms/posts/{slug}.html`
+  - Article files under `public_html/cms/posts/` using the selected [permalink structure](docs/permalinks.md)
   - `public_html/cms/posts/page/{n}.html`
   - `public_html/cms/pages/{slug}.html`
   - `public_html/cms/forms/{slug}.html`
@@ -56,7 +58,7 @@ Operator-facing notes now live under `docs/README.md`.
   - `public_html/llms.txt`
 - Embeddable client script at `public_html/cms/embed.js`
 - JSON API at `/cms-api/posts`, `/cms-api/posts/:slug`, `/cms-api/search`
-- Media API at `/cms-api/media`
+- Permission-protected media-library API at `/cms-api/media`
 
 ## Directory layout
 
@@ -157,6 +159,8 @@ GET /cms-api/forms
 GET /cms-api/media
 GET /cms-api/search?q=hello
 ```
+
+Anonymous list requests return published content only. Draft and scheduled list filters require a signed-in user with the corresponding read permission, and `/cms-api/media` requires `media.read`.
 
 ## Open-source direction
 

@@ -29,6 +29,8 @@ export type PostRecord = {
   authorName: string | null;
   categories: string[];
   tags: string[];
+  commentsPolicy: "inherit" | "enabled" | "disabled";
+  commentsEnabled: boolean;
 };
 
 export type PostInput = {
@@ -48,6 +50,7 @@ export type PostInput = {
   publishedAt?: string | null;
   categorySlugs?: string[];
   tagSlugs?: string[];
+  seriesId?: number | null;
 };
 
 export type PageRecord = {
@@ -86,6 +89,7 @@ export type PageInput = {
   seoNoindex?: boolean;
   seoNofollow?: boolean;
   publishedAt?: string | null;
+  pageGroupId?: number | null;
 };
 
 export type FormFieldType = "text" | "email" | "textarea" | "select" | "checkbox";

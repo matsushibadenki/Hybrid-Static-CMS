@@ -5,6 +5,7 @@ import { escapeHtml } from "./content";
 import { sql, withTransaction } from "./db";
 import { AppValidationError, isUniqueConstraintError, requireNonEmpty, validateSlug } from "./validation";
 import type { FormFieldRecord, FormInput, FormRecord, FormFieldType } from "./types";
+import { publicTranslations } from "./i18n";
 
 type RawFormRow = Record<string, unknown>;
 
@@ -42,9 +43,21 @@ function validateFields(fields: FormInput["fields"]) {
   if (fields.length === 0) {
     throw new AppValidationError("At least one field is required.");
   }
+  const names = new Set<string>();
   for (const field of fields) {
     if (!field.name.trim() || !field.label.trim()) {
       throw new AppValidationError("Each field needs a name and label.");
+    }
+    if (!/^[a-z][a-z0-9_-]{0,63}$/i.test(field.name)) {
+      throw new AppValidationError(`Field name "${field.name}" must use letters, numbers, underscores, or hyphens.`);
+    }
+    const normalizedName = field.name.toLowerCase();
+    if (names.has(normalizedName) || normalizedName === "recaptchatoken") {
+      throw new AppValidationError(`Field name "${field.name}" is duplicated or reserved.`);
+    }
+    names.add(normalizedName);
+    if (!new Set(["text", "email", "textarea", "select", "checkbox"]).has(field.type)) {
+      throw new AppValidationError(`Field "${field.name}" has an unsupported type.`);
     }
     if (field.type === "select" && (!field.options || field.options.length === 0)) {
       throw new AppValidationError(`Select field "${field.name}" needs at least one option.`);
@@ -55,7 +68,44 @@ function validateFields(fields: FormInput["fields"]) {
 function validateFormInput(input: FormInput) {
   requireNonEmpty(input.title, "Title");
   validateSlug(input.slug);
+  if (input.status !== "draft" && input.status !== "published") {
+    throw new AppValidationError("Status must be draft or published.");
+  }
   validateFields(input.fields);
+}
+
+const maxSubmissionFieldLength = 10_000;
+
+export function validateFormSubmission(form: FormRecord, formData: FormData) {
+  const payload: Record<string, string> = {};
+
+  for (const field of form.fields) {
+    const raw = formData.get(field.name);
+    if (raw instanceof File) {
+      throw new AppValidationError(`Field "${field.label}" does not accept files.`);
+    }
+
+    const value = String(raw ?? "").trim();
+    if (field.required && !value) {
+      throw new AppValidationError(`Field "${field.label}" is required.`);
+    }
+    if (value.length > maxSubmissionFieldLength) {
+      throw new AppValidationError(`Field "${field.label}" is too long.`);
+    }
+    if (field.type === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      throw new AppValidationError(`Field "${field.label}" must be a valid email address.`);
+    }
+    if (field.type === "select" && value && !field.options.includes(value)) {
+      throw new AppValidationError(`Field "${field.label}" contains an invalid option.`);
+    }
+    if (field.type === "checkbox" && value && value !== "yes") {
+      throw new AppValidationError(`Field "${field.label}" contains an invalid value.`);
+    }
+
+    payload[field.name] = value;
+  }
+
+  return payload;
 }
 
 async function getFormFields(formId: number) {
@@ -304,6 +354,7 @@ function renderField(field: FormFieldRecord) {
 }
 
 export function renderFormHtml(form: FormRecord) {
+  const publicCopy = publicTranslations[config.publicLocale];
   const fields = form.fields.map(renderField).join("");
   const recaptchaEnabled = Boolean(config.recaptchaSiteKey && config.recaptchaSecretKey);
   const recaptchaAction = `form_submit_${form.slug.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
@@ -345,7 +396,7 @@ export function renderFormHtml(form: FormRecord) {
             if (submitButton) submitButton.disabled = false;
             const target = form.querySelector(".hybrid-static-cms-form__status");
             if (target) {
-              target.textContent = "Spam protection could not be verified. Please try again.";
+              target.textContent = ${JSON.stringify(publicCopy.spamCheckFailed)};
             }
           }
         });

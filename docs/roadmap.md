@@ -32,6 +32,10 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 - `[Done]` Post CRUD with categories, tags, draft, published, and scheduled states
 - `[Done]` Series management with parent series, ordered article assignment, and dedicated control-panel management screens
+- `[Done]` Series-aware article pagination with ordered previous, next, and numbered navigation
+- `[Done]` Selectable post permalink structures with complete regeneration and safe stale-file cleanup
+- `[Done]` Complete control-panel translation coverage for text, form hints, accessibility labels, dynamic counts, and localized dates in English, Japanese, and Simplified Chinese
+- `[Done]` Configurable localization of CMS-generated public navigation through `PUBLIC_LOCALE`
 - `[Done]` Fixed-page groups with slug-based parents, ordered page assignment, and dedicated control-panel management screens
 - `[Done]` CMS-managed page CRUD
 - `[Done]` Multiple form generation, management, deletion, and submission capture
@@ -45,6 +49,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Reusable published blocks via `[[block:slug]]`
 - `[Done]` CMS-managed navigation menus
 - `[Done]` Post and page revisions with review and restore
+- `[Done]` Moderated article comments with series-level safety controls, per-post overrides, rate limiting, and reCAPTCHA v3
 
 ### Publishing and discoverability
 
@@ -95,19 +100,19 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` PostgreSQL backup-generation integration coverage
 - `[Done]` Destructive restore integration tests using an isolated temporary database
 - `[Done]` Atomic static artifact publishing with temporary files and rename-on-success
-- `[Next]` Scheduled-publishing timezone support, failure notifications, and retry handling
+- `[Done]` Scheduled-publishing timezone support, persistent exponential retries, failure notifications, and recovery alerts
 - `[Done]` Signed one-hour preview URLs for draft, scheduled, and published posts/pages
-- `[Next]` Structured application logs and operator alert integrations
+- `[Done]` Structured JSON/text application logs with recursive secret redaction, severity filtering, and signed operator-alert webhooks
 
 ### Security and media hardening
 
-- `[Next]` File-size limits, upload quotas, and per-role upload policies
+- `[Done]` File-size limits, site/user storage quotas, per-role upload policies, and control-panel usage reporting
 - `[Done]` Per-file upload size limits and opt-in SVG handling
 - `[Done]` Media content-signature checks for common image, video, audio, and PDF uploads
 - `[Done]` SVG sanitization and removal of scripts, event attributes, and foreign content
 - `[Next]` Deeper media-content inspection with safer handling for active formats
 - `[Next]` Image metadata extraction, automatic resizing, WebP/AVIF variants, and thumbnails
-- `[Next]` Unused-media detection, cleanup workflow, and storage usage reporting
+- `[Next]` Unused-media detection and a reference-aware cleanup workflow
 - `[Next]` Per-user 2FA enrollment, password self-service, recovery flow, and login-session listing
 - `[Done]` PostgreSQL-backed public form rate limiting by form and trusted client IP
 - `[Done]` Configurable form-submission retention cleanup and permission-protected CSV export
@@ -119,7 +124,6 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 ### Editorial workflow
 
 - `[Next]` Autosave drafts and crash recovery
-- `[Next]` Private preview links with expiration
 - `[Next]` Editorial review states and approval workflow separate from publication status
 - `[Next]` Post/page import and export for migration and portability
 - `[Next]` Redirect manager and 404 report for slug changes and broken links
@@ -156,8 +160,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 ## Priority order
 
-1. `[Next]` Tests, CI, and permission regression coverage
-2. `[Next]` Atomic publishing, preview, health checks, and structured alerts
+1. `[Done]` Tests, CI, and permission regression coverage
+2. `[Done]` Atomic publishing, preview, health checks, and structured alerts
 3. `[Next]` Media and upload security hardening
 4. `[Next]` Editorial autosave, preview, and review workflow
 5. `[Next]` Forms operations, imports/exports, redirects, and Japanese search

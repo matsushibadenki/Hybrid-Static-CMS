@@ -52,7 +52,8 @@ export async function verifyPassword(password: string, stored: string) {
     256,
   );
 
-  return timingSafeEqual(Buffer.from(bits), expected);
+  const actual = Buffer.from(bits);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 export function randomToken(size = 32) {
