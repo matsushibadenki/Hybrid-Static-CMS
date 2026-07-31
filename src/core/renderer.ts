@@ -16,6 +16,7 @@ import { publicTranslations } from "./i18n";
 import { postArtifactRelativePath, postPermalinkPath, type PostPermalinkPattern } from "./permalinks";
 import { getPostPermalinkPattern } from "./settings";
 import { listApprovedCommentsForPosts, type PostCommentRecord } from "./comments";
+import { ensurePublicAssetDirectories, stylesheetPublicUrl } from "./assets";
 
 const publicCopy = publicTranslations[config.publicLocale];
 const publicDateLocale = config.publicLocale === "zh" ? "zh-CN" : config.publicLocale === "ja" ? "ja-JP" : "en-US";
@@ -86,7 +87,7 @@ function card(post: PostRecord, variant: "lead" | "compact" = "compact", permali
   `;
 }
 
-function pageTemplate(meta: SeoMeta, body: string) {
+function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []) {
   const description = meta.description ? `<meta name="description" content="${escapeHtml(meta.description)}" />` : "";
   const canonical = meta.canonicalUrl ? `<link rel="canonical" href="${escapeHtml(meta.canonicalUrl)}" />` : "";
   const ogTitle = `<meta property="og:title" content="${escapeHtml(meta.title)}" />`;
@@ -99,6 +100,9 @@ function pageTemplate(meta: SeoMeta, body: string) {
   const keywords = meta.keywords ? `<meta name="keywords" content="${escapeHtml(meta.keywords)}" />` : "";
   const jsonLd = meta.jsonLd ? `<script type="application/ld+json">${safeJsonLd(meta.jsonLd)}</script>` : "";
   const robots = meta.robots ? `<meta name="robots" content="${escapeHtml(meta.robots)}" />` : "";
+  const stylesheets = [...new Set(stylesheetUrls)]
+    .map((url) => `<link rel="stylesheet" href="${escapeHtml(url)}" />`)
+    .join("\n    ");
   const fallback = `<!doctype html>
 <html lang="${config.publicLocale === "zh" ? "zh-CN" : config.publicLocale}">
   <head>
@@ -654,6 +658,7 @@ function pageTemplate(meta: SeoMeta, body: string) {
       ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: #bbb; }
     </style>
+    ${stylesheets}
   </head>
   <body>
     <main class="magazine-shell">
@@ -669,7 +674,8 @@ function pageTemplate(meta: SeoMeta, body: string) {
 </html>`;
   try {
     const template = readFileSync(path.join(config.templateDir, "page.html"), "utf8");
-    return template
+    const hasStylesheetSlot = template.includes("{{stylesheets}}");
+    const rendered = template
       .replaceAll("{{lang}}", config.publicLocale === "zh" ? "zh-CN" : config.publicLocale)
       .replaceAll("{{title}}", escapeHtml(meta.title))
       .replaceAll("{{description}}", description)
@@ -682,7 +688,11 @@ function pageTemplate(meta: SeoMeta, body: string) {
       .replaceAll("{{keywords}}", keywords)
       .replaceAll("{{robots}}", robots)
       .replaceAll("{{jsonLd}}", jsonLd)
+      .replaceAll("{{stylesheets}}", stylesheets)
       .replaceAll("{{body}}", body);
+    return hasStylesheetSlot || !stylesheets
+      ? rendered
+      : rendered.replace("</head>", `    ${stylesheets}\n  </head>`);
   } catch {
     return fallback;
   }
@@ -724,6 +734,7 @@ export async function renderPage(page: PageRecord) {
   const expandedBody = await expandPublishedBlocks(page.bodyHtml);
   const canonicalUrl = page.seoCanonicalUrl || `${config.appUrl}${pagePublicPath(page.slug)}`;
   const robots = [page.seoNoindex ? "noindex" : "index", page.seoNofollow ? "nofollow" : "follow"].join(", ");
+  const stylesheetUrl = stylesheetPublicUrl(page.stylesheetPath, "pages");
   return pageTemplate(
     {
       title: page.seoTitle || page.title,
@@ -752,6 +763,7 @@ export async function renderPage(page: PageRecord) {
         <div class="magazine-prose__body">${expandedBody}</div>
       </article>
     `,
+    stylesheetUrl ? [stylesheetUrl] : [],
   );
 }
 
@@ -846,6 +858,9 @@ function renderCommentSection(post: PostRecord, comments: PostCommentRecord[]) {
 export function renderPost(post: PostRecord, series: SeriesNavigation | null = null, permalinkPattern: PostPermalinkPattern = "post_name", comments: PostCommentRecord[] = []) {
   const canonicalUrl = post.seoCanonicalUrl || `${config.appUrl}${postPermalinkPath(post, permalinkPattern)}`;
   const robots = [post.seoNoindex ? "noindex" : "index", post.seoNofollow ? "nofollow" : "follow"].join(", ");
+  const stylesheetUrls = post.categoryStylesheets
+    .map((stylesheet) => stylesheetPublicUrl(stylesheet, "categories"))
+    .filter((url): url is string => Boolean(url));
   return pageTemplate(
     {
       title: post.seoTitle || post.title,
@@ -881,6 +896,7 @@ export function renderPost(post: PostRecord, series: SeriesNavigation | null = n
         ${renderCommentSection(post, comments)}
       </article>
     `,
+    stylesheetUrls,
   );
 }
 
@@ -1155,6 +1171,7 @@ async function removeObsoletePostArtifacts(currentPaths: string[], legacyPaths: 
 }
 
 export async function renderPublishedArtifacts() {
+  await ensurePublicAssetDirectories();
   await emitHook("beforeRender", { outputDir: config.cmsOutputDir });
   const permalinkPattern = await getPostPermalinkPattern();
   const latest = await listPosts({ page: 1, limit: 5, status: "published" });

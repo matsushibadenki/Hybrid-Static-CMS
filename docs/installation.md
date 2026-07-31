@@ -32,6 +32,7 @@ Important settings:
 - `PORT`: Bun application port
 - `APP_URL`: canonical external URL
 - `SESSION_SECRET`: cookie/session secret, must be changed
+- `ACCOUNT_ENCRYPTION_KEY`: separate long random secret used to encrypt personal TOTP credentials and key recovery-code hashes; back it up securely and do not rotate it without resetting enrolled 2FA
 - `DATABASE_URL`: PostgreSQL connection string
 - `SEED_ADMIN_EMAIL`: email used by the optional seed script to create the initial local administrator
 - `SEED_ADMIN_PASSWORD`: password used by the optional seed script; use a strong value and change it after first login
@@ -40,8 +41,8 @@ Important settings:
 - `RECAPTCHA_MIN_SCORE`: minimum accepted v3 score, default `0.5`
 - `LOGIN_MAX_ATTEMPTS`: failed login attempts allowed per IP/email key, default `8`
 - `LOGIN_WINDOW_SECONDS`: login throttling window, default `900`
-- `TWO_FACTOR_ENABLED`: set to `true` to require TOTP for all admin logins
-- `TWO_FACTOR_SECRET`: Base32 TOTP secret used when two-factor login is enabled
+- `TWO_FACTOR_ENABLED`: compatibility option that requires one deployment-wide TOTP secret for users who have not enrolled personal 2FA
+- `TWO_FACTOR_SECRET`: shared Base32 TOTP secret for the compatibility mode; personal account enrollment is preferred
 - `COOKIE_SECURE`: set to `true` for HTTPS deployments; defaults automatically from an `https://` `APP_URL`
 - `TRUST_PROXY`: set to `true` only when a trusted reverse proxy sets client IP headers
 - `APP_ENV_FILE`: environment file loaded by `docker-compose.production.yml`, default `.env`
@@ -59,6 +60,11 @@ Important settings:
 - `MEDIA_UPLOAD_ALLOWED_ROLES`: comma-separated roles allowed to upload media, default `owner,admin,editor,author`
 - `MEDIA_ROLE_QUOTA_BYTES`: optional comma- or pipe-separated per-role quota overrides such as `author:268435456,editor:1073741824`
 - `MEDIA_ROLE_MAX_UPLOAD_BYTES`: optional per-role one-file limits; `MAX_UPLOAD_BYTES` remains the hard installation-wide ceiling
+- `MEDIA_IMAGE_DERIVATIVES_ENABLED`: generate resized display, thumbnail, WebP, and AVIF files for JPEG, PNG, and WebP uploads; default `true`
+- `MEDIA_IMAGE_MAX_WIDTH`, `MEDIA_IMAGE_MAX_HEIGHT`: maximum display and responsive dimensions, default `1920`
+- `MEDIA_THUMBNAIL_WIDTH`, `MEDIA_THUMBNAIL_HEIGHT`: thumbnail bounding box, default `480x320`
+- `MEDIA_WEBP_QUALITY`, `MEDIA_AVIF_QUALITY`: encoder quality from `1` to `100`, default `82` and `55`
+- `MEDIA_MAX_INPUT_PIXELS`: maximum decoded input pixels, default `40000000`, protecting the image pipeline from excessive memory use
 - `FORM_RATE_LIMIT_ATTEMPTS`: accepted public form submissions per client and form in one window, default `5`
 - `FORM_RATE_LIMIT_WINDOW_SECONDS`: public form rate-limit window, default `300`
 - `FORM_SUBMISSION_RETENTION_DAYS`: delete stored form submissions older than this many days during scheduled housekeeping; `0` disables automatic deletion
@@ -121,6 +127,7 @@ The seed also creates:
 
 Uploads are not seeded, but the media library becomes available after migration under the control panel.
 The media screen displays site and current-user usage, the effective file-size limit, and whether the current role may upload. See [Media upload policies](./media-upload-policies.md) before enabling quotas.
+JPEG, PNG, and WebP uploads use Sharp to extract metadata and create display, thumbnail, WebP, and AVIF variants. `bun install --frozen-lockfile` installs the platform-specific Sharp/libvips package selected by the lockfile.
 
 Published navigation menus are available under `/control-panel/menus`. Their static HTML output is written to `/cms/menus/{slug}.html`, which can be included by an existing HTML or PHP page.
 

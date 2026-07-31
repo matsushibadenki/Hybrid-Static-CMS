@@ -7,8 +7,12 @@ import { loadPlugins } from "../core/hooks";
 import { createApp } from "./app";
 import { logInfo, logWarn } from "../core/logger";
 import { reportOperationalEvent } from "../core/operatorAlerts";
+import { ensurePublicAssetDirectories } from "../core/assets";
 
 if (import.meta.main) {
+  await ensurePublicAssetDirectories().catch((error) => {
+    logWarn("startup.assets_unavailable", "The public asset directories could not be prepared.", { error });
+  });
   await ensureDefaultSettings().catch((error) => {
     logWarn("startup.settings_unavailable", "Initial settings are not ready; complete /setup after database migration.", { error });
   });

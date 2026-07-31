@@ -11,6 +11,10 @@ function toBase64Url(bytes: Uint8Array) {
     .replaceAll("=", "");
 }
 
+function fromBase64Url(value: string) {
+  return Uint8Array.from(Buffer.from(value.replaceAll("-", "+").replaceAll("_", "/"), "base64"));
+}
+
 export async function hashPassword(password: string) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const material = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, [
@@ -60,6 +64,83 @@ export function randomToken(size = 32) {
   return toBase64Url(crypto.getRandomValues(new Uint8Array(size)));
 }
 
+const base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+export function generateTotpSecret(size = 20) {
+  const bytes = crypto.getRandomValues(new Uint8Array(size));
+  let output = "";
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      output += base32Alphabet[(buffer >> bits) & 31];
+    }
+  }
+  if (bits > 0) output += base32Alphabet[(buffer << (5 - bits)) & 31];
+  return output;
+}
+
+async function accountEncryptionKey() {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(config.accountEncryptionKey));
+  return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+export async function encryptAccountSecret(secret: string) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await accountEncryptionKey(), encoder.encode(secret));
+  return `v1.${toBase64Url(iv)}.${toBase64Url(new Uint8Array(encrypted))}`;
+}
+
+export async function decryptAccountSecret(value: string) {
+  const [version, ivValue, encryptedValue] = value.split(".");
+  if (version !== "v1" || !ivValue || !encryptedValue) return null;
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: fromBase64Url(ivValue) },
+      await accountEncryptionKey(),
+      fromBase64Url(encryptedValue),
+    );
+    return new TextDecoder().decode(decrypted);
+  } catch {
+    return null;
+  }
+}
+
+const recoveryAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function normalizeRecoveryCode(value: string) {
+  return value.toUpperCase().replace(/[^A-Z2-9]/g, "");
+}
+
+export function generateRecoveryCodes(count = 8) {
+  return Array.from({ length: count }, () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(12));
+    const raw = [...bytes].map((byte) => recoveryAlphabet[byte % recoveryAlphabet.length]).join("");
+    return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+  });
+}
+
+export async function hashRecoveryCode(value: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(config.accountEncryptionKey),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(normalizeRecoveryCode(value)));
+  return toBase64Url(new Uint8Array(digest));
+}
+
+export function totpEnrollmentUri(secret: string, email: string) {
+  const issuer = config.appName;
+  const label = `${issuer}:${email}`;
+  return `otpauth://totp/${encodeURIComponent(label)}?secret=${encodeURIComponent(secret)}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+}
+
 function decodeBase32(value: string) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   const normalized = value.toUpperCase().replace(/[^A-Z2-7]/g, "");
@@ -93,6 +174,10 @@ async function totpCode(secret: string, counter: number) {
     ((digest[offset + 2] & 0xff) << 8) |
     (digest[offset + 3] & 0xff);
   return String(binary % 1_000_000).padStart(6, "0");
+}
+
+export function generateTotpCode(secret: string, at = Date.now()) {
+  return totpCode(secret, Math.floor(at / 30_000));
 }
 
 export async function verifyTotpCode(secret: string, submittedCode: string) {

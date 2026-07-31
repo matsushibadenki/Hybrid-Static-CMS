@@ -2,6 +2,7 @@ export type UserRole = "owner" | "admin" | "editor" | "author" | "viewer" | "ai_
 
 export type SessionUser = {
   id: number;
+  sessionId: number;
   email: string;
   displayName: string;
   roles: UserRole[];
@@ -28,6 +29,7 @@ export type PostRecord = {
   authorId: number | null;
   authorName: string | null;
   categories: string[];
+  categoryStylesheets: string[];
   tags: string[];
   commentsPolicy: "inherit" | "enabled" | "disabled";
   commentsEnabled: boolean;
@@ -72,6 +74,7 @@ export type PageRecord = {
   updatedAt: string;
   authorId: number | null;
   authorName: string | null;
+  stylesheetPath: string | null;
 };
 
 export type PageInput = {
@@ -90,6 +93,7 @@ export type PageInput = {
   seoNofollow?: boolean;
   publishedAt?: string | null;
   pageGroupId?: number | null;
+  stylesheetPath?: string | null;
 };
 
 export type FormFieldType = "text" | "email" | "textarea" | "select" | "checkbox";

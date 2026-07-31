@@ -271,6 +271,7 @@ apiRoutes.post("/pages", async (c) => {
       seoNoindex: Boolean(payload.seoNoindex),
       seoNofollow: Boolean(payload.seoNofollow),
       pageGroupId: optionalRelationId(payload, "pageGroupId"),
+      stylesheetPath: payload.stylesheetPath,
       publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
     },
     user.id,
@@ -312,6 +313,7 @@ apiRoutes.put("/pages/:id", async (c) => {
     seoNoindex: Boolean(payload.seoNoindex),
     seoNofollow: Boolean(payload.seoNofollow),
     pageGroupId: optionalRelationId(payload, "pageGroupId"),
+    stylesheetPath: payload.stylesheetPath,
     publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
   }, user.id);
 
@@ -384,13 +386,20 @@ apiRoutes.delete("/media/:id", async (c) => {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
-  await deleteMedia(Number(c.req.param("id")));
+  try {
+    await deleteMedia(Number(c.req.param("id")));
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.json({ error: error.message }, 409);
+    }
+    throw error;
+  }
   await writeAuditLog({
     actorUserId: user.id,
     action: "media.delete",
     targetType: "media",
     targetId: c.req.param("id"),
-    summary: `Deleted media #${c.req.param("id")}.`,
+    summary: `Deleted unused media #${c.req.param("id")}.`,
     ipAddress: requestIp(c),
   });
   return c.json({ ok: true });

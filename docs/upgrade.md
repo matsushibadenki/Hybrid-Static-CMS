@@ -25,6 +25,24 @@ Media upload quotas do not require a database migration. Add the `MEDIA_*`
 variables from `.env.example` and restart the application. Their default values
 keep storage quotas unlimited while preserving the existing upload roles.
 
+Deeper media inspection does not require a database migration. New uploads use
+canonical MIME-derived extensions and stricter container checks. Existing media
+URLs are left unchanged to avoid breaking generated or hand-written references;
+review legacy uploads separately when they came from untrusted users.
+
+Migration `023_media_image_variants.sql` adds image dimensions, safe metadata,
+and derivative-file records. Run `bun install --frozen-lockfile` before the
+migration so the locked Sharp/libvips package is present. Existing images remain
+valid but do not receive variants automatically; re-upload them if derivatives
+are required. Back up the complete upload directory because database backups
+contain variant metadata but not image files.
+
+Migration `024_content_stylesheets.sql` adds stylesheet selections to categories
+and fixed pages. On startup, the application creates `public_html/assets` and
+its `css`, `img`, `js`, and `video` structure without overwriting existing
+files. Back up `public_html/assets` separately because PostgreSQL stores only
+the selected relative CSS paths.
+
 ## PostgreSQL 17 to 18
 
 New deployments use PostgreSQL 18. Do not attach a PostgreSQL 17 data volume directly to the PostgreSQL 18 container. Create a logical backup with `bun run db:backup`, start PostgreSQL 18 with a new volume, restore the backup, and then run `bun run migrate`.

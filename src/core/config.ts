@@ -10,6 +10,7 @@ export type AppConfig = {
   publicLocale: "en" | "ja" | "zh";
   scheduleTimeZone: string;
   sessionSecret: string;
+  accountEncryptionKey: string;
   databaseUrl: string;
   recaptchaSiteKey: string | null;
   recaptchaSecretKey: string | null;
@@ -36,6 +37,14 @@ export type AppConfig = {
   mediaUploadAllowedRoles: ReadonlySet<UserRole>;
   mediaRoleQuotaBytes: Partial<Record<UserRole, number>>;
   mediaRoleMaxUploadBytes: Partial<Record<UserRole, number>>;
+  mediaImageDerivativesEnabled: boolean;
+  mediaImageMaxWidth: number;
+  mediaImageMaxHeight: number;
+  mediaThumbnailWidth: number;
+  mediaThumbnailHeight: number;
+  mediaWebpQuality: number;
+  mediaAvifQuality: number;
+  mediaMaxInputPixels: number;
   formRateLimitAttempts: number;
   formRateLimitWindowSeconds: number;
   formSubmissionRetentionDays: number;
@@ -106,6 +115,7 @@ export const config: AppConfig = {
   publicLocale: parsePublicLocale(process.env.PUBLIC_LOCALE),
   scheduleTimeZone: parseScheduleTimeZone(process.env.SCHEDULE_TIME_ZONE),
   sessionSecret: requireEnv("SESSION_SECRET", "change-me"),
+  accountEncryptionKey: requireEnv("ACCOUNT_ENCRYPTION_KEY", requireEnv("SESSION_SECRET", "change-me")),
   databaseUrl: requireEnv("DATABASE_URL"),
   recaptchaSiteKey: process.env.RECAPTCHA_SITE_KEY?.trim() || null,
   recaptchaSecretKey: process.env.RECAPTCHA_SECRET_KEY?.trim() || null,
@@ -135,6 +145,14 @@ export const config: AppConfig = {
   mediaUploadAllowedRoles: parseRoleSet(process.env.MEDIA_UPLOAD_ALLOWED_ROLES, ["owner", "admin", "editor", "author"]),
   mediaRoleQuotaBytes: parseRoleByteLimits(process.env.MEDIA_ROLE_QUOTA_BYTES),
   mediaRoleMaxUploadBytes: parseRoleByteLimits(process.env.MEDIA_ROLE_MAX_UPLOAD_BYTES),
+  mediaImageDerivativesEnabled: process.env.MEDIA_IMAGE_DERIVATIVES_ENABLED !== "false",
+  mediaImageMaxWidth: parseConfigNumber(process.env.MEDIA_IMAGE_MAX_WIDTH, 1920, { min: 320, max: 7680 }),
+  mediaImageMaxHeight: parseConfigNumber(process.env.MEDIA_IMAGE_MAX_HEIGHT, 1920, { min: 320, max: 7680 }),
+  mediaThumbnailWidth: parseConfigNumber(process.env.MEDIA_THUMBNAIL_WIDTH, 480, { min: 64, max: 1920 }),
+  mediaThumbnailHeight: parseConfigNumber(process.env.MEDIA_THUMBNAIL_HEIGHT, 320, { min: 64, max: 1920 }),
+  mediaWebpQuality: parseConfigNumber(process.env.MEDIA_WEBP_QUALITY, 82, { min: 1, max: 100 }),
+  mediaAvifQuality: parseConfigNumber(process.env.MEDIA_AVIF_QUALITY, 55, { min: 1, max: 100 }),
+  mediaMaxInputPixels: parseConfigNumber(process.env.MEDIA_MAX_INPUT_PIXELS, 40_000_000, { min: 1_000_000, max: 268_402_689 }),
   formRateLimitAttempts: parseConfigNumber(process.env.FORM_RATE_LIMIT_ATTEMPTS, 5, { min: 1 }),
   formRateLimitWindowSeconds: parseConfigNumber(process.env.FORM_RATE_LIMIT_WINDOW_SECONDS, 300, { min: 60 }),
   formSubmissionRetentionDays: parseConfigNumber(process.env.FORM_SUBMISSION_RETENTION_DAYS, 0, { min: 0 }),

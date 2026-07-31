@@ -20,6 +20,7 @@ import {
 import { adminDate, adminLayout } from "../../core/layout";
 import {
   deleteMedia,
+  deleteUnusedMedia,
   formatByteSize,
   getMediaStorageUsage,
   isAudioMedia,
@@ -27,15 +28,18 @@ import {
   isPdfMedia,
   isVideoMedia,
   listMedia,
+  listMediaUsage,
   mediaEmbedSnippet,
+  mediaPreviewUrl,
   mediaStorageState,
+  mediaTotalSizeBytes,
   uploadMedia,
 } from "../../core/media";
 import { createPage, deletePage, getPageById, listPages, updatePage } from "../../core/pages";
 import { createPost, deletePost, getPostById, listPosts, setPostCommentsPolicy, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
 import { buildScopedSlug, slugify, escapeHtml } from "../../core/content";
-import { createManagedUser, getUserById, listUsers, managedRoles, resetUserPassword, revokeUserSessions, setUserActive, updateUserProfile } from "../../core/users";
+import { createManagedUser, getUserById, listUsers, managedRoles, resetUserPassword, resetUserTwoFactor, revokeUserSessions, setUserActive, updateUserProfile } from "../../core/users";
 import { hasPermission, requireAdminPermission } from "../../core/permissions";
 import { config } from "../../core/config";
 import { AppValidationError } from "../../core/validation";
@@ -47,12 +51,26 @@ import { listOperatorNotifications, markOperatorNotificationRead } from "../../c
 import { createPreviewToken } from "../../core/previews";
 import { assignPostToSeries, createSeries, deleteSeries, getPostSeriesId, getSeriesById, listPostSeriesAssignments, listSeries, listSeriesPosts, removePostFromSeries, updateSeries } from "../../core/series";
 import { assignPageToGroup, createPageGroup, deletePageGroup, getPageGroupById, getPageGroupId, listPageGroupAssignments, listPageGroupMembers, listPageGroups, removePageFromGroup, updatePageGroup } from "../../core/pageGroups";
-import type { FormFieldRecord, UserRole } from "../../core/types";
+import type { FormFieldRecord, SessionUser, UserRole } from "../../core/types";
 import { getPostPermalinkPattern, setPostPermalinkPattern } from "../../core/settings";
 import { isPostPermalinkPattern, postPermalinkExample, postPermalinkPath, postPermalinkPatterns } from "../../core/permalinks";
 import { approveComment, deleteComment, listComments } from "../../core/comments";
 import { scheduleTimestampForInput, scheduleTimestampForStorage } from "../../core/scheduling";
 import { logError } from "../../core/logger";
+import { listStylesheets } from "../../core/assets";
+import { listCategories, updateCategoryStylesheet } from "../../core/categories";
+import {
+  changeOwnPassword,
+  confirmTotpEnrollment,
+  disableTotp,
+  getAccountSecurity,
+  getPendingTotpEnrollment,
+  regenerateRecoveryCodes,
+  revokeOtherSessions,
+  revokeOwnSession,
+  startTotpEnrollment,
+} from "../../core/accountSecurity";
+import { deleteEditorAutosave, getEditorAutosave, saveEditorAutosave, type AutosaveContentType } from "../../core/autosaves";
 
 function splitCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
@@ -156,6 +174,8 @@ function postValuesFromForm(form: FormData) {
     seoKeywords: String(form.get("seoKeywords") ?? ""),
     seoNoindex: form.has("seoNoindex") ? "true" : "false",
     seoNofollow: form.has("seoNofollow") ? "true" : "false",
+    autosaveKey: String(form.get("autosaveKey") ?? ""),
+    autosaveBaseUpdatedAt: String(form.get("autosaveBaseUpdatedAt") ?? ""),
   };
 }
 
@@ -169,6 +189,7 @@ function pageValuesFromForm(form: FormData) {
     status: String(form.get("status") ?? "draft"),
     publishedAt: String(form.get("publishedAt") ?? ""),
     pageGroupId: String(form.get("pageGroupId") ?? ""),
+    stylesheetPath: String(form.get("stylesheetPath") ?? ""),
     seoTitle: String(form.get("seoTitle") ?? ""),
     seoDescription: String(form.get("seoDescription") ?? ""),
     seoCanonicalUrl: String(form.get("seoCanonicalUrl") ?? ""),
@@ -176,6 +197,8 @@ function pageValuesFromForm(form: FormData) {
     seoKeywords: String(form.get("seoKeywords") ?? ""),
     seoNoindex: form.has("seoNoindex") ? "true" : "false",
     seoNofollow: form.has("seoNofollow") ? "true" : "false",
+    autosaveKey: String(form.get("autosaveKey") ?? ""),
+    autosaveBaseUpdatedAt: String(form.get("autosaveBaseUpdatedAt") ?? ""),
   };
 }
 
@@ -562,9 +585,184 @@ function pageGroupSelect(groups: Awaited<ReturnType<typeof listPageGroups>>, sel
   return `<label>Page group <select name="pageGroupId" data-slug-scope="pageGroup"><option value="">No page group</option>${groups.map((item) => `<option value="${item.id}" data-scope-slug="${escapeHtml(item.slug)}" ${selectedId === String(item.id) ? "selected" : ""}>${escapeHtml(item.title)} (${escapeHtml(item.slug)})</option>`).join("")}</select><span class="meta">Group this fixed page under one page group. Manage groups in the Page groups menu.</span></label>`;
 }
 
-function postForm(action: string, values?: Record<string, string>, series: Awaited<ReturnType<typeof listSeries>> = []) {
+function stylesheetSelect(
+  name: string,
+  stylesheets: string[],
+  selectedPath: string | undefined,
+  emptyLabel: string,
+  description: string,
+) {
+  return `<label>Stylesheet
+    <select name="${escapeHtml(name)}">
+      <option value="">${escapeHtml(emptyLabel)}</option>
+      ${stylesheets.map((stylesheet) => `<option value="${escapeHtml(stylesheet)}" ${selectedPath === stylesheet ? "selected" : ""}>${escapeHtml(stylesheet)}</option>`).join("")}
+    </select>
+    <span class="meta">${escapeHtml(description)}</span>
+  </label>`;
+}
+
+function newAutosaveKey(value?: string) {
+  return value && /^[A-Za-z0-9_-]{1,96}$/.test(value) ? value : `new-${crypto.randomUUID()}`;
+}
+
+function editorAutosaveUi(contentType: AutosaveContentType, key: string, baseUpdatedAt = "") {
+  const endpoint = `${config.controlPanelPath}/${contentType}s/autosave/${encodeURIComponent(key)}`;
+  const baseDate = baseUpdatedAt ? new Date(baseUpdatedAt) : null;
+  const normalizedBaseUpdatedAt = baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate.toISOString() : "";
   return `
-    <form method="post" action="${action}" class="form-grid editor-form">
+    <input type="hidden" name="autosaveKey" value="${escapeHtml(key)}" />
+    <input type="hidden" name="autosaveBaseUpdatedAt" value="${escapeHtml(normalizedBaseUpdatedAt)}" />
+    <aside class="editor-autosave" data-editor-autosave data-endpoint="${escapeHtml(endpoint)}" data-base-updated-at="${escapeHtml(normalizedBaseUpdatedAt)}">
+      <div class="editor-autosave-status"><span class="editor-autosave-dot" aria-hidden="true"></span><span data-autosave-status>Autosave ready</span></div>
+      <div class="editor-autosave-recovery" data-autosave-recovery hidden>
+        <div>
+          <strong>Unsaved changes were found.</strong>
+          <p class="meta" data-autosave-message>Restore the automatically saved version or discard it.</p>
+          <p class="meta security-warning" data-autosave-conflict hidden>The saved post or page changed after this recovery copy was created. Review restored values before saving.</p>
+        </div>
+        <div class="row">
+          <button class="button button-primary" type="button" data-autosave-restore>Restore autosave</button>
+          <button class="button" type="button" data-autosave-discard>Discard autosave</button>
+        </div>
+      </div>
+    </aside>
+  `;
+}
+
+function editorAutosaveScript() {
+  return `<script>
+    (() => {
+      const form = document.querySelector("form[data-autosave-form]");
+      const panel = form?.querySelector("[data-editor-autosave]");
+      if (!form || !panel) return;
+      const endpoint = panel.dataset.endpoint;
+      const baseUpdatedAt = panel.dataset.baseUpdatedAt || null;
+      const csrf = form.querySelector('input[name="_csrf"]')?.value || "";
+      const status = panel.querySelector("[data-autosave-status]");
+      const recovery = panel.querySelector("[data-autosave-recovery]");
+      const conflict = panel.querySelector("[data-autosave-conflict]");
+      let pendingPayload = null;
+      let timer = null;
+      let submitting = false;
+
+      const text = (source) => window.adminTranslate?.(source) || source;
+      const setStatus = (message, state = "") => {
+        status.textContent = text(message);
+        panel.dataset.state = state;
+      };
+      const collect = () => {
+        const payload = {};
+        form.querySelectorAll("input[name], textarea[name], select[name]").forEach((field) => {
+          if (["_csrf", "autosaveKey", "autosaveBaseUpdatedAt"].includes(field.name) || field.type === "file" || field.type === "submit") return;
+          payload[field.name] = field.type === "checkbox" ? field.checked : field.value;
+        });
+        return payload;
+      };
+      let lastSnapshot = JSON.stringify(collect());
+
+      const save = async () => {
+        if (submitting) return;
+        const payload = collect();
+        const snapshot = JSON.stringify(payload);
+        if (snapshot === lastSnapshot) return;
+        setStatus("Autosaving...", "saving");
+        try {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+            body: JSON.stringify({ payload, baseUpdatedAt }),
+          });
+          if (!response.ok) throw new Error("Autosave failed.");
+          const result = await response.json();
+          lastSnapshot = snapshot;
+          setStatus("Autosaved", "saved");
+          panel.title = result.updatedAt || "";
+        } catch {
+          setStatus("Autosave failed. Your form remains open.", "error");
+        }
+      };
+      const schedule = () => {
+        clearTimeout(timer);
+        timer = setTimeout(save, 2000);
+        setStatus("Unsaved changes", "dirty");
+      };
+      form.addEventListener("input", schedule);
+      form.addEventListener("change", schedule);
+      form.addEventListener("click", (event) => {
+        if (event.target.closest('button[type="button"]') && !event.target.closest("[data-autosave-recovery]")) {
+          setTimeout(schedule, 50);
+        }
+      });
+      form.addEventListener("submit", () => {
+        submitting = true;
+        clearTimeout(timer);
+        setStatus("Saving...", "saving");
+      });
+      window.addEventListener("pagehide", () => {
+        if (submitting || JSON.stringify(collect()) === lastSnapshot) return;
+        fetch(endpoint, {
+          method: "POST",
+          credentials: "same-origin",
+          keepalive: true,
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          body: JSON.stringify({ payload: collect(), baseUpdatedAt }),
+        }).catch(() => undefined);
+      });
+      setInterval(() => {
+        if (!submitting && JSON.stringify(collect()) !== lastSnapshot) schedule();
+      }, 5000);
+
+      panel.querySelector("[data-autosave-restore]")?.addEventListener("click", () => {
+        if (!pendingPayload) return;
+        Object.entries(pendingPayload).forEach(([name, value]) => {
+          const field = form.elements.namedItem(name);
+          if (!field || field instanceof RadioNodeList) return;
+          if (field.type === "checkbox") field.checked = Boolean(value);
+          else field.value = String(value);
+        });
+        recovery.hidden = true;
+        lastSnapshot = JSON.stringify(collect());
+        setStatus("Autosave restored. Review and save when ready.", "restored");
+      });
+      panel.querySelector("[data-autosave-discard]")?.addEventListener("click", async () => {
+        const response = await fetch(endpoint + "/delete", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "X-CSRF-Token": csrf },
+        });
+        if (response.ok) {
+          pendingPayload = null;
+          recovery.hidden = true;
+          setStatus("Autosave discarded", "");
+        }
+      });
+
+      fetch(endpoint, { credentials: "same-origin" })
+        .then((response) => response.ok ? response.json() : null)
+        .then((result) => {
+          if (!result?.autosave) return;
+          pendingPayload = result.autosave.payload;
+          recovery.hidden = false;
+          conflict.hidden = !(result.autosave.baseUpdatedAt && baseUpdatedAt && result.autosave.baseUpdatedAt !== baseUpdatedAt);
+          setStatus("Recovery copy available", "recovery");
+        })
+        .catch(() => setStatus("Autosave unavailable", "error"));
+
+      const url = new URL(window.location.href);
+      if (url.pathname.endsWith("/new") && !url.searchParams.has("autosave")) {
+        url.searchParams.set("autosave", form.elements.autosaveKey.value);
+        history.replaceState(null, "", url);
+      }
+    })();
+  </script>`;
+}
+
+function postForm(action: string, values?: Record<string, string>, series: Awaited<ReturnType<typeof listSeries>> = []) {
+  const autosaveKey = newAutosaveKey(values?.autosaveKey);
+  return `
+    <form method="post" action="${action}" class="form-grid editor-form" data-autosave-form>
+      ${editorAutosaveUi("post", autosaveKey, values?.autosaveBaseUpdatedAt)}
       <section class="editor-section">
         <p class="editor-section-kicker">Content setup</p>
         <h2 class="editor-section-title">Basic information</h2>
@@ -619,12 +817,20 @@ function postForm(action: string, values?: Record<string, string>, series: Await
       </div>
     </form>
     ${slugAutomationScript()}
+    ${editorAutosaveScript()}
   `;
 }
 
-function pageForm(action: string, values?: Record<string, string>, groups: Awaited<ReturnType<typeof listPageGroups>> = []) {
+function pageForm(
+  action: string,
+  values?: Record<string, string>,
+  groups: Awaited<ReturnType<typeof listPageGroups>> = [],
+  stylesheets: string[] = [],
+) {
+  const autosaveKey = newAutosaveKey(values?.autosaveKey);
   return `
-    <form method="post" action="${action}" class="form-grid editor-form">
+    <form method="post" action="${action}" class="form-grid editor-form" data-autosave-form>
+      ${editorAutosaveUi("page", autosaveKey, values?.autosaveBaseUpdatedAt)}
       <section class="editor-section">
         <p class="editor-section-kicker">Page setup</p>
         <h2 class="editor-section-title">Basic information</h2>
@@ -643,6 +849,12 @@ function pageForm(action: string, values?: Record<string, string>, groups: Await
         <label>Body HTML override <textarea name="bodyHtml">${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>
         ${richEditorTools()}
       </section>
+      <details class="editor-section editor-section-compact editor-collapsible">
+        <summary><span class="editor-section-kicker">Presentation</span><span class="editor-section-title">Appearance</span></summary>
+        <div class="form-grid">
+          ${stylesheetSelect("stylesheetPath", stylesheets, values?.stylesheetPath, "Default site stylesheet only", "Choose a CSS file from public_html/assets/css/pages.")}
+        </div>
+      </details>
       <details class="editor-section editor-section-compact editor-collapsible">
         <summary><span class="editor-section-kicker">Publishing</span><span class="editor-section-title">Publication settings</span></summary>
         <div class="form-grid">
@@ -675,32 +887,80 @@ function pageForm(action: string, values?: Record<string, string>, groups: Await
       </div>
     </form>
     ${slugAutomationScript()}
+    ${editorAutosaveScript()}
   `;
 }
 
 function formBuilderForm(action: string, values?: Record<string, string>) {
+  const fields = (values?.fieldsSpec ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name = "", label = "", type = "text", required = "false", options = ""] = line.split("|");
+      return { name, label, type, required: required.toLowerCase() === "true", options };
+    });
   return `
-    <form method="post" action="${action}" class="form-grid">
-      <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
-      <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
-      <label>Description <textarea name="description">${escapeHtml(values?.description ?? "")}</textarea></label>
-      <label>Status
-        <select name="status">
-          <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
-          <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
-        </select>
-      </label>
-      <label>Submit button label <input name="submitLabel" value="${escapeHtml(values?.submitLabel ?? "Send")}" /></label>
-      <label>Success message <textarea name="successMessage">${escapeHtml(values?.successMessage ?? "Thank you. Your submission has been received.")}</textarea></label>
-      <label>Fields definition
-        <textarea name="fieldsSpec">${escapeHtml(values?.fieldsSpec ?? "")}</textarea>
-      </label>
-      <p class="meta">One field per line: <code>name|Label|type|required|option1,option2</code>. Types: text, email, textarea, select, checkbox.</p>
+    <form method="post" action="${action}" class="editor-form form-grid">
+      <section class="editor-section">
+        <p class="editor-section-kicker">Form setup</p>
+        <h2 class="editor-section-title">Basic information</h2>
+        <div class="form-grid">
+          <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
+          <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
+          <label>Description <textarea name="description">${escapeHtml(values?.description ?? "")}</textarea></label>
+        </div>
+      </section>
+      <section class="editor-section structured-builder" data-structured-builder="form">
+        <p class="editor-section-kicker">Form structure</p>
+        <h2 class="editor-section-title">Fields</h2>
+        <p class="meta">Add fields in the same order visitors should complete them.</p>
+        <div class="structured-rows" data-structured-rows>
+          ${(fields.length ? fields : [{ name: "", label: "", type: "text", required: false, options: "" }]).map((field) => formFieldEditorRow(field)).join("")}
+        </div>
+        <button class="button structured-add" type="button" data-add-structured-row>Add field</button>
+        <label class="structured-source">Fields definition
+          <textarea name="fieldsSpec">${escapeHtml(values?.fieldsSpec ?? "")}</textarea>
+        </label>
+        <p class="meta structured-source">One field per line: <code>name|Label|type|required|option1,option2</code>. Types: text, email, textarea, select, checkbox.</p>
+      </section>
+      <section class="editor-section">
+        <p class="editor-section-kicker">Response</p>
+        <h2 class="editor-section-title">Submission experience</h2>
+        <div class="form-grid">
+          <label>Submit button label <input name="submitLabel" value="${escapeHtml(values?.submitLabel ?? "Send")}" /></label>
+          <label>Success message <textarea name="successMessage">${escapeHtml(values?.successMessage ?? "Thank you. Your submission has been received.")}</textarea></label>
+        </div>
+      </section>
+      <details class="editor-section editor-section-compact editor-collapsible">
+        <summary><span class="editor-section-kicker">Publishing</span><span class="editor-section-title">Publication settings</span></summary>
+        <div class="form-grid">
+          <label>Status
+            <select name="status">
+              <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
+              <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
+            </select>
+          </label>
+        </div>
+      </details>
       <div class="row">
         <button class="button button-primary" type="submit">Save form</button>
       </div>
     </form>
+    ${structuredBuilderScript()}
   `;
+}
+
+function formFieldEditorRow(field: { name: string; label: string; type: string; required: boolean; options: string }) {
+  return `<div class="structured-row" data-structured-row>
+    <span class="structured-handle" aria-hidden="true"></span>
+    <label>Field name<input data-part="name" value="${escapeHtml(field.name)}" placeholder="email" /></label>
+    <label>Label<input data-part="label" value="${escapeHtml(field.label)}" placeholder="Email address" /></label>
+    <label>Type<select data-part="type">${["text", "email", "textarea", "select", "checkbox"].map((type) => `<option value="${type}" ${field.type === type ? "selected" : ""}>${type}</option>`).join("")}</select></label>
+    <label>Options<input data-part="options" value="${escapeHtml(field.options)}" placeholder="option1,option2" /></label>
+    <label class="checkbox-label structured-required"><input type="checkbox" data-part="required" ${field.required ? "checked" : ""} /><span>Required</span></label>
+    <button class="button structured-remove" type="button" data-remove-structured-row>Remove</button>
+  </div>`;
 }
 
 function menuValuesFromForm(form: FormData) {
@@ -724,23 +984,112 @@ function parseMenuItems(spec: string) {
 }
 
 function menuForm(action: string, values?: Record<string, string>) {
+  const items = (values?.itemsSpec ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [label = "", url = "", openNewTab = "false"] = line.split("|");
+      return { label, url, openNewTab: openNewTab.toLowerCase() === "true" };
+    });
   return `
-    <form method="post" action="${action}" class="form-grid">
-      <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
-      <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="main-navigation" required /></label>
-      <label>Status
-        <select name="status">
-          <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
-          <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
-        </select>
-      </label>
-      <label>Menu items
-        <textarea name="itemsSpec" placeholder="Home|/|false\nAbout|/about.php|false\nExternal|https://example.com|true" required>${escapeHtml(values?.itemsSpec ?? "")}</textarea>
-      </label>
-      <p class="meta">One item per line: <code>label|url|openNewTab</code>. Use <code>true</code> for a new tab. JavaScript and data URLs are blocked.</p>
+    <form method="post" action="${action}" class="editor-form form-grid">
+      <section class="editor-section">
+        <p class="editor-section-kicker">Menu setup</p>
+        <h2 class="editor-section-title">Basic information</h2>
+        <div class="form-grid">
+          <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
+          <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="main-navigation" required /></label>
+        </div>
+      </section>
+      <section class="editor-section structured-builder" data-structured-builder="menu">
+        <p class="editor-section-kicker">Navigation structure</p>
+        <h2 class="editor-section-title">Menu items</h2>
+        <p class="meta">Add links in their displayed order. External links can open in a new tab.</p>
+        <div class="structured-rows" data-structured-rows>
+          ${(items.length ? items : [{ label: "", url: "", openNewTab: false }]).map((item) => menuItemEditorRow(item)).join("")}
+        </div>
+        <button class="button structured-add" type="button" data-add-structured-row>Add menu item</button>
+        <label class="structured-source">Menu items
+          <textarea name="itemsSpec" placeholder="Home|/|false\nAbout|/about.php|false\nExternal|https://example.com|true">${escapeHtml(values?.itemsSpec ?? "")}</textarea>
+        </label>
+        <p class="meta structured-source">One item per line: <code>label|url|openNewTab</code>. Use <code>true</code> for a new tab. JavaScript and data URLs are blocked.</p>
+      </section>
+      <details class="editor-section editor-section-compact editor-collapsible">
+        <summary><span class="editor-section-kicker">Publishing</span><span class="editor-section-title">Publication settings</span></summary>
+        <div class="form-grid">
+          <label>Status
+            <select name="status">
+              <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
+              <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
+            </select>
+          </label>
+        </div>
+      </details>
       <div class="row"><button class="button button-primary" type="submit">Save menu</button></div>
     </form>
+    ${structuredBuilderScript()}
   `;
+}
+
+function menuItemEditorRow(item: { label: string; url: string; openNewTab: boolean }) {
+  return `<div class="structured-row structured-row-menu" data-structured-row>
+    <span class="structured-handle" aria-hidden="true"></span>
+    <label>Label<input data-part="label" value="${escapeHtml(item.label)}" placeholder="About" /></label>
+    <label>URL<input data-part="url" value="${escapeHtml(item.url)}" placeholder="/about.php" /></label>
+    <label class="checkbox-label structured-required"><input type="checkbox" data-part="openNewTab" ${item.openNewTab ? "checked" : ""} /><span>Open in new tab</span></label>
+    <button class="button structured-remove" type="button" data-remove-structured-row>Remove</button>
+  </div>`;
+}
+
+function structuredBuilderScript() {
+  return `<script>
+    document.querySelectorAll("[data-structured-builder]").forEach((builder) => {
+      const rows = builder.querySelector("[data-structured-rows]");
+      const source = builder.querySelector("textarea[name=fieldsSpec], textarea[name=itemsSpec]");
+      const kind = builder.dataset.structuredBuilder;
+      if (!rows || !source) return;
+      builder.classList.add("is-enhanced");
+      const formRow = ${JSON.stringify(formFieldEditorRow({ name: "", label: "", type: "text", required: false, options: "" }))};
+      const menuRow = ${JSON.stringify(menuItemEditorRow({ label: "", url: "", openNewTab: false }))};
+      const sync = () => {
+        source.value = Array.from(rows.querySelectorAll("[data-structured-row]")).map((row) => {
+          const value = (part) => (row.querySelector("[data-part=" + part + "]")?.value || "").trim().replaceAll("|", "");
+          const checked = (part) => Boolean(row.querySelector("[data-part=" + part + "]")?.checked);
+          if (kind === "form") {
+            const name = value("name");
+            const label = value("label");
+            const options = value("options");
+            return name || label || options
+              ? [name, label, value("type"), checked("required") ? "true" : "false", options].join("|")
+              : "";
+          }
+          const label = value("label");
+          const url = value("url");
+          return label || url ? [label, url, checked("openNewTab") ? "true" : "false"].join("|") : "";
+        }).filter(Boolean).join("\\n");
+      };
+      builder.addEventListener("input", sync);
+      builder.addEventListener("change", sync);
+      builder.addEventListener("click", (event) => {
+        const remove = event.target.closest("[data-remove-structured-row]");
+        if (remove) {
+          remove.closest("[data-structured-row]")?.remove();
+          if (!rows.children.length) rows.insertAdjacentHTML("beforeend", kind === "form" ? formRow : menuRow);
+          sync();
+          return;
+        }
+        if (event.target.closest("[data-add-structured-row]")) {
+          rows.insertAdjacentHTML("beforeend", kind === "form" ? formRow : menuRow);
+          rows.lastElementChild?.querySelector("input")?.focus();
+          sync();
+          window.applyAdminLocale?.(localStorage.getItem("hybrid-static-cms-locale") || "en");
+        }
+      });
+      builder.closest("form")?.addEventListener("submit", sync);
+      sync();
+    });
+  </script>`;
 }
 
 function blockValuesFromForm(form: FormData) {
@@ -754,18 +1103,37 @@ function blockValuesFromForm(form: FormData) {
 
 function blockForm(action: string, values?: Record<string, string>) {
   return `
-    <form method="post" action="${action}" class="form-grid">
-      <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
-      <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="footer-cta" required /></label>
-      <label>Status
-        <select name="status">
-          <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
-          <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
-        </select>
-      </label>
-      <label>Body HTML <textarea name="bodyHtml" required>${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>
-      ${richEditorTools()}
-      <p class="meta">Use <code>[[block:slug]]</code> in a CMS-managed page body to include this block.</p>
+    <form method="post" action="${action}" class="editor-form form-grid">
+      <section class="editor-section">
+        <p class="editor-section-kicker">Block setup</p>
+        <h2 class="editor-section-title">Basic information</h2>
+        <div class="form-grid">
+          <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
+          <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="footer-cta" required /></label>
+        </div>
+      </section>
+      <section class="editor-section">
+        <p class="editor-section-kicker">Reusable content</p>
+        <h2 class="editor-section-title">Block body</h2>
+        <label>Body HTML <textarea name="bodyHtml" required>${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>
+        ${richEditorTools()}
+      </section>
+      <section class="editor-section editor-section-compact">
+        <p class="editor-section-kicker">Placement</p>
+        <h2 class="editor-section-title">Embed block</h2>
+        <div class="usage-callout"><p>Use this snippet in a CMS-managed post or page body.</p><code>[[block:${escapeHtml(values?.slug || "slug")}]]</code></div>
+      </section>
+      <details class="editor-section editor-section-compact editor-collapsible">
+        <summary><span class="editor-section-kicker">Publishing</span><span class="editor-section-title">Publication settings</span></summary>
+        <div class="form-grid">
+          <label>Status
+            <select name="status">
+              <option value="draft" ${values?.status === "draft" ? "selected" : ""}>Draft</option>
+              <option value="published" ${values?.status === "published" ? "selected" : ""}>Published</option>
+            </select>
+          </label>
+        </div>
+      </details>
       <div class="row"><button class="button button-primary" type="submit">Save block</button></div>
     </form>
   `;
@@ -793,7 +1161,7 @@ function snapshotHelperCard(returnTo: string, suggestions: string[]) {
       <form method="post" action="${config.controlPanelPath}/snapshots" class="form-grid">
         <input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}" />
         <label>Relative path inside public_html
-          <input name="relativePath" placeholder="index.html or assets/site.css" required />
+          <input name="relativePath" placeholder="index.html or assets/css/site.css" required />
         </label>
         <label>Reason
           <input name="reason" value="Before editing related site template" />
@@ -814,7 +1182,7 @@ function mediaHelperCard(items: Awaited<ReturnType<typeof listMedia>>) {
     .map((item) => {
       let preview = `<span class="meta">No preview</span>`;
       if (isImageMedia(item.mimeType)) {
-        preview = `<img src="${item.publicUrl}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:120px; max-height:88px; border-radius:8px; border:1px solid var(--line);" />`;
+        preview = `<img src="${mediaPreviewUrl(item)}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:120px; max-height:88px; border-radius:8px; border:1px solid var(--line);" loading="lazy" decoding="async" />`;
       } else if (isVideoMedia(item.mimeType)) {
         preview = `<video src="${item.publicUrl}" style="max-width:120px; max-height:88px; border-radius:8px; border:1px solid var(--line);" muted></video>`;
       } else if (isAudioMedia(item.mimeType)) {
@@ -828,6 +1196,7 @@ function mediaHelperCard(items: Awaited<ReturnType<typeof listMedia>>) {
           <div style="margin-bottom:12px;">${preview}</div>
           <h3 style="font-size:1rem; margin-bottom:8px;">${escapeHtml(item.originalName)}</h3>
           <p class="meta" style="margin-bottom:10px;">${escapeHtml(item.mimeType)}</p>
+          ${item.width && item.height ? `<p class="meta" style="margin-bottom:10px;"><span data-i18n="Dimensions">Dimensions</span>: ${item.width} × ${item.height} px · <span data-i18n="Variants">Variants</span>: ${item.variants.length}</p>` : ""}
           <label class="meta">Embed snippet
             <textarea readonly style="min-height:90px;">${escapeHtml(mediaEmbedSnippet(item))}</textarea>
           </label>
@@ -908,6 +1277,227 @@ export const adminRoutes = new Hono();
 
 adminRoutes.use("/*", requireAdminPermission());
 
+async function autosaveResponse(c: Context, contentType: AutosaveContentType) {
+  const user = c.get("sessionUser");
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const autosave = await getEditorAutosave(user.id, contentType, String(c.req.param("key") ?? ""));
+    return c.json({ autosave });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Unable to load autosave." }, 400);
+  }
+}
+
+async function saveAutosaveResponse(c: Context, contentType: AutosaveContentType) {
+  const user = c.get("sessionUser");
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const body = await c.req.json();
+    const updatedAt = await saveEditorAutosave(user.id, contentType, String(c.req.param("key") ?? ""), body.payload, body.baseUpdatedAt);
+    return c.json({ updatedAt });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Unable to autosave." }, 400);
+  }
+}
+
+async function deleteAutosaveResponse(c: Context, contentType: AutosaveContentType) {
+  const user = c.get("sessionUser");
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    await deleteEditorAutosave(user.id, contentType, String(c.req.param("key") ?? ""));
+    return c.json({ deleted: true });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Unable to discard autosave." }, 400);
+  }
+}
+
+async function clearSubmittedAutosave(userId: number, contentType: AutosaveContentType, key: string) {
+  if (/^[A-Za-z0-9_-]{1,96}$/.test(key)) {
+    await deleteEditorAutosave(userId, contentType, key).catch(() => undefined);
+  }
+}
+
+adminRoutes.get("/posts/autosave/:key", (c) => autosaveResponse(c, "post"));
+adminRoutes.post("/posts/autosave/:key", (c) => saveAutosaveResponse(c, "post"));
+adminRoutes.post("/posts/autosave/:key/delete", (c) => deleteAutosaveResponse(c, "post"));
+adminRoutes.get("/pages/autosave/:key", (c) => autosaveResponse(c, "page"));
+adminRoutes.post("/pages/autosave/:key", (c) => saveAutosaveResponse(c, "page"));
+adminRoutes.post("/pages/autosave/:key/delete", (c) => deleteAutosaveResponse(c, "page"));
+
+function recoveryCodesPage(_user: SessionUser, codes: string[]) {
+  return `
+    <section class="editor-section">
+      <p class="editor-section-kicker">Account security</p>
+      <h2 class="editor-section-title">Save your recovery codes</h2>
+      <div class="security-warning">
+        <strong>These codes are shown only once.</strong>
+        <p>Store them in a password manager or another protected offline location. Each code can be used only once.</p>
+      </div>
+      <div class="recovery-code-grid">${codes.map((code) => `<code>${escapeHtml(code)}</code>`).join("")}</div>
+      <p><a class="button button-primary" href="${config.controlPanelPath}/security">Return to account security</a></p>
+    </section>`;
+}
+
+adminRoutes.get("/security", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  c.header("Cache-Control", "no-store");
+  const [security, pending] = await Promise.all([
+    getAccountSecurity(user.id, user.sessionId),
+    getPendingTotpEnrollment(user.id, user.email),
+  ]);
+  const body = `${queryNotice(c)}
+    <div class="account-security-page">
+      <section class="editor-section">
+        <p class="editor-section-kicker">Password</p>
+        <h2 class="editor-section-title">Change password</h2>
+        <p class="meta">Changing your password signs out every other session.</p>
+        <form method="post" action="${config.controlPanelPath}/security/password" class="form-grid">
+          <label>Current password <input type="password" name="currentPassword" autocomplete="current-password" required /></label>
+          <label>New password <input type="password" name="newPassword" autocomplete="new-password" minlength="12" required /></label>
+          <label>Confirm new password <input type="password" name="confirmPassword" autocomplete="new-password" minlength="12" required /></label>
+          <div><button class="button button-primary" type="submit">Change password</button></div>
+        </form>
+      </section>
+      <section class="editor-section">
+        <p class="editor-section-kicker">Two-factor authentication</p>
+        <div class="section-heading-row"><div><h2 class="editor-section-title">Authenticator app</h2><p class="meta">${security.twoFactorEnabled ? `<span>Enabled</span> · ${security.recoveryCodesRemaining} <span>recovery codes remaining</span>` : "Not enabled"}</p></div><span class="media-usage-badge ${security.twoFactorEnabled ? "media-usage-used" : "media-usage-unused"}">${security.twoFactorEnabled ? "Enabled" : "Disabled"}</span></div>
+        ${security.twoFactorEnabled ? `
+          <div class="security-action-grid">
+            <form method="post" action="${config.controlPanelPath}/security/2fa/recovery-codes" class="form-grid">
+              <h3>Generate new recovery codes</h3>
+              <p class="meta">Existing recovery codes become invalid immediately.</p>
+              <label>Current password <input type="password" name="currentPassword" autocomplete="current-password" required /></label>
+              <label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required /></label>
+              <button class="button" type="submit">Replace recovery codes</button>
+            </form>
+            <form method="post" action="${config.controlPanelPath}/security/2fa/disable" class="form-grid security-danger-zone">
+              <h3>Disable two-factor authentication</h3>
+              <p class="meta">This also invalidates every recovery code and signs out other sessions.</p>
+              <label>Current password <input type="password" name="currentPassword" autocomplete="current-password" required /></label>
+              <label>Authenticator or recovery code <input name="code" autocomplete="one-time-code" required /></label>
+              <button class="button" type="submit">Disable two-factor authentication</button>
+            </form>
+          </div>` : pending ? `
+          <div class="security-enrollment">
+            <h3>Connect your authenticator app</h3>
+            <ol><li>Add a new time-based account in your authenticator app.</li><li>Enter the secret or use the setup URI.</li><li>Confirm with the current six-digit code.</li></ol>
+            <dl class="security-secret"><dt>Secret</dt><dd><code>${escapeHtml(pending.secret)}</code></dd><dt>Setup URI</dt><dd><code>${escapeHtml(pending.uri)}</code></dd></dl>
+            <form method="post" action="${config.controlPanelPath}/security/2fa/confirm" class="form-grid">
+              <label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required /></label>
+              <div><button class="button button-primary" type="submit">Enable two-factor authentication</button></div>
+            </form>
+          </div>` : `
+          <p>Use a personal authenticator secret instead of sharing the installation-wide TOTP secret.</p>
+          <form method="post" action="${config.controlPanelPath}/security/2fa/start" class="form-grid">
+            <label>Current password <input type="password" name="currentPassword" autocomplete="current-password" required /></label>
+            <div><button class="button button-primary" type="submit">Start two-factor enrollment</button></div>
+          </form>`}
+      </section>
+      <section class="editor-section">
+        <p class="editor-section-kicker">Sessions</p>
+        <div class="section-heading-row"><div><h2 class="editor-section-title">Signed-in devices</h2><p class="meta">Review where this account is currently signed in.</p></div>${security.sessions.length > 1 ? `<form method="post" action="${config.controlPanelPath}/security/sessions/revoke-others"><button class="button" type="submit">Sign out other sessions</button></form>` : ""}</div>
+        <div class="session-list">
+          ${security.sessions.map((session) => `<article class="session-item">
+            <div><strong>${session.current ? "Current session" : escapeHtml(session.userAgent?.slice(0, 120) || "Unknown browser")}</strong><p class="meta">${session.createdIp ? `IP ${escapeHtml(session.createdIp)} · ` : ""}<span>Last active</span> ${adminDate(session.lastSeenAt)} · <span>Expires</span> ${adminDate(session.expiresAt)}</p>${session.current ? `<span class="media-usage-badge media-usage-used">This device</span>` : ""}</div>
+            ${session.current ? "" : `<form method="post" action="${config.controlPanelPath}/security/sessions/${session.id}/revoke"><button class="button" type="submit">Sign out</button></form>`}
+          </article>`).join("")}
+        </div>
+      </section>
+    </div>`;
+  return c.html(adminLayout("Account Security", user, body));
+});
+
+adminRoutes.post("/security/password", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const form = await c.req.formData();
+  const currentPassword = String(form.get("currentPassword") ?? "");
+  const newPassword = String(form.get("newPassword") ?? "");
+  if (newPassword !== String(form.get("confirmPassword") ?? "")) {
+    return c.redirect(`${config.controlPanelPath}/security?error=${encodeURIComponent("New password confirmation does not match.")}`);
+  }
+  try {
+    await changeOwnPassword(user.id, currentPassword, newPassword, user.sessionId);
+    await writeAuditLog({ actorUserId: user.id, action: "auth.password_change", targetType: "user", targetId: user.id, summary: "Changed own password and revoked other sessions.", ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/security?success=${encodeURIComponent("Password changed. Other sessions were signed out.")}`);
+  } catch (error) {
+    return c.redirect(`${config.controlPanelPath}/security?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to change password.")}`);
+  }
+});
+
+adminRoutes.post("/security/2fa/start", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  try {
+    await startTotpEnrollment(user.id, user.email, String((await c.req.formData()).get("currentPassword") ?? ""));
+    await writeAuditLog({ actorUserId: user.id, action: "auth.2fa_enrollment_start", targetType: "user", targetId: user.id, summary: "Started personal two-factor enrollment.", ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/security?success=${encodeURIComponent("Enter the authenticator code to finish enrollment.")}`);
+  } catch (error) {
+    return c.redirect(`${config.controlPanelPath}/security?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to start enrollment.")}`);
+  }
+});
+
+adminRoutes.post("/security/2fa/confirm", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  try {
+    const codes = await confirmTotpEnrollment(user.id, String((await c.req.formData()).get("code") ?? ""), user.sessionId);
+    await writeAuditLog({ actorUserId: user.id, action: "auth.2fa_enable", targetType: "user", targetId: user.id, summary: "Enabled personal two-factor authentication.", ipAddress: requestIp(c) });
+    c.header("Cache-Control", "no-store");
+    return c.html(adminLayout("Recovery Codes", user, recoveryCodesPage(user, codes)));
+  } catch (error) {
+    return c.redirect(`${config.controlPanelPath}/security?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to enable two-factor authentication.")}`);
+  }
+});
+
+adminRoutes.post("/security/2fa/recovery-codes", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const form = await c.req.formData();
+  try {
+    const codes = await regenerateRecoveryCodes(user.id, String(form.get("currentPassword") ?? ""), String(form.get("code") ?? ""));
+    await writeAuditLog({ actorUserId: user.id, action: "auth.recovery_codes_replace", targetType: "user", targetId: user.id, summary: "Replaced personal two-factor recovery codes.", ipAddress: requestIp(c) });
+    c.header("Cache-Control", "no-store");
+    return c.html(adminLayout("Recovery Codes", user, recoveryCodesPage(user, codes)));
+  } catch (error) {
+    return c.redirect(`${config.controlPanelPath}/security?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to replace recovery codes.")}`);
+  }
+});
+
+adminRoutes.post("/security/2fa/disable", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const form = await c.req.formData();
+  try {
+    await disableTotp(user.id, String(form.get("currentPassword") ?? ""), String(form.get("code") ?? ""), user.sessionId);
+    await writeAuditLog({ actorUserId: user.id, action: "auth.2fa_disable", targetType: "user", targetId: user.id, summary: "Disabled personal two-factor authentication.", ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/security?success=${encodeURIComponent("Two-factor authentication disabled.")}`);
+  } catch (error) {
+    return c.redirect(`${config.controlPanelPath}/security?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to disable two-factor authentication.")}`);
+  }
+});
+
+adminRoutes.post("/security/sessions/revoke-others", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const count = await revokeOtherSessions(user.id, user.sessionId);
+  await writeAuditLog({ actorUserId: user.id, action: "auth.sessions_revoke_others", targetType: "user", targetId: user.id, summary: `Revoked ${count} other session(s).`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/security?success=${encodeURIComponent("Other sessions signed out.")}`);
+});
+
+adminRoutes.post("/security/sessions/:id/revoke", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  try {
+    const revoked = await revokeOwnSession(user.id, Number(c.req.param("id")), user.sessionId);
+    if (revoked) await writeAuditLog({ actorUserId: user.id, action: "auth.session_revoke", targetType: "session", targetId: c.req.param("id"), summary: "Revoked an account session.", ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/security?success=${encodeURIComponent(revoked ? "Session signed out." : "Session was already inactive.")}`);
+  } catch (error) {
+    return c.redirect(`${config.controlPanelPath}/security?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to revoke session.")}`);
+  }
+});
+
 adminRoutes.get("/users", async (c) => {
   const user = c.get("sessionUser");
   const users = await listUsers();
@@ -986,6 +1576,11 @@ adminRoutes.get("/users/:id/edit", async (c) => {
     <form method="post" action="${config.controlPanelPath}/users/${target.id}/revoke-sessions" style="margin-top:16px;">
       <button class="button" type="submit">Revoke all sessions</button>
     </form>
+    ${target.twoFactorEnabled && target.id !== actor?.id ? `
+      <form method="post" action="${config.controlPanelPath}/users/${target.id}/reset-2fa" class="security-danger-zone" style="margin-top:16px;">
+        <p class="meta">Use only after verifying the user's identity. This removes personal 2FA and signs out every session.</p>
+        <button class="button" type="submit">Reset two-factor authentication</button>
+      </form>` : ""}
   `;
   return c.html(adminLayout("Edit User", actor, body));
 });
@@ -1057,6 +1652,20 @@ adminRoutes.post("/users/:id/revoke-sessions", async (c) => {
   return c.redirect(`${config.controlPanelPath}/users/${target.id}/edit?success=${encodeURIComponent(`${count} session(s) revoked.`)}`);
 });
 
+adminRoutes.post("/users/:id/reset-2fa", async (c) => {
+  const actor = c.get("sessionUser");
+  if (!actor) return c.redirect("/login");
+  const target = await getUserById(Number(c.req.param("id")));
+  if (!target) return c.notFound();
+  if (target.id === actor.id) {
+    return c.redirect(`${config.controlPanelPath}/security?error=${encodeURIComponent("Use account security to change your own two-factor authentication.")}`);
+  }
+  if (target.roles.includes("owner") && !actor.roles.includes("owner")) return c.text("Forbidden", 403);
+  await resetUserTwoFactor(target.id);
+  await writeAuditLog({ actorUserId: actor.id, action: "user.2fa_reset", targetType: "user", targetId: target.id, summary: `Reset personal two-factor authentication for user "${target.email}" and revoked sessions.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/users/${target.id}/edit?success=${encodeURIComponent("Two-factor authentication reset and sessions revoked.")}`);
+});
+
 adminRoutes.get("/", async (c) => {
   const user = c.get("sessionUser");
   const stats = await getDashboardStats();
@@ -1064,6 +1673,7 @@ adminRoutes.get("/", async (c) => {
   const notifications = await listOperatorNotifications(8, true);
 
   const body = `
+    ${queryNotice(c)}
     <section class="stats">
       <div class="stat"><p class="meta">Posts</p><h2>${stats.posts}</h2></div>
       <div class="stat"><p class="meta">Published</p><h2>${stats.published}</h2></div>
@@ -1100,6 +1710,9 @@ adminRoutes.get("/", async (c) => {
       <aside>
         <h2>Publishing model</h2>
         <p>Published posts regenerate static fragments, RSS, sitemap, and the embeddable script output.</p>
+        <form method="post" action="${config.controlPanelPath}/render" style="margin-bottom:12px;">
+          <button class="button button-primary" type="submit">Regenerate public output</button>
+        </form>
         <div class="row">
           <a class="button" href="/cms/posts/latest.html">Latest fragment</a>
           <a class="button" href="/cms/posts/list.html">List page</a>
@@ -1167,9 +1780,6 @@ adminRoutes.get("/posts", async (c) => {
     ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;">
       <a class="button button-primary" href="${config.controlPanelPath}/posts/new">New post</a>
-      <form method="post" action="${config.controlPanelPath}/render">
-        <button class="button" type="submit">Regenerate fragments</button>
-      </form>
     </div>
     <form method="get" action="${config.controlPanelPath}/posts" class="form-grid" style="margin-bottom:16px;">
       <div class="row">
@@ -1258,7 +1868,63 @@ adminRoutes.post("/comments/:id/delete", async (c) => {
 
 adminRoutes.get("/posts/new", async (c) => {
   const user = c.get("sessionUser");
-  return c.html(adminLayout("New Post", user, queryNotice(c) + postForm(`${config.controlPanelPath}/posts`, undefined, await listSeries())));
+  return c.html(adminLayout("New Post", user, queryNotice(c) + postForm(`${config.controlPanelPath}/posts`, {
+    autosaveKey: newAutosaveKey(c.req.query("autosave")),
+  }, await listSeries())));
+});
+
+adminRoutes.get("/categories", async (c) => {
+  const [categories, stylesheets] = await Promise.all([listCategories(), listStylesheets("categories")]);
+  const body = `
+    ${queryNotice(c)}
+    <section class="editor-section">
+      <p class="editor-section-kicker">Article presentation</p>
+      <h2 class="editor-section-title">Category stylesheets</h2>
+      <p class="meta">Assign CSS from <code>public_html/assets/css/categories</code>. Every published post automatically loads the stylesheets assigned to its categories.</p>
+    </section>
+    <table>
+      <thead><tr><th>Category</th><th>Slug</th><th>Posts</th><th>Stylesheet</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${categories.map((category) => `<tr>
+          <td><strong>${escapeHtml(category.name)}</strong></td>
+          <td><code>${escapeHtml(category.slug)}</code></td>
+          <td>${category.postCount}</td>
+          <td><code>${escapeHtml(category.stylesheetPath ?? "Default site stylesheet only")}</code></td>
+          <td class="cell-actions">
+            <form method="post" action="${config.controlPanelPath}/categories/${category.id}/stylesheet" class="row">
+              <select name="stylesheetPath" aria-label="Stylesheet">
+                <option value="">Default site stylesheet only</option>
+                ${stylesheets.map((stylesheet) => `<option value="${escapeHtml(stylesheet)}" ${category.stylesheetPath === stylesheet ? "selected" : ""}>${escapeHtml(stylesheet)}</option>`).join("")}
+              </select>
+              <button class="button" type="submit">Save stylesheet</button>
+            </form>
+          </td>
+        </tr>`).join("") || `<tr><td colspan="5">No categories yet. Categories are created when a post is saved.</td></tr>`}
+      </tbody>
+    </table>`;
+  return c.html(adminLayout("Categories", c.get("sessionUser"), body, "wide-list"));
+});
+
+adminRoutes.post("/categories/:id/stylesheet", async (c) => {
+  const form = await c.req.formData();
+  try {
+    await updateCategoryStylesheet(Number(c.req.param("id")), String(form.get("stylesheetPath") ?? ""));
+    await renderPublishedArtifacts();
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.redirect(`${config.controlPanelPath}/categories?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+  await writeAuditLog({
+    actorUserId: c.get("sessionUser")?.id ?? null,
+    action: "category.stylesheet.update",
+    targetType: "category",
+    targetId: c.req.param("id"),
+    summary: `Updated the stylesheet for category #${c.req.param("id")}.`,
+    ipAddress: requestIp(c),
+  });
+  return c.redirect(`${config.controlPanelPath}/categories?success=${encodeURIComponent("Category stylesheet saved.")}`);
 });
 
 adminRoutes.post("/posts", async (c) => {
@@ -1314,6 +1980,7 @@ adminRoutes.post("/posts", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
+  await clearSubmittedAutosave(user.id, "post", values.autosaveKey);
   const success = publishAndGenerate ? "Post published and generated." : "Post saved.";
   return c.redirect(`${config.controlPanelPath}/posts/${post?.id ?? ""}/edit?success=${encodeURIComponent(success)}`);
 });
@@ -1366,10 +2033,12 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
         seoNoindex: post.seoNoindex ? "true" : "false",
         seoNofollow: post.seoNofollow ? "true" : "false",
         seriesId: seriesId ? String(seriesId) : "",
+        autosaveKey: `post-${post.id}`,
+        autosaveBaseUpdatedAt: post.updatedAt,
       }, series) +
         snapshotHelperCard(`${config.controlPanelPath}/posts/${post.id}/edit`, [
           "index.html",
-          "assets/site.css",
+          "assets/css/site.css",
           "cms/posts/latest.html",
         ]) +
         mediaHelperCard(mediaItems) +
@@ -1416,7 +2085,7 @@ adminRoutes.post("/posts/:id", async (c) => {
             postForm(`${config.controlPanelPath}/posts/${c.req.param("id")}`, values, series) +
             snapshotHelperCard(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit`, [
               "index.html",
-              "assets/site.css",
+              "assets/css/site.css",
               "cms/posts/latest.html",
             ]) +
             mediaHelperCard(mediaItems) +
@@ -1437,6 +2106,7 @@ adminRoutes.post("/posts/:id", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
+  if (user) await clearSubmittedAutosave(user.id, "post", values.autosaveKey);
   const success = publishAndGenerate ? "Post published and generated." : "Post updated.";
   return c.redirect(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit?success=${encodeURIComponent(success)}`);
 });
@@ -1530,7 +2200,7 @@ adminRoutes.post("/render", async (c) => {
     await renderPublishedArtifacts();
   } catch (error) {
     logError("renderer.regeneration_failed", "Published artifact regeneration failed.", { error });
-    return c.redirect(`${config.controlPanelPath}/posts?error=${encodeURIComponent("Page generation failed. Check the application logs and output-directory permissions.")}`);
+    return c.redirect(`${config.controlPanelPath}?error=${encodeURIComponent("Page generation failed. Check the application logs and output-directory permissions.")}`);
   }
   await writeAuditLog({
     actorUserId: c.get("sessionUser")?.id ?? null,
@@ -1540,7 +2210,7 @@ adminRoutes.post("/render", async (c) => {
     summary: "Regenerated published CMS artifacts.",
     ipAddress: requestIp(c),
   });
-  return c.redirect(`${config.controlPanelPath}/posts?success=${encodeURIComponent("Published pages regenerated successfully.")}`);
+  return c.redirect(`${config.controlPanelPath}?success=${encodeURIComponent("Published pages regenerated successfully.")}`);
 });
 
 adminRoutes.get("/pages", async (c) => {
@@ -1600,7 +2270,10 @@ adminRoutes.get("/pages", async (c) => {
 
 adminRoutes.get("/pages/new", async (c) => {
   const user = c.get("sessionUser");
-  return c.html(adminLayout("New Page", user, queryNotice(c) + pageForm(`${config.controlPanelPath}/pages`, undefined, await listPageGroups())));
+  const [groups, stylesheets] = await Promise.all([listPageGroups(), listStylesheets("pages")]);
+  return c.html(adminLayout("New Page", user, queryNotice(c) + pageForm(`${config.controlPanelPath}/pages`, {
+    autosaveKey: newAutosaveKey(c.req.query("autosave")),
+  }, groups, stylesheets)));
 });
 
 adminRoutes.get("/forms", async (c) => {
@@ -1846,6 +2519,7 @@ adminRoutes.post("/pages", async (c) => {
   const values = pageValuesFromForm(form);
   const publishAndGenerate = applyPublishAndGenerateAction(form, values);
   const groups = await listPageGroups();
+  const stylesheets = await listStylesheets("pages");
   const selectedGroup = groups.find((item) => item.id === Number(form.get("pageGroupId")));
   values.slug = buildScopedSlug(values.slug, values.title, selectedGroup?.slug);
   let page;
@@ -1868,12 +2542,13 @@ adminRoutes.post("/pages", async (c) => {
         seoNoindex: values.seoNoindex === "true",
         seoNofollow: values.seoNofollow === "true",
         pageGroupId: selectedGroup?.id ?? null,
+        stylesheetPath: values.stylesheetPath,
       },
       user.id,
     );
   } catch (error) {
     if (error instanceof AppValidationError) {
-      return c.html(adminLayout("New Page", user, noticeCard(error.message, "error") + pageForm(`${config.controlPanelPath}/pages`, values, groups)), 400);
+      return c.html(adminLayout("New Page", user, noticeCard(error.message, "error") + pageForm(`${config.controlPanelPath}/pages`, values, groups, stylesheets)), 400);
     }
     throw error;
   }
@@ -1887,6 +2562,7 @@ adminRoutes.post("/pages", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
+  await clearSubmittedAutosave(user.id, "page", values.autosaveKey);
   const success = publishAndGenerate ? "Page published and generated." : "Page saved.";
   return c.redirect(`${config.controlPanelPath}/pages/${page?.id ?? ""}/edit?success=${encodeURIComponent(success)}`);
 });
@@ -1896,6 +2572,7 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
   const page = await getPageById(Number(c.req.param("id")));
   const mediaItems = await listMedia();
   const groups = await listPageGroups();
+  const stylesheets = await listStylesheets("pages");
   const groupId = await getPageGroupId(Number(c.req.param("id")));
   if (!page) {
     return c.text("Not found", 404);
@@ -1921,7 +2598,10 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
         seoNoindex: page.seoNoindex ? "true" : "false",
         seoNofollow: page.seoNofollow ? "true" : "false",
         pageGroupId: groupId ? String(groupId) : "",
-      }, groups) +
+        stylesheetPath: page.stylesheetPath ?? "",
+        autosaveKey: `page-${page.id}`,
+        autosaveBaseUpdatedAt: page.updatedAt,
+      }, groups, stylesheets) +
         snapshotHelperCard(`${config.controlPanelPath}/pages/${page.id}/edit`, [
           "index.html",
           "about.php",
@@ -1938,6 +2618,7 @@ adminRoutes.post("/pages/:id", async (c) => {
   const user = c.get("sessionUser");
   const mediaItems = await listMedia();
   const groups = await listPageGroups();
+  const stylesheets = await listStylesheets("pages");
   const values = pageValuesFromForm(form);
   const publishAndGenerate = applyPublishAndGenerateAction(form, values);
   try {
@@ -1958,6 +2639,7 @@ adminRoutes.post("/pages/:id", async (c) => {
       seoNoindex: values.seoNoindex === "true",
       seoNofollow: values.seoNofollow === "true",
       pageGroupId: Number(form.get("pageGroupId")) > 0 ? Number(form.get("pageGroupId")) : null,
+      stylesheetPath: values.stylesheetPath,
     }, user?.id);
   } catch (error) {
     if (error instanceof AppValidationError) {
@@ -1966,7 +2648,7 @@ adminRoutes.post("/pages/:id", async (c) => {
           "Edit Page",
           user,
           noticeCard(error.message, "error") +
-            pageForm(`${config.controlPanelPath}/pages/${c.req.param("id")}`, values, groups) +
+            pageForm(`${config.controlPanelPath}/pages/${c.req.param("id")}`, values, groups, stylesheets) +
             snapshotHelperCard(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit`, [
               "index.html",
               "about.php",
@@ -1990,6 +2672,7 @@ adminRoutes.post("/pages/:id", async (c) => {
     ipAddress: requestIp(c),
   });
   await renderPublishedArtifacts();
+  if (user) await clearSubmittedAutosave(user.id, "page", values.autosaveKey);
   const success = publishAndGenerate ? "Page published and generated." : "Page updated.";
   return c.redirect(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit?success=${encodeURIComponent(success)}`);
 });
@@ -2063,6 +2746,7 @@ adminRoutes.post("/pages/:id/revisions/:revisionId/restore", async (c) => {
     seoKeywords: snapshot.seoKeywords ?? "",
     seoNoindex: snapshot.seoNoindex,
     seoNofollow: snapshot.seoNofollow,
+    stylesheetPath: snapshot.stylesheetPath,
   }, user?.id);
   await writeAuditLog({
     actorUserId: user?.id ?? null,
@@ -2092,12 +2776,24 @@ adminRoutes.get("/series", async (c) => {
 });
 
 adminRoutes.get("/series/new", (c) => c.html(adminLayout("New Series", c.get("sessionUser"), `${queryNotice(c)}
-  <form method="post" action="${config.controlPanelPath}/series" class="form-grid">
-    <label>Series title <input name="title" required placeholder="e.g. CMS development diary" /></label>
-    <label>Slug <input name="slug" required placeholder="cms-development-diary" /></label>
-    <label>Description <textarea name="description"></textarea></label>
-    <label class="checkbox-label"><input type="checkbox" name="commentsEnabled" value="true" /> <span>Enable comments for this series</span></label>
-    <button class="button button-primary" type="submit">Create series</button>
+  <form method="post" action="${config.controlPanelPath}/series" class="editor-form form-grid">
+    <section class="editor-section">
+      <p class="editor-section-kicker">Organization</p>
+      <h2 class="editor-section-title">Series information</h2>
+      <p class="meta">Create the parent collection first, then add and order its articles.</p>
+      <div class="form-grid">
+        <label>Series title <input name="title" required placeholder="e.g. CMS development diary" /></label>
+        <label>Slug <input name="slug" required placeholder="cms-development-diary" /></label>
+        <label>Description <textarea name="description"></textarea></label>
+      </div>
+    </section>
+    <section class="editor-section editor-section-compact">
+      <p class="editor-section-kicker">Discussion</p>
+      <h2 class="editor-section-title">Comment policy</h2>
+      <label class="checkbox-label"><input type="checkbox" name="commentsEnabled" value="true" /> <span>Enable comments for this series</span></label>
+      <p class="meta">Individual articles can still disable comments after the series is created.</p>
+    </section>
+    <div class="row"><button class="button button-primary" type="submit">Create series</button></div>
   </form>`)));
 
 adminRoutes.post("/series", async (c) => {
@@ -2119,27 +2815,34 @@ adminRoutes.get("/series/:id/edit", async (c) => {
   const members = await listSeriesPosts(item.id);
   const memberIds = new Set(members.map((post) => Number(post.id)));
   const body = `${queryNotice(c)}
-    <section style="border:1px solid var(--line); padding:20px; margin-bottom:24px;">
-      <p class="meta">Series parent</p>
+    <div class="editor-form group-editor">
+    <section class="editor-section">
+      <p class="editor-section-kicker">Organization</p>
+      <h2 class="editor-section-title">Series information</h2>
+      <p class="meta">This parent controls the shared URL scope, description, and default comment policy.</p>
       <form method="post" action="${config.controlPanelPath}/series/${item.id}" class="form-grid">
         <label>Series title <input name="title" value="${escapeHtml(item.title)}" required /></label>
         <label>Slug <input name="slug" value="${escapeHtml(item.slug)}" required /></label>
         <label>Description <textarea name="description">${escapeHtml(item.description ?? "")}</textarea></label>
-        <label class="checkbox-label"><input type="checkbox" name="commentsEnabled" value="true" ${item.commentsEnabled ? "checked" : ""} /> <span>Enable comments for this series</span></label>
-        <p class="meta">Turning this off closes comments on every article in the series. When enabled, individual articles can still disallow comments from the post list.</p>
+        <details class="editor-inline-details">
+          <summary><span class="editor-section-title">Comment policy</span></summary>
+          <label class="checkbox-label"><input type="checkbox" name="commentsEnabled" value="true" ${item.commentsEnabled ? "checked" : ""} /> <span>Enable comments for this series</span></label>
+          <p class="meta">Turning this off closes comments on every article in the series. When enabled, individual articles can still disallow comments from the post list.</p>
+        </details>
         <button class="button button-primary" type="submit">Save series</button>
       </form>
     </section>
-    <section style="border:1px solid var(--line); padding:20px;">
-      <p class="meta">Series articles</p>
-      <h2>${escapeHtml(item.title)} <span class="meta">(${members.length} articles)</span></h2>
-      <form method="post" action="${config.controlPanelPath}/series/${item.id}/posts" class="row" style="align-items:end; margin-bottom:20px;">
-        <label style="flex:1;">Add article<select name="postId"><option value="">Select an article</option>${posts.items.filter((post) => !memberIds.has(post.id)).map((post) => `<option value="${post.id}">${escapeHtml(post.title)}</option>`).join("")}</select></label>
-        <label style="width:120px;">Order<input type="number" name="position" min="0" value="${members.length}" /></label>
+    <section class="editor-section">
+      <p class="editor-section-kicker">Series contents</p>
+      <div class="section-heading-row"><div><h2 class="editor-section-title">Series articles</h2><p class="meta">${members.length} articles in ${escapeHtml(item.title)}</p></div></div>
+      <form method="post" action="${config.controlPanelPath}/series/${item.id}/posts" class="assignment-form">
+        <label>Add article<select name="postId"><option value="">Select an article</option>${posts.items.filter((post) => !memberIds.has(post.id)).map((post) => `<option value="${post.id}">${escapeHtml(post.title)}</option>`).join("")}</select></label>
+        <label class="assignment-order">Order<input type="number" name="position" min="0" value="${members.length}" /></label>
         <button class="button button-primary" type="submit">Add to series</button>
       </form>
-      <ol>${members.map((post) => `<li style="padding:10px 0; border-bottom:1px solid var(--line);"><div class="row" style="justify-content:space-between;"><span><strong>${escapeHtml(String(post.title))}</strong> <span class="meta">#${post.position}</span></span><form method="post" action="${config.controlPanelPath}/series/${item.id}/posts/${post.id}/remove"><button class="button" type="submit">Remove</button></form></div></li>`).join("") || "<li>No articles assigned.</li>"}</ol>
-    </section>`;
+      <ol class="assignment-list">${members.map((post) => `<li><span class="assignment-position">${Number(post.position) + 1}</span><span class="assignment-title"><strong>${escapeHtml(String(post.title))}</strong><span class="meta">Article</span></span><form method="post" action="${config.controlPanelPath}/series/${item.id}/posts/${post.id}/remove"><button class="button" type="submit">Remove</button></form></li>`).join("") || "<li class='assignment-empty'>No articles assigned.</li>"}</ol>
+    </section>
+    </div>`;
   return c.html(adminLayout("Edit Series", user, body));
 });
 
@@ -2184,7 +2887,20 @@ adminRoutes.get("/page-groups", async (c) => {
   return c.html(adminLayout("Page groups", c.get("sessionUser"), body, "wide-list"));
 });
 
-adminRoutes.get("/page-groups/new", (c) => c.html(adminLayout("New Page Group", c.get("sessionUser"), `<form method="post" action="${config.controlPanelPath}/page-groups" class="form-grid"><label>Group title <input name="title" required placeholder="e.g. Company information" /></label><label>Slug <input name="slug" required placeholder="company" /></label><label>Description <textarea name="description"></textarea></label><button class="button button-primary" type="submit">Create page group</button></form>`)));
+adminRoutes.get("/page-groups/new", (c) => c.html(adminLayout("New Page Group", c.get("sessionUser"), `${queryNotice(c)}
+  <form method="post" action="${config.controlPanelPath}/page-groups" class="editor-form form-grid">
+    <section class="editor-section">
+      <p class="editor-section-kicker">Organization</p>
+      <h2 class="editor-section-title">Page group information</h2>
+      <p class="meta">Create the parent section first, then add and order its fixed pages.</p>
+      <div class="form-grid">
+        <label>Group title <input name="title" required placeholder="e.g. Company information" /></label>
+        <label>Slug <input name="slug" required placeholder="company" /></label>
+        <label>Description <textarea name="description"></textarea></label>
+      </div>
+    </section>
+    <div class="row"><button class="button button-primary" type="submit">Create page group</button></div>
+  </form>`)));
 
 adminRoutes.post("/page-groups", async (c) => {
   const form = await c.req.formData();
@@ -2203,7 +2919,30 @@ adminRoutes.get("/page-groups/:id/edit", async (c) => {
   const pages = await listPages({ page: 1, limit: 50, status: "any" });
   const members = await listPageGroupMembers(item.id);
   const memberIds = new Set(members.map((page) => Number(page.id)));
-  const body = `${queryNotice(c)}<section style="border:1px solid var(--line); padding:20px; margin-bottom:24px;"><p class="meta">Page group parent</p><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}" class="form-grid"><label>Group title <input name="title" value="${escapeHtml(item.title)}" required /></label><label>Slug <input name="slug" value="${escapeHtml(item.slug)}" required /></label><label>Description <textarea name="description">${escapeHtml(item.description ?? "")}</textarea></label><button class="button button-primary" type="submit">Save page group</button></form></section><section style="border:1px solid var(--line); padding:20px;"><p class="meta">Grouped pages</p><h2>${escapeHtml(item.title)} <span class="meta">(${members.length} pages)</span></h2><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/pages" class="row" style="align-items:end; margin-bottom:20px;"><label style="flex:1;">Add page<select name="pageId"><option value="">Select a page</option>${pages.items.filter((page) => !memberIds.has(page.id)).map((page) => `<option value="${page.id}">${escapeHtml(page.title)}</option>`).join("")}</select></label><label style="width:120px;">Order<input type="number" name="position" min="0" value="${members.length}" /></label><button class="button button-primary" type="submit">Add to group</button></form><ol>${members.map((page) => `<li style="padding:10px 0; border-bottom:1px solid var(--line);"><div class="row" style="justify-content:space-between;"><span><strong>${escapeHtml(String(page.title))}</strong> <span class="meta">#${page.position}</span></span><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/pages/${page.id}/remove"><button class="button" type="submit">Remove</button></form></div></li>`).join("") || "<li>No pages assigned.</li>"}</ol></section>`;
+  const body = `${queryNotice(c)}
+    <div class="editor-form group-editor">
+      <section class="editor-section">
+        <p class="editor-section-kicker">Organization</p>
+        <h2 class="editor-section-title">Page group information</h2>
+        <p class="meta">This parent controls the shared URL scope and description for its fixed pages.</p>
+        <form method="post" action="${config.controlPanelPath}/page-groups/${item.id}" class="form-grid">
+          <label>Group title <input name="title" value="${escapeHtml(item.title)}" required /></label>
+          <label>Slug <input name="slug" value="${escapeHtml(item.slug)}" required /></label>
+          <label>Description <textarea name="description">${escapeHtml(item.description ?? "")}</textarea></label>
+          <button class="button button-primary" type="submit">Save page group</button>
+        </form>
+      </section>
+      <section class="editor-section">
+        <p class="editor-section-kicker">Group contents</p>
+        <div class="section-heading-row"><div><h2 class="editor-section-title">Grouped pages</h2><p class="meta">${members.length} pages in ${escapeHtml(item.title)}</p></div></div>
+        <form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/pages" class="assignment-form">
+          <label>Add page<select name="pageId"><option value="">Select a page</option>${pages.items.filter((page) => !memberIds.has(page.id)).map((page) => `<option value="${page.id}">${escapeHtml(page.title)}</option>`).join("")}</select></label>
+          <label class="assignment-order">Order<input type="number" name="position" min="0" value="${members.length}" /></label>
+          <button class="button button-primary" type="submit">Add to group</button>
+        </form>
+        <ol class="assignment-list">${members.map((page) => `<li><span class="assignment-position">${Number(page.position) + 1}</span><span class="assignment-title"><strong>${escapeHtml(String(page.title))}</strong><span class="meta">Fixed page</span></span><form method="post" action="${config.controlPanelPath}/page-groups/${item.id}/pages/${page.id}/remove"><button class="button" type="submit">Remove</button></form></li>`).join("") || "<li class='assignment-empty'>No pages assigned.</li>"}</ol>
+      </section>
+    </div>`;
   return c.html(adminLayout("Edit Page Group", c.get("sessionUser"), body));
 });
 
@@ -2440,7 +3179,14 @@ adminRoutes.post("/proposals/:id/reject", async (c) => {
 adminRoutes.get("/media", async (c) => {
   const user = c.get("sessionUser");
   if (!user) return c.redirect("/login");
-  const items = await listMedia();
+  const usageFilter = c.req.query("usage") ?? "all";
+  const allItems = await listMediaUsage();
+  const items = allItems.filter((item) =>
+    usageFilter === "unused" ? item.references.length === 0
+      : usageFilter === "used" ? item.references.length > 0
+        : true);
+  const unusedCount = allItems.filter((item) => item.references.length === 0).length;
+  const canDeleteMedia = hasPermission(user, "media.delete");
   const usage = await getMediaStorageUsage(user.id);
   const storage = mediaStorageState(usage);
   const quotaLabel = (usedBytes: number, quotaBytes: number) =>
@@ -2469,41 +3215,76 @@ adminRoutes.get("/media", async (c) => {
           <dt class="meta">Upload status</dt><dd style="margin:0;">${storage.uploadAllowed ? "Upload allowed" : "Upload blocked by role policy"}</dd>
         </dl>
         <p class="meta">Storage quotas are calculated from media records in PostgreSQL.</p>
+        <p class="meta">Raster images generate resized display, thumbnail, WebP, and AVIF files. Derived files count toward storage quotas.</p>
         <p>Uploaded files are published under the <code>/cms/uploads/</code> path so existing HTML and PHP pages can reference them directly.</p>
       </aside>
     </div>
     <div style="margin-top:20px;">
-      <h2>Media library</h2>
+      <div class="section-heading-row">
+        <div><h2>Media library</h2><p class="meta"><span data-i18n="Unused media">Unused media</span>: ${unusedCount} / ${allItems.length}</p></div>
+        <nav class="media-usage-filters" aria-label="Media usage filter">
+          <a class="button ${usageFilter === "all" ? "button-primary" : ""}" href="${config.controlPanelPath}/media?usage=all">All media</a>
+          <a class="button ${usageFilter === "used" ? "button-primary" : ""}" href="${config.controlPanelPath}/media?usage=used">Used</a>
+          <a class="button ${usageFilter === "unused" ? "button-primary" : ""}" href="${config.controlPanelPath}/media?usage=unused">Unused</a>
+        </nav>
+      </div>
+      <p class="meta">References are checked in posts, pages, blocks, menus, forms, revisions, and text-based files under public_html. Upload files themselves are excluded from scanning.</p>
       <table>
-        <thead><tr><th>Preview</th><th>Name</th><th>Type</th><th>URL</th><th>Actions</th></tr></thead>
+        <thead><tr>${canDeleteMedia ? "<th><span class='sr-only'>Select</span></th>" : ""}<th>Preview</th><th>Name</th><th>Type</th><th>Reference status</th><th>URL</th><th>Actions</th></tr></thead>
         <tbody>
           ${items
             .map((item) => {
+              const isUnused = item.references.length === 0;
               const preview = item.mimeType.startsWith("image/")
-                ? `<img src="${item.publicUrl}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:96px; max-height:72px; border-radius:8px; border:1px solid var(--line);" />`
+                ? `<img src="${mediaPreviewUrl(item)}" alt="${escapeHtml(item.altText ?? item.originalName)}" style="max-width:96px; max-height:72px; border-radius:8px; border:1px solid var(--line);" loading="lazy" decoding="async" />`
                 : `<span class="meta">No preview</span>`;
+              const variantLinks = item.variants
+                .filter((variant) => variant.kind !== "thumbnail")
+                .map((variant) => {
+                  const kind = variant.kind === "display" ? "Display" : "Responsive";
+                  return `<a href="${variant.publicUrl}"><span data-i18n="${kind}">${kind}</span> ${escapeHtml(`${variant.format.toUpperCase()} ${variant.width}×${variant.height}`)}</a>`;
+                })
+                .join(" · ");
               return `
                 <tr>
+                  ${canDeleteMedia ? `<td>${isUnused ? `<input type="checkbox" name="mediaIds" value="${item.id}" form="unused-media-cleanup" aria-label="Select unused media" />` : ""}</td>` : ""}
                   <td>${preview}</td>
                   <td class="cell-long">
                     <strong>${escapeHtml(item.originalName)}</strong>
-                    <div class="meta">${formatByteSize(item.sizeBytes)}</div>
+                    <div class="meta">${item.width && item.height ? `${item.width} × ${item.height} px · ` : ""}<span data-i18n="Original">Original</span> ${formatByteSize(item.sizeBytes)}</div>
+                    ${item.variants.length ? `<div class="meta"><span data-i18n="Total with variants">Total with variants</span> ${formatByteSize(mediaTotalSizeBytes(item))}</div>` : ""}
                   </td>
                   <td>${escapeHtml(item.mimeType)}</td>
-                  <td class="cell-long"><a href="${item.publicUrl}">${escapeHtml(item.publicUrl)}</a></td>
+                  <td class="cell-long">
+                    <span class="media-usage-badge ${isUnused ? "media-usage-unused" : "media-usage-used"}">${isUnused ? "Unused" : "Used"}</span>
+                    ${isUnused ? `<div class="meta">No references detected.</div>` : `<details class="media-reference-details"><summary>${item.references.length} <span data-i18n="references">references</span></summary><ul>${item.references.map((reference) => {
+                      const href = reference.sourceType === "post" ? `${config.controlPanelPath}/posts/${reference.sourceId}/edit`
+                        : reference.sourceType === "page" ? `${config.controlPanelPath}/pages/${reference.sourceId}/edit`
+                          : reference.sourceType === "block" ? `${config.controlPanelPath}/blocks/${reference.sourceId}/edit`
+                            : reference.sourceType === "menu" ? `${config.controlPanelPath}/menus/${reference.sourceId}/edit`
+                              : reference.sourceType === "form" ? `${config.controlPanelPath}/forms/${reference.sourceId}/edit`
+                                : "";
+                      const label = `${reference.title} · ${reference.field}`;
+                      return `<li>${href ? `<a href="${href}">${escapeHtml(label)}</a>` : `<span>${escapeHtml(label)}</span>`}</li>`;
+                    }).join("")}</ul></details>`}
+                  </td>
+                  <td class="cell-long"><a href="${item.publicUrl}" data-i18n="Original">Original</a>${variantLinks ? `<div class="meta">${variantLinks}</div>` : ""}</td>
                   <td class="cell-actions">
                     <div class="row">
                       <a class="button" href="${item.publicUrl}">Open</a>
-                      <form method="post" action="${config.controlPanelPath}/media/${item.id}/delete">
-                        <button class="button" type="submit">Delete</button>
-                      </form>
+                      ${canDeleteMedia ? isUnused ? `<form method="post" action="${config.controlPanelPath}/media/${item.id}/delete"><button class="button" type="submit">Delete</button></form>` : `<button class="button" type="button" disabled title="Remove references before deleting this media.">Delete</button>` : ""}
                     </div>
                   </td>
                 </tr>`;
             })
-            .join("")}
+            .join("") || `<tr><td colspan="${canDeleteMedia ? 7 : 6}">No media matches this usage filter.</td></tr>`}
         </tbody>
       </table>
+      ${canDeleteMedia && unusedCount > 0 ? `<form id="unused-media-cleanup" method="post" action="${config.controlPanelPath}/media/cleanup" class="media-cleanup-form">
+        <div><strong>Clean up selected unused media</strong><p class="meta">References are checked again immediately before every deletion.</p></div>
+        <label class="checkbox-label"><input type="checkbox" name="confirmed" value="true" required /><span>I understand that deleted files cannot be restored.</span></label>
+        <button class="button" type="submit">Delete selected unused media</button>
+      </form>` : ""}
     </div>
   `;
 
@@ -2544,16 +3325,45 @@ adminRoutes.post("/media", async (c) => {
 });
 
 adminRoutes.post("/media/:id/delete", async (c) => {
-  await deleteMedia(Number(c.req.param("id")));
+  try {
+    await deleteMedia(Number(c.req.param("id")));
+    await writeAuditLog({
+      actorUserId: c.get("sessionUser")?.id ?? null,
+      action: "media.delete",
+      targetType: "media",
+      targetId: c.req.param("id"),
+      summary: `Deleted unused media #${c.req.param("id")}.`,
+      ipAddress: requestIp(c),
+    });
+    return c.redirect(`${config.controlPanelPath}/media?success=${encodeURIComponent("Unused media deleted.")}`);
+  } catch (error) {
+    const message = error instanceof AppValidationError ? error.message : "Unable to delete media.";
+    return c.redirect(`${config.controlPanelPath}/media?error=${encodeURIComponent(message)}`);
+  }
+});
+
+adminRoutes.post("/media/cleanup", async (c) => {
+  const form = await c.req.formData();
+  if (form.get("confirmed") !== "true") {
+    return c.redirect(`${config.controlPanelPath}/media?usage=unused&error=${encodeURIComponent("Confirm the cleanup before deleting media.")}`);
+  }
+  const ids = form.getAll("mediaIds").map((value) => Number(value)).filter((id) => Number.isSafeInteger(id) && id > 0);
+  if (ids.length === 0) {
+    return c.redirect(`${config.controlPanelPath}/media?usage=unused&error=${encodeURIComponent("Select at least one unused media item.")}`);
+  }
+  const result = await deleteUnusedMedia(ids);
   await writeAuditLog({
     actorUserId: c.get("sessionUser")?.id ?? null,
-    action: "media.delete",
+    action: "media.cleanup",
     targetType: "media",
-    targetId: c.req.param("id"),
-    summary: `Deleted media #${c.req.param("id")}.`,
+    targetId: null,
+    summary: `Deleted ${result.deleted.length} unused media items; skipped ${result.skipped.length} referenced items.`,
     ipAddress: requestIp(c),
   });
-  return c.redirect(`${config.controlPanelPath}/media`);
+  const message = result.skipped.length > 0
+    ? `Deleted ${result.deleted.length} unused media items. ${result.skipped.length} items were skipped because references were found.`
+    : `Deleted ${result.deleted.length} unused media items.`;
+  return c.redirect(`${config.controlPanelPath}/media?usage=unused&success=${encodeURIComponent(message)}`);
 });
 
 adminRoutes.get("/logs", async (c) => {
@@ -2604,7 +3414,7 @@ adminRoutes.get("/snapshots", async (c) => {
         <h2>Create snapshot</h2>
         <form method="post" action="${config.controlPanelPath}/snapshots" class="form-grid">
           <label>Relative path inside public_html
-            <input name="relativePath" placeholder="index.html or assets/site.css" required />
+            <input name="relativePath" placeholder="index.html or assets/css/site.css" required />
           </label>
           <label>Reason
             <input name="reason" placeholder="Before manual homepage update" />

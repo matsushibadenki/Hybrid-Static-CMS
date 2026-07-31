@@ -9,6 +9,7 @@ import {
 } from "./validation";
 import type { PageInput, PageRecord } from "./types";
 import { createContentRevision } from "./revisions";
+import { requireExistingStylesheet } from "./assets";
 
 function normalizePage(row: Record<string, unknown>): PageRecord {
   return {
@@ -30,6 +31,7 @@ function normalizePage(row: Record<string, unknown>): PageRecord {
     updatedAt: String(row.updated_at),
     authorId: row.author_id ? Number(row.author_id) : null,
     authorName: (row.author_name as string | null) ?? null,
+    stylesheetPath: (row.stylesheet_path as string | null) ?? null,
   };
 }
 
@@ -80,6 +82,7 @@ const basePageQuery = `
     p.published_at,
     p.updated_at,
     p.author_id,
+    p.stylesheet_path,
     u.display_name as author_name
   from pages p
   left join users u on u.id = p.author_id
@@ -144,6 +147,7 @@ export async function getPageBySlug(slug: string, status = "published") {
 export async function createPage(input: PageInput, authorId: number) {
   validatePageInput(input);
   const bodyHtml = deriveBodyHtml(input);
+  const stylesheetPath = await requireExistingStylesheet(input.stylesheetPath, "pages");
   let pageId: number;
   try {
     pageId = await withTransaction(async (trx) => {
@@ -163,7 +167,8 @@ export async function createPage(input: PageInput, authorId: number) {
         seo_og_image,
         seo_keywords,
         seo_noindex,
-        seo_nofollow
+        seo_nofollow,
+        stylesheet_path
       ) values (
         ${input.title},
         ${input.slug},
@@ -179,7 +184,8 @@ export async function createPage(input: PageInput, authorId: number) {
         ${input.seoOgImage ?? null},
         ${input.seoKeywords ?? null},
         ${input.seoNoindex ?? false},
-        ${input.seoNofollow ?? false}
+        ${input.seoNofollow ?? false},
+        ${stylesheetPath}
       )
         returning id
       `;
@@ -201,6 +207,7 @@ export async function updatePage(id: number, input: PageInput, actorUserId?: num
   validatePageInput(input);
   const previous = await getPageById(id);
   const bodyHtml = deriveBodyHtml(input);
+  const stylesheetPath = await requireExistingStylesheet(input.stylesheetPath, "pages");
   try {
     await withTransaction(async (trx) => {
       await trx`
@@ -220,6 +227,7 @@ export async function updatePage(id: number, input: PageInput, actorUserId?: num
           seo_keywords = ${input.seoKeywords ?? null},
           seo_noindex = ${input.seoNoindex ?? false},
           seo_nofollow = ${input.seoNofollow ?? false},
+          stylesheet_path = ${stylesheetPath},
           scheduled_publish_attempts = 0,
           scheduled_publish_next_retry_at = null,
           scheduled_publish_last_error = null,

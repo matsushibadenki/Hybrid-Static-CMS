@@ -23,6 +23,9 @@ async function sendFile(c: Context, relativePath: string) {
   let resolvedPath: string;
   try {
     [publicRoot, resolvedPath] = await Promise.all([realpath(config.publicHtmlDir), realpath(fullPath)]);
+    if ((await stat(resolvedPath)).isDirectory()) {
+      resolvedPath = await realpath(path.join(resolvedPath, "index.html"));
+    }
   } catch {
     return c.notFound();
   }
@@ -30,13 +33,15 @@ async function sendFile(c: Context, relativePath: string) {
     return c.notFound();
   }
   if (!(await stat(resolvedPath)).isFile()) return c.notFound();
-  const file = Bun.file(resolvedPath);
-  const extension = path.extname(normalized).toLowerCase();
+  const extension = path.extname(resolvedPath).toLowerCase();
   const contentTypes: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
+    ".htm": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".js": "application/javascript; charset=utf-8",
+    ".mjs": "application/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
+    ".webmanifest": "application/manifest+json; charset=utf-8",
     ".xml": "application/xml; charset=utf-8",
     ".txt": "text/plain; charset=utf-8",
     ".pdf": "application/pdf",
@@ -46,17 +51,29 @@ async function sendFile(c: Context, relativePath: string) {
     ".jpeg": "image/jpeg",
     ".gif": "image/gif",
     ".webp": "image/webp",
+    ".avif": "image/avif",
+    ".ico": "image/x-icon",
     ".mp4": "video/mp4",
     ".webm": "video/webm",
     ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
     ".wav": "audio/wav",
     ".ogg": "audio/ogg",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+    ".wasm": "application/wasm",
   };
+  const contentType = contentTypes[extension];
+  if (!contentType) return c.notFound();
+  const file = Bun.file(resolvedPath);
   return new Response(file, {
-    headers: { "Content-Type": contentTypes[extension] ?? "application/octet-stream" },
+    headers: { "Content-Type": contentType, "X-Content-Type-Options": "nosniff" },
   });
 }
 
+publicRoutes.get("/", (c) => c.redirect("/index.html"));
 publicRoutes.get("/index.html", (c) => sendFile(c, "index.html"));
 publicRoutes.get("/llms.txt", (c) => sendFile(c, "llms.txt"));
 publicRoutes.get("/robots.txt", (c) => sendFile(c, "robots.txt"));
@@ -82,6 +99,10 @@ publicRoutes.get("/cms/*", (c) => {
   return sendFile(c, relative);
 });
 publicRoutes.get("/assets/*", (c) => {
+  const relative = c.req.path.replace(/^\//, "");
+  return sendFile(c, relative);
+});
+publicRoutes.get("*", (c) => {
   const relative = c.req.path.replace(/^\//, "");
   return sendFile(c, relative);
 });

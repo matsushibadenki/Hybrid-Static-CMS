@@ -8,9 +8,10 @@ import { getSetupStatus, resetApplicationDatabase, runSetupMigrations, writeSetu
 import { randomToken } from "../../core/security";
 
 function twoFactorField() {
-  return config.twoFactorEnabled
-    ? `<label>Authenticator code <input inputmode="numeric" pattern="[0-9]{6}" name="twoFactorCode" autocomplete="one-time-code" required /></label>`
-    : "";
+  return `<label>Authenticator or recovery code
+    <input name="twoFactorCode" autocomplete="one-time-code" />
+    <span class="meta">Required only when two-factor authentication is enabled for your account or installation.</span>
+  </label>`;
 }
 
 export const authRoutes = new Hono();
@@ -102,7 +103,7 @@ authRoutes.post("/setup", async (c) => {
     const afterMigration = await getSetupStatus();
     if (afterMigration.hasAdmin) return c.redirect("/login");
     await createUser({ email: values.email, password: values.password, displayName: values.displayName, roles: ["owner", "admin"] });
-    await writeSetupEnvironment({ appName: values.appName, appUrl: values.appUrl, publicHtmlDir: values.publicHtmlDir, sessionSecret: randomToken(48) });
+    await writeSetupEnvironment({ appName: values.appName, appUrl: values.appUrl, publicHtmlDir: values.publicHtmlDir, sessionSecret: randomToken(48), accountEncryptionKey: randomToken(48) });
     return c.html(adminLayout("Setup Complete", null, `<h2>Setup complete</h2><p>The administrator was created and the environment file was written with owner-only permissions.</p><p>Restart the Bun process, then sign in at <a href="/login">/login</a>. The setup wizard is now locked because an administrator exists.</p>`));
   } catch (error) {
     return c.html(adminLayout("Initial Setup", null, setupForm(values, error instanceof Error ? error.message : "Setup failed.")), 400);

@@ -27,18 +27,19 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Generated CMS output under `/cms/*`
 - `[Done]` Configurable generated templates through `templates/page.html`
 - `[Done]` Google Fonts configuration through `GOOGLE_FONTS_CSS_URLS`
+- `[Done]` Automatic public asset directories for headless frontends and category/fixed-page stylesheet assignment
 
 ### Content and editor
 
 - `[Done]` Post CRUD with categories, tags, draft, published, and scheduled states
-- `[Done]` Series management with parent series, ordered article assignment, and dedicated control-panel management screens
+- `[Done]` Series management with parent series, ordered article assignment, and a section-based collection editor
 - `[Done]` Series-aware article pagination with ordered previous, next, and numbered navigation
 - `[Done]` Selectable post permalink structures with complete regeneration and safe stale-file cleanup
 - `[Done]` Complete control-panel translation coverage for text, form hints, accessibility labels, dynamic counts, and localized dates in English, Japanese, and Simplified Chinese
 - `[Done]` Configurable localization of CMS-generated public navigation through `PUBLIC_LOCALE`
-- `[Done]` Fixed-page groups with slug-based parents, ordered page assignment, and dedicated control-panel management screens
+- `[Done]` Fixed-page groups with slug-based parents, ordered page assignment, and a section-based collection editor
 - `[Done]` CMS-managed page CRUD
-- `[Done]` Multiple form generation, management, deletion, and submission capture
+- `[Done]` Multiple form generation, visual field builder, management, deletion, and submission capture
 - `[Done]` Media library for images, video, audio, PDF, and text files
 - `[Done]` Media picker and direct upload from post/page editors
 - `[Done]` HTML authoring toolbar for bold, italic, strikethrough, quotes, lists, links, alignment, code, and rules
@@ -46,9 +47,10 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Semantic ruby annotations
 - `[Done]` LaTeX mathematics through MathJax rendering
 - `[Done]` Mermaid chart blocks and static-page rendering
-- `[Done]` Reusable published blocks via `[[block:slug]]`
-- `[Done]` CMS-managed navigation menus
+- `[Done]` Reusable published blocks with separated identity, body, placement, and publication controls via `[[block:slug]]`
+- `[Done]` CMS-managed navigation menus with a visual link builder
 - `[Done]` Post and page revisions with review and restore
+- `[Done]` PostgreSQL-backed post/page autosave with per-user crash recovery, conflict warnings, explicit restore/discard controls, and retention cleanup
 - `[Done]` Moderated article comments with series-level safety controls, per-post overrides, rate limiting, and reCAPTCHA v3
 
 ### Publishing and discoverability
@@ -66,6 +68,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 - `[Done]` Cookie-based authentication and login throttling
 - `[Done]` Optional deployment-wide TOTP two-factor authentication
+- `[Done]` Personal TOTP enrollment with encrypted secrets, one-time recovery codes, password self-service, and active-session management
 - `[Done]` User directory with role assignment, activation, password reset, and session revocation
 - `[Done]` Fine-grained permissions for reading, editing, publishing, deleting, restoring, AI, snapshots, and user administration
 - `[Done]` CSRF protection for authenticated admin and API mutations
@@ -110,10 +113,9 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Per-file upload size limits and opt-in SVG handling
 - `[Done]` Media content-signature checks for common image, video, audio, and PDF uploads
 - `[Done]` SVG sanitization and removal of scripts, event attributes, and foreign content
-- `[Next]` Deeper media-content inspection with safer handling for active formats
-- `[Next]` Image metadata extraction, automatic resizing, WebP/AVIF variants, and thumbnails
-- `[Next]` Unused-media detection and a reference-aware cleanup workflow
-- `[Next]` Per-user 2FA enrollment, password self-service, recovery flow, and login-session listing
+- `[Done]` Deeper media-content inspection, canonical MIME-derived extensions, active-PDF rejection, and escaped embed output
+- `[Done]` Image metadata extraction, bounded decoding, automatic resizing, WebP/AVIF variants, thumbnails, responsive picture output, and derivative-aware quotas/deletion
+- `[Done]` Unused-media detection and a reference-aware cleanup workflow covering CMS content, revisions, generated output, and hand-written public files
 - `[Done]` PostgreSQL-backed public form rate limiting by form and trusted client IP
 - `[Done]` Configurable form-submission retention cleanup and permission-protected CSV export
 - `[Done]` SMTP form submission notifications with operator-visible delivery failures
@@ -124,7 +126,6 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 ### Editorial workflow
 
-- `[Next]` Autosave drafts and crash recovery
 - `[Next]` Editorial review states and approval workflow separate from publication status
 - `[Next]` Post/page import and export for migration and portability
 - `[Next]` Redirect manager and 404 report for slug changes and broken links
@@ -163,8 +164,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 1. `[Done]` Tests, CI, and permission regression coverage
 2. `[Done]` Atomic publishing, preview, health checks, and structured alerts
-3. `[Next]` Media and upload security hardening
-4. `[Next]` Editorial autosave, preview, and review workflow
+3. `[Done]` Media and upload security hardening
+4. `[Next]` Editorial review states and approval workflow
 5. `[Next]` Forms operations, imports/exports, redirects, and Japanese search
 6. `[Later]` Themes, integrations, scale-out operations, and localization
 

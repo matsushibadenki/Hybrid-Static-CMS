@@ -48,6 +48,7 @@ function postFixture(id: number, title: string, slug: string): PostRecord {
     authorId: null,
     authorName: null,
     categories: [],
+    categoryStylesheets: [],
     tags: [],
     commentsPolicy: "enabled",
     commentsEnabled: true,
@@ -164,6 +165,16 @@ describe("content formatting", () => {
     const categorizedHtml = renderPost(current, series, "category");
     expect(categorizedHtml).toContain('/cms/posts/category/uncategorized/part-one.html');
     expect(categorizedHtml).toContain('/cms/posts/category/uncategorized/part-three.html');
+  });
+
+  test("loads safe category stylesheets after the built-in page styles", () => {
+    const html = renderPost({
+      ...postFixture(5, "Styled post", "styled-post"),
+      categoryStylesheets: ["categories/news.css", "../private.css"],
+    });
+    expect(html).toContain('href="/assets/css/categories/news.css"');
+    expect(html).not.toContain("private.css");
+    expect(html.indexOf("</style>")).toBeLessThan(html.indexOf('href="/assets/css/categories/news.css"'));
   });
 
   test("renders approved comments without exposing email addresses", () => {

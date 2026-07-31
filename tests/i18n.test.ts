@@ -12,6 +12,18 @@ describe("internationalization", () => {
   test("covers representative control-panel workflows in both translated locales", () => {
     const required = [
       "Dashboard",
+      "Account security",
+      "Change password",
+      "Two-factor authentication",
+      "Authenticator or recovery code",
+      "Recovery Codes",
+      "Signed-in devices",
+      "Current password is incorrect.",
+      "Unable to enable two-factor authentication.",
+      "Autosave ready",
+      "Unsaved changes were found.",
+      "Restore autosave",
+      "Autosave failed. Your form remains open.",
       "Basic information",
       "Save post",
       "Publish and generate page",
@@ -39,6 +51,50 @@ describe("internationalization", () => {
       "Upload blocked by role policy",
       "The site media storage quota would be exceeded.",
       "Your media storage quota would be exceeded.",
+      "The media file is incomplete, malformed, or does not match its declared type.",
+      "PDF files containing active content are not allowed.",
+      "Dimensions",
+      "Variants",
+      "Original",
+      "Total with variants",
+      "Display",
+      "Responsive",
+      "The image could not be decoded or processed safely.",
+      "Unused media",
+      "All media",
+      "Reference status",
+      "No references detected.",
+      "Clean up selected unused media",
+      "Delete selected unused media",
+      "Referenced media cannot be deleted. Remove its references first.",
+      "Stylesheet",
+      "Category stylesheets",
+      "Save stylesheet",
+      "Default site stylesheet only",
+      "Select a valid stylesheet from the public assets directory.",
+      "The selected stylesheet no longer exists.",
+      "Forms and assets",
+      "Extensions",
+      "Menu",
+      "Presentation",
+      "Appearance",
+      "Regenerate public output",
+      "Form setup",
+      "Form structure",
+      "Add field",
+      "Submission experience",
+      "Menu setup",
+      "Navigation structure",
+      "Add menu item",
+      "Block setup",
+      "Block body",
+      "Embed block",
+      "Organization",
+      "Series information",
+      "Comment policy",
+      "Series contents",
+      "Page group information",
+      "Group contents",
       "HTML formatting tools",
       "Text formatting",
       "Headings and structure",
@@ -68,6 +124,7 @@ describe("internationalization", () => {
     expect(html).toContain("originalAttributes");
     expect(html).toContain("explicitKey");
     expect(html).toContain("Intl.DateTimeFormat");
+    expect(html).toContain("window.applyAdminLocale = applyAdminLocale");
   });
 
   test("enables the full-width layout explicitly or whenever a table is present", () => {
@@ -85,5 +142,35 @@ describe("internationalization", () => {
     expect(automaticTableHtml).toContain('class="shell-card shell-card-wide-list"');
     expect(automaticTableHtml).toContain('<div class="table-scroll"><table class="data-table">');
     expect(wideHtml).not.toContain("data-table data-table");
+  });
+
+  test("keeps mobile navigation collapsible and groups related tools together", () => {
+    const html = adminLayout("Edit Post", {
+      id: 1,
+      sessionId: 1,
+      email: "owner@example.test",
+      displayName: "Owner",
+      roles: ["owner"],
+      csrfToken: "test",
+    }, "<p>Editor</p>");
+
+    expect(html).toContain('class="shell-menu-toggle"');
+    expect(html).toContain('aria-controls="control-panel-navigation"');
+    expect(html).toContain(".shell-admin .shell-header.menu-open .shell-nav");
+    expect(html).toContain("menuToggle?.addEventListener");
+    expect(html.indexOf('href="/control-panel/comments"')).toBeLessThan(html.indexOf('data-i18n="Fixed pages"'));
+    expect(html.indexOf('href="/control-panel/settings/permalinks"')).toBeLessThan(html.indexOf('data-i18n="Fixed pages"'));
+    expect(html.indexOf('href="/control-panel/proposals"')).toBeGreaterThan(html.indexOf('data-i18n="Operations"'));
+  });
+
+  test("includes responsive patterns for collection and structured editors", () => {
+    const html = adminLayout("Dashboard", null, "<p>Editor styles</p>");
+
+    expect(html).toContain(".assignment-form");
+    expect(html).toContain(".assignment-list");
+    expect(html).toContain(".structured-row-menu");
+    expect(html).toContain(".structured-builder.is-enhanced .structured-source");
+    expect(html).toContain("counter-reset: structured-row");
+    expect(html).toContain("@media (max-width: 620px)");
   });
 });

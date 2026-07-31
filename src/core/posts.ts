@@ -31,6 +31,7 @@ function normalizePost(row: Record<string, unknown>): PostRecord {
     authorId: row.author_id ? Number(row.author_id) : null,
     authorName: (row.author_name as string | null) ?? null,
     categories: Array.isArray(row.categories) ? (row.categories as string[]) : [],
+    categoryStylesheets: Array.isArray(row.category_stylesheets) ? (row.category_stylesheets as string[]) : [],
     tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
     commentsPolicy: row.comments_policy as PostRecord["commentsPolicy"],
     commentsEnabled: Boolean(row.comments_enabled),
@@ -130,6 +131,7 @@ const basePostQuery = `
     end as comments_enabled,
     u.display_name as author_name,
     coalesce(array_agg(distinct c.slug order by c.slug) filter (where c.slug is not null), '{}') as categories,
+    coalesce(array_agg(distinct c.stylesheet_path order by c.stylesheet_path) filter (where c.stylesheet_path is not null), '{}') as category_stylesheets,
     coalesce(array_agg(distinct t.slug order by t.slug) filter (where t.slug is not null), '{}') as tags
   from posts p
   left join users u on u.id = p.author_id

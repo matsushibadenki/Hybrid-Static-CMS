@@ -85,7 +85,8 @@ function adminPermissionForRequest(c: Context): Permission {
   if (path.startsWith("/logs")) return "audit.read";
   if (path.startsWith("/snapshots")) return path.endsWith("/restore") && method === "POST" ? "snapshots.restore" : method === "POST" ? "snapshots.write" : "snapshots.read";
   if (path.startsWith("/proposals")) return "ai.review";
-  if (path.startsWith("/media")) return method === "GET" ? "media.read" : path.endsWith("/delete") ? "media.delete" : "media.write";
+  if (path.startsWith("/media")) return method === "GET" ? "media.read" : path.endsWith("/delete") || path === "/media/cleanup" ? "media.delete" : "media.write";
+  if (path.startsWith("/categories")) return method === "GET" ? "posts.read" : "posts.write";
   if (path.startsWith("/posts")) {
     if (path === "/posts/media/upload") return "media.write";
     if (path.endsWith("/delete")) return "posts.delete";

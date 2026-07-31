@@ -5,6 +5,7 @@ import { deleteExpiredFormSubmissions } from "./forms";
 import { createOperatorNotification } from "./notifications";
 import { renderPublishedArtifacts } from "./renderer";
 import { logInfo } from "./logger";
+import { deleteExpiredEditorAutosaves } from "./autosaves";
 
 type ScheduledItem = { id: number; attempts: number };
 
@@ -64,6 +65,7 @@ async function runHousekeeping() {
     sql`delete from login_attempts where window_started < now() - interval '1 day'`,
     clearExpiredFormRateLimits(),
     deleteExpiredFormSubmissions(),
+    deleteExpiredEditorAutosaves(),
   ]);
   const failures = results.filter((result) => result.status === "rejected");
   if (failures.length > 0) {

@@ -27,6 +27,8 @@ The current codebase includes:
 - Optional Google reCAPTCHA v3 verification for public form submissions
 - CSRF protection for authenticated admin and API mutations
 - Media picker buttons in post and page editing for image, video, audio, and PDF snippets
+- Canonical media storage extensions, container completeness checks, active-PDF rejection, and escaped embed snippets
+- Image metadata, bounded decoding, resized display files, thumbnails, WebP/AVIF variants, and responsive picture output
 - Transaction-safe site, user, and role media quotas with control-panel usage reporting
 - Revision history for posts and pages, including restore through the normal validation and publishing flow
 - Automatic pre-restore snapshots and rollback links for file snapshot restoration
@@ -118,6 +120,7 @@ This means installation users should know:
 
 - Change the seeded admin password immediately
 - Use a strong `SESSION_SECRET`
+- Set and securely back up a separate `ACCOUNT_ENCRYPTION_KEY` before users enroll personal 2FA
 - Set `COOKIE_SECURE=true` when serving through HTTPS if automatic detection is not sufficient
 - Set `TRUST_PROXY=true` only behind a proxy you control; otherwise forwarded client-IP headers are ignored
 - Enable `TWO_FACTOR_ENABLED=true` with a protected Base32 `TWO_FACTOR_SECRET` for an additional login factor
@@ -128,6 +131,7 @@ This means installation users should know:
 - Monitor app logs and database health
 - Verify the operator alert receiver with a controlled test error before relying on it for incident response
 - Back up PostgreSQL and generated uploads
+- Include every file in `CMS_UPLOAD_DIR`; image variants are separate files referenced by PostgreSQL
 - Set media quotas appropriate for available disk space and verify the media usage panel after changes
 - Confirm `/cms` does not conflict with existing site paths
 - Verify `robots.txt` and `llms.txt` match the intended AI access policy

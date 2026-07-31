@@ -17,6 +17,12 @@ Hybrid-Static-CMS is not designed as a full-site replacement CMS like WordPress.
     index.html
     about.php
     assets/
+      css/
+        categories/
+        pages/
+      img/
+      js/
+      video/
     cms/
       posts/
         latest.html
@@ -91,6 +97,11 @@ GET /cms-api/search?q=...
 Anonymous API requests only receive published posts, pages, forms, menus, and blocks. Draft filtering parameters are honored only for signed-in users with the matching read permission. Media-library enumeration requires the `media.read` permission; published media URLs remain directly usable by generated content.
 
 Public static-file delivery resolves real paths and refuses hidden path segments, directories, and symbolic links that leave `PUBLIC_HTML_DIR`.
+
+The application prepares `public_html/assets` without overwriting existing
+files. Category and fixed-page stylesheet selections are stored in PostgreSQL,
+while the referenced CSS remains portable frontend source under
+`public_html/assets/css`. See [Public assets](assets.md).
 
 ## Current MVP boundaries
 

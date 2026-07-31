@@ -39,6 +39,8 @@ Operator-facing notes now live under `docs/README.md`.
 - Page CRUD with CMS-managed static page output
 - Multiple form generation, management, deletion, and submission capture
 - Media upload and library management under `/cms/uploads/*`
+- Image metadata extraction with resized display files, thumbnails, WebP, and AVIF variants
+- Automatic `public_html/assets` structure with category and fixed-page stylesheet assignment
 - Post and page media helpers for image, video, audio, and PDF embeds
 - Google reCAPTCHA v3 support for public form submissions via `.env` keys
 - Moderated article comments with series-wide and per-post availability controls
@@ -67,6 +69,11 @@ Operator-facing notes now live under `docs/README.md`.
 .
 ├── public_html/
 │   ├── index.html
+│   ├── assets/
+│   │   ├── css/
+│   │   ├── img/
+│   │   ├── js/
+│   │   └── video/
 │   └── cms/
 │       ├── posts/
 │       └── embed.js

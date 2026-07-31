@@ -5,6 +5,7 @@ import { sql } from "./db";
 import { hashPassword, randomToken, verifyPassword, verifyTotpCode } from "./security";
 import { config } from "./config";
 import type { SessionUser, UserRole } from "./types";
+import { verifyAndConsumeSecondFactor } from "./accountSecurity";
 
 const SESSION_COOKIE = "hybrid_static_cms_session";
 
@@ -35,6 +36,7 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
     rows = await sql`
     select
       s.token,
+      s.id as session_id,
       s.csrf_token,
       s.expires_at,
       u.id,
@@ -49,7 +51,7 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
     where s.token = ${token}
       and s.expires_at > now()
       and u.is_active = true
-    group by s.token, s.csrf_token, s.expires_at, u.id
+    group by s.id, s.token, s.csrf_token, s.expires_at, u.id
     limit 1
     `;
   } catch {
@@ -66,11 +68,19 @@ export const sessionMiddleware: MiddlewareHandler = async (c, next) => {
 
   c.set("sessionUser", {
     id: Number(rows[0].id),
+    sessionId: Number(rows[0].session_id),
     email: String(rows[0].email),
     displayName: String(rows[0].display_name),
     roles: normalizeRoles(rows[0].roles),
     csrfToken: String(rows[0].csrf_token),
   });
+
+  await sql`
+    update sessions
+    set last_seen_at = now()
+    where id = ${rows[0].session_id}
+      and last_seen_at < now() - interval '5 minutes'
+  `;
 
   await next();
 };
@@ -121,7 +131,8 @@ export async function attemptLogin(c: Context, email: string, password: string, 
   }
 
   const rows = await sql`
-    select id, email, display_name, password_hash, is_active
+    select id, email, display_name, password_hash, is_active,
+      totp_secret_encrypted, recovery_code_hashes
     from users
     where email = ${normalizedEmail}
     limit 1
@@ -139,7 +150,21 @@ export async function attemptLogin(c: Context, email: string, password: string, 
     return null;
   }
 
-  if (config.twoFactorEnabled && config.twoFactorSecret && !(await verifyTotpCode(config.twoFactorSecret, twoFactorCode))) {
+  let recoveryCodeUsed = false;
+  if (row.totp_secret_encrypted) {
+    const recoveryHashes = Array.isArray(row.recovery_code_hashes) ? row.recovery_code_hashes.map(String) : [];
+    const verification = await verifyAndConsumeSecondFactor(
+      Number(row.id),
+      String(row.totp_secret_encrypted),
+      recoveryHashes,
+      twoFactorCode,
+    );
+    if (!verification.ok) {
+      await recordFailedLogin(attemptKeys);
+      return null;
+    }
+    recoveryCodeUsed = verification.recoveryCodeUsed;
+  } else if (config.twoFactorEnabled && config.twoFactorSecret && !(await verifyTotpCode(config.twoFactorSecret, twoFactorCode))) {
     await recordFailedLogin(attemptKeys);
     return null;
   }
@@ -153,8 +178,16 @@ export async function attemptLogin(c: Context, email: string, password: string, 
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14);
 
   await sql`
-    insert into sessions (user_id, token, csrf_token, expires_at)
-    values (${row.id}, ${token}, ${csrfToken}, ${expiresAt.toISOString()})
+    insert into sessions (user_id, token, csrf_token, expires_at, created_ip, user_agent, last_seen_at)
+    values (
+      ${row.id},
+      ${token},
+      ${csrfToken},
+      ${expiresAt.toISOString()},
+      ${requestIp(c)},
+      ${c.req.header("user-agent")?.slice(0, 500) ?? null},
+      now()
+    )
   `;
 
   await writeAuditLog({
@@ -165,6 +198,16 @@ export async function attemptLogin(c: Context, email: string, password: string, 
     summary: `User ${row.display_name} signed in.`,
     ipAddress: requestIp(c),
   });
+  if (recoveryCodeUsed) {
+    await writeAuditLog({
+      actorUserId: Number(row.id),
+      action: "auth.recovery_code_used",
+      targetType: "user",
+      targetId: row.id,
+      summary: `User ${row.display_name} signed in with a recovery code.`,
+      ipAddress: requestIp(c),
+    });
+  }
 
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,

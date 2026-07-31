@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config";
 import { sql } from "./db";
+import { ensurePublicAssetDirectories } from "./assets";
 
 const migrationsDir = path.join(process.cwd(), "migrations");
 
@@ -49,6 +50,7 @@ export async function resetApplicationDatabase() {
         file_snapshots,
         ai_file_proposals,
         operator_notifications,
+        media_variants,
         media_files,
         forms,
         menus,
@@ -94,6 +96,7 @@ export async function writeSetupEnvironment(input: {
   appUrl: string;
   publicHtmlDir: string;
   sessionSecret: string;
+  accountEncryptionKey: string;
 }) {
   const envPath = path.join(process.cwd(), ".env");
   let existingEnv = "";
@@ -110,6 +113,7 @@ export async function writeSetupEnvironment(input: {
     PUBLIC_LOCALE: envValue(config.publicLocale),
     SCHEDULE_TIME_ZONE: envValue(config.scheduleTimeZone),
     SESSION_SECRET: envValue(input.sessionSecret),
+    ACCOUNT_ENCRYPTION_KEY: envValue(input.accountEncryptionKey),
     DATABASE_URL: envValue(config.databaseUrl),
     PUBLIC_HTML_DIR: envValue(input.publicHtmlDir),
     CONTROL_PANEL_PATH: envValue(config.controlPanelPath),
@@ -126,6 +130,14 @@ export async function writeSetupEnvironment(input: {
     MEDIA_UPLOAD_ALLOWED_ROLES: envValue(Array.from(config.mediaUploadAllowedRoles).join(",")),
     MEDIA_ROLE_QUOTA_BYTES: envValue(roleByteLimitsValue(config.mediaRoleQuotaBytes)),
     MEDIA_ROLE_MAX_UPLOAD_BYTES: envValue(roleByteLimitsValue(config.mediaRoleMaxUploadBytes)),
+    MEDIA_IMAGE_DERIVATIVES_ENABLED: envValue(String(config.mediaImageDerivativesEnabled)),
+    MEDIA_IMAGE_MAX_WIDTH: envValue(String(config.mediaImageMaxWidth)),
+    MEDIA_IMAGE_MAX_HEIGHT: envValue(String(config.mediaImageMaxHeight)),
+    MEDIA_THUMBNAIL_WIDTH: envValue(String(config.mediaThumbnailWidth)),
+    MEDIA_THUMBNAIL_HEIGHT: envValue(String(config.mediaThumbnailHeight)),
+    MEDIA_WEBP_QUALITY: envValue(String(config.mediaWebpQuality)),
+    MEDIA_AVIF_QUALITY: envValue(String(config.mediaAvifQuality)),
+    MEDIA_MAX_INPUT_PIXELS: envValue(String(config.mediaMaxInputPixels)),
     RECAPTCHA_SITE_KEY: envValue(process.env.RECAPTCHA_SITE_KEY ?? ""),
     RECAPTCHA_SECRET_KEY: envValue(process.env.RECAPTCHA_SECRET_KEY ?? ""),
     RECAPTCHA_MIN_SCORE: envValue(String(config.recaptchaMinScore)),
@@ -164,5 +176,6 @@ export async function writeSetupEnvironment(input: {
   await mkdir(path.dirname(envPath), { recursive: true });
   await writeFile(envPath, content, { encoding: "utf8", mode: 0o600 });
   await chmod(envPath, 0o600);
+  await ensurePublicAssetDirectories(input.publicHtmlDir);
   return envPath;
 }

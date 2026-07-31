@@ -14,7 +14,8 @@
     {{keywords}}
     {{robots}}
     {{jsonLd}}
-    <link rel="stylesheet" href="/assets/site.css" />
+    <link rel="stylesheet" href="/assets/css/site.css" />
+    {{stylesheets}}
   </head>
   <body>
     <main>{{body}}</main>

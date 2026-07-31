@@ -17,10 +17,9 @@ export function createApp() {
   app.route("/", authRoutes);
   app.route("/", healthRoutes);
   app.route(config.cmsApiPrefix, apiRoutes);
+  app.route(config.cmsApiPrefix, customApiRoutes);
   app.route(config.controlPanelPath, adminRoutes);
   app.route("/", publicRoutes);
-  app.route(config.cmsApiPrefix, customApiRoutes);
-  app.get("/", (c) => c.redirect("/index.html"));
   app.onError((error, c) => {
     void reportOperationalEvent({
       level: "error",

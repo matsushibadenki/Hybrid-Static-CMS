@@ -12,6 +12,7 @@ export type UserAdminRecord = {
   createdAt: string;
   lastLoginAt: string | null;
   passwordChangedAt: string | null;
+  twoFactorEnabled: boolean;
   roles: UserRole[];
 };
 
@@ -24,6 +25,7 @@ function toUser(row: Record<string, unknown>): UserAdminRecord {
     createdAt: String(row.created_at),
     lastLoginAt: row.last_login_at ? String(row.last_login_at) : null,
     passwordChangedAt: row.password_changed_at ? String(row.password_changed_at) : null,
+    twoFactorEnabled: Boolean(row.two_factor_enabled),
     roles: Array.isArray(row.roles) ? (row.roles.filter((role): role is UserRole => managedRoles.includes(String(role) as UserRole))) : [],
   };
 }
@@ -31,6 +33,7 @@ function toUser(row: Record<string, unknown>): UserAdminRecord {
 export async function listUsers() {
   const rows = await sql`
     select u.id, u.email, u.display_name, u.is_active, u.created_at, u.last_login_at, u.password_changed_at,
+      (u.totp_secret_encrypted is not null) as two_factor_enabled,
       coalesce(array_agg(r.name order by r.name) filter (where r.name is not null), '{}') as roles
     from users u
     left join user_roles ur on ur.user_id = u.id
@@ -44,6 +47,7 @@ export async function listUsers() {
 export async function getUserById(id: number) {
   const rows = await sql`
     select u.id, u.email, u.display_name, u.is_active, u.created_at, u.last_login_at, u.password_changed_at,
+      (u.totp_secret_encrypted is not null) as two_factor_enabled,
       coalesce(array_agg(r.name order by r.name) filter (where r.name is not null), '{}') as roles
     from users u
     left join user_roles ur on ur.user_id = u.id
@@ -91,6 +95,21 @@ export async function resetUserPassword(id: number, password: string) {
 export async function revokeUserSessions(id: number) {
   const result = await sql`delete from sessions where user_id = ${id}`;
   return result.count;
+}
+
+export async function resetUserTwoFactor(id: number) {
+  await sql.begin(async (trx) => {
+    await trx`
+      update users
+      set totp_secret_encrypted = null,
+        totp_enabled_at = null,
+        totp_pending_secret_encrypted = null,
+        totp_pending_expires_at = null,
+        recovery_code_hashes = '{}'
+      where id = ${id}
+    `;
+    await trx`delete from sessions where user_id = ${id}`;
+  });
 }
 
 export async function createManagedUser(input: { email: string; displayName: string; password: string; roles: UserRole[] }) {

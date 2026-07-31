@@ -66,6 +66,18 @@ export function adminLayout(
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h16"/><circle cx="18" cy="12" r="2"/></svg>
             Series
           </a>` : ""}
+          ${can("posts.read") ? `<a data-i18n="Categories" href="${config.controlPanelPath}/categories">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 13l-7 7-10-10V3h7z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+            Categories
+          </a>` : ""}
+          ${can("comments.read") ? `<a data-i18n="Comments" href="${config.controlPanelPath}/comments">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg>
+            Comments
+          </a>` : ""}
+          ${can("settings.manage") ? `<a data-i18n="Permalinks" href="${config.controlPanelPath}/settings/permalinks">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            Permalinks
+          </a>` : ""}
           </div>
           <div class="shell-nav-subgroup">
             <p class="shell-nav-sublabel" data-i18n="Fixed pages">Fixed pages</p>
@@ -80,15 +92,15 @@ export function adminLayout(
           </a>` : ""}
           </div>
           <div class="shell-nav-subgroup shell-nav-separated">
-            <p class="shell-nav-sublabel" data-i18n="Forms and media">Forms and media</p>
+            <p class="shell-nav-sublabel" data-i18n="Forms and assets">Forms and assets</p>
             ${can("forms.read") ? `<a data-i18n="Forms" href="${config.controlPanelPath}/forms">Forms</a>` : ""}
-            ${can("comments.read") ? `<a data-i18n="Comments" href="${config.controlPanelPath}/comments">Comments</a>` : ""}
             ${can("media.read") ? `<a data-i18n="Media" href="${config.controlPanelPath}/media">Media</a>` : ""}
           </div>
         </div>
         <div class="shell-nav-group">
           <p class="shell-nav-label" data-i18n="Site structure">Site structure</p>
-          ${can("menus.read") ? `<a data-i18n="Menus" href="${config.controlPanelPath}/menus">
+          <div class="shell-nav-subgroup">
+            ${can("menus.read") ? `<a data-i18n="Menus" href="${config.controlPanelPath}/menus">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             Menus
           </a>` : ""}
@@ -96,22 +108,26 @@ export function adminLayout(
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
             Blocks
           </a>` : ""}
-          ${can("settings.manage") ? `<a data-i18n="Permalinks" href="${config.controlPanelPath}/settings/permalinks">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-            Permalinks
-          </a>` : ""}
+          </div>
+          <div class="shell-nav-subgroup">
+            <p class="shell-nav-sublabel" data-i18n="Extensions">Extensions</p>
+            <a data-i18n="API" href="${config.cmsApiPrefix}/posts" target="_blank" rel="noopener noreferrer">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              API
+            </a>
+            ${listAdminLinks().map((link) => `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`).join("")}
+          </div>
+        </div>
+        <div class="shell-nav-group">
+          <p class="shell-nav-label" data-i18n="Operations">Operations</p>
+          <a data-i18n="Account security" href="${config.controlPanelPath}/security">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+            Account security
+          </a>
           ${can("ai.review") ? `<a data-i18n="AI proposals" href="${config.controlPanelPath}/proposals">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
             AI proposals
           </a>` : ""}
-          <a data-i18n="API" href="${config.cmsApiPrefix}/posts">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            API
-          </a>
-          ${listAdminLinks().map((link) => `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`).join("")}
-        </div>
-        <div class="shell-nav-group">
-          <p class="shell-nav-label" data-i18n="Operations">Operations</p>
           ${can("users.manage") ? `<a data-i18n="Users" href="${config.controlPanelPath}/users">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             Users
@@ -271,6 +287,31 @@ export function adminLayout(
       .shell-brand {
         padding: 20px 20px 16px;
         border-bottom: 1px solid var(--line);
+      }
+
+      .shell-brand-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .shell-menu-toggle {
+        display: none;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.78rem;
+        padding: 7px 10px;
+        cursor: pointer;
+      }
+
+      .shell-menu-toggle svg {
+        width: 16px;
+        height: 16px;
       }
 
       .shell-brand .meta {
@@ -781,6 +822,128 @@ export function adminLayout(
         text-transform: uppercase;
       }
       .editor-section-title { margin: -8px 0 2px; font-size: 1.2rem; font-weight: 600; }
+      .section-heading-row {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .section-heading-row .editor-section-title { margin-bottom: 4px; }
+      .assignment-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 110px auto;
+        gap: 12px;
+        align-items: end;
+        padding: 18px;
+        border: 1px solid var(--line);
+        background: var(--sidebar-hover);
+      }
+      .assignment-form .button { margin-bottom: 1px; }
+      .assignment-list {
+        list-style: none;
+        padding: 0;
+        margin: 4px 0 0;
+        border-top: 1px solid var(--line);
+      }
+      .assignment-list li {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        min-height: 58px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line-light);
+      }
+      .assignment-position {
+        display: inline-grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .assignment-title {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+      .assignment-title strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .assignment-empty {
+        display: block !important;
+        min-height: 0 !important;
+        padding: 24px 0 !important;
+        color: var(--muted);
+      }
+      .structured-builder .structured-source {
+        margin-top: 8px;
+      }
+      .structured-builder.is-enhanced .structured-source {
+        display: none;
+      }
+      .structured-rows {
+        display: grid;
+        gap: 8px;
+        counter-reset: structured-row;
+      }
+      .structured-row {
+        counter-increment: structured-row;
+        display: grid;
+        grid-template-columns: 24px minmax(110px, 0.8fr) minmax(150px, 1.2fr) minmax(105px, 0.65fr) minmax(130px, 1fr) auto auto;
+        gap: 10px;
+        align-items: end;
+        padding: 14px 12px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .structured-row-menu {
+        grid-template-columns: 24px minmax(150px, 0.8fr) minmax(220px, 1.4fr) auto auto;
+      }
+      .structured-row label {
+        min-width: 0;
+        font-size: 0.74rem;
+      }
+      .structured-handle {
+        align-self: center;
+        color: var(--muted);
+        font-size: 0.74rem;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+      }
+      .structured-handle::before { content: counter(structured-row); }
+      .structured-required {
+        align-self: center;
+        min-height: 38px;
+        white-space: nowrap;
+      }
+      .structured-remove {
+        color: var(--danger);
+        margin-bottom: 1px;
+      }
+      .structured-add {
+        justify-self: start;
+      }
+      .usage-callout {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+        border-left: 3px solid var(--accent);
+        background: var(--accent-light);
+      }
+      .usage-callout p { margin: 0; }
+      .usage-callout code {
+        padding: 6px 9px;
+        white-space: nowrap;
+        background: var(--panel);
+        border: 1px solid var(--line);
+      }
 
       /* ========================================
          Rich Editor Toolbar — Premium Design
@@ -1111,6 +1274,196 @@ export function adminLayout(
         transform: translateY(-2px);
       }
 
+      .media-usage-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .media-usage-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border: 1px solid var(--line);
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .media-usage-used {
+        border-color: var(--success-border);
+        background: var(--success-bg);
+        color: var(--accent-hover);
+      }
+
+      .media-usage-unused {
+        background: var(--sidebar-hover);
+        color: var(--muted);
+      }
+
+      .media-reference-details {
+        margin-top: 6px;
+        font-size: 0.8rem;
+      }
+
+      .media-reference-details summary {
+        cursor: pointer;
+        color: var(--ink-secondary);
+      }
+
+      .media-reference-details ul {
+        display: grid;
+        gap: 4px;
+        margin: 8px 0 0;
+        padding-left: 18px;
+      }
+
+      .media-cleanup-form {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(260px, auto) auto;
+        gap: 18px;
+        align-items: center;
+        margin-top: 20px;
+        padding: 18px;
+        border: 1px solid var(--danger-border);
+        background: var(--danger-bg);
+      }
+
+      .media-cleanup-form p { margin: 4px 0 0; }
+
+      .editor-autosave {
+        display: grid;
+        gap: 12px;
+        padding: 12px 16px;
+        border: 1px solid var(--line);
+        background: var(--sidebar-hover);
+      }
+
+      .editor-autosave-status {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+
+      .editor-autosave-dot {
+        width: 7px;
+        height: 7px;
+        background: #a7adb3;
+        border-radius: 50%;
+      }
+
+      .editor-autosave[data-state="dirty"] .editor-autosave-dot,
+      .editor-autosave[data-state="saving"] .editor-autosave-dot { background: #cf8b2f; }
+      .editor-autosave[data-state="saved"] .editor-autosave-dot,
+      .editor-autosave[data-state="restored"] .editor-autosave-dot { background: var(--accent); }
+      .editor-autosave[data-state="error"] .editor-autosave-dot { background: var(--danger); }
+      .editor-autosave[data-state="recovery"] .editor-autosave-dot { background: #3976b8; }
+
+      .editor-autosave-recovery {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+
+      .editor-autosave-recovery[hidden] { display: none; }
+      .editor-autosave-recovery p { margin: 4px 0 0; }
+      .editor-autosave-recovery .security-warning { margin-top: 10px; }
+
+      .account-security-page {
+        display: grid;
+        gap: 8px;
+      }
+
+      .security-action-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+      }
+
+      .security-action-grid > form,
+      .security-enrollment {
+        padding: 20px;
+        border: 1px solid var(--line);
+        background: var(--sidebar-hover);
+      }
+
+      .security-action-grid h3,
+      .security-enrollment h3 { margin: 0; }
+
+      .security-danger-zone {
+        border-color: var(--danger-border) !important;
+        background: var(--danger-bg) !important;
+      }
+
+      .security-warning {
+        padding: 16px 18px;
+        border-left: 3px solid var(--danger);
+        background: var(--danger-bg);
+      }
+
+      .security-warning p { margin: 4px 0 0; }
+
+      .security-secret {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: 10px 16px;
+        margin: 18px 0;
+      }
+
+      .security-secret dt {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+      }
+
+      .security-secret dd {
+        min-width: 0;
+        margin: 0;
+      }
+
+      .security-secret code {
+        display: block;
+        overflow-wrap: anywhere;
+        user-select: all;
+      }
+
+      .recovery-code-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        max-width: 560px;
+      }
+
+      .recovery-code-grid code {
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        background: var(--sidebar-hover);
+        font-size: 0.95rem;
+        text-align: center;
+        user-select: all;
+      }
+
+      .session-list {
+        border-top: 1px solid var(--line);
+      }
+
+      .session-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: center;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--line-light);
+      }
+
+      .session-item p { margin: 3px 0; }
+
       /* ---- Responsive ---- */
 
       @media (min-width: 860px) {
@@ -1140,6 +1493,9 @@ export function adminLayout(
           border-right: 0;
           border-bottom: 1px solid var(--line);
         }
+        .shell-admin .shell-menu-toggle {
+          display: inline-flex;
+        }
         .shell-admin .shell-card {
           padding: 40px 20px 72px;
         }
@@ -1147,14 +1503,19 @@ export function adminLayout(
           padding: 2rem;
         }
         .shell-admin .shell-nav {
+          display: none;
           flex-direction: row;
           flex-wrap: wrap;
           padding: 8px 12px;
           gap: 4px;
         }
+        .shell-admin .shell-header.menu-open .shell-nav {
+          display: flex;
+        }
         .shell-admin .shell-nav-group {
           flex-direction: row;
           flex-wrap: wrap;
+          flex-basis: 100%;
           gap: 2px;
           border-bottom: none;
           padding: 0;
@@ -1167,7 +1528,16 @@ export function adminLayout(
           margin-top: 0;
         }
         .shell-admin .shell-nav-label {
-          display: none;
+          display: block;
+          flex-basis: 100%;
+          margin-top: 8px;
+        }
+        .shell-admin .shell-nav-subgroup {
+          flex: 1 1 140px;
+          min-width: 0;
+        }
+        .shell-admin .shell-nav-separated {
+          flex-basis: 100%;
         }
         .shell-brand {
           padding: 16px 20px 12px;
@@ -1192,9 +1562,36 @@ export function adminLayout(
         .stats {
           grid-template-columns: repeat(2, 1fr);
         }
+        .structured-row,
+        .structured-row-menu {
+          grid-template-columns: 20px repeat(2, minmax(0, 1fr));
+        }
+        .structured-row > label,
+        .structured-row-menu > label {
+          grid-column: span 1;
+        }
+        .structured-required {
+          grid-column: 2;
+        }
+        .structured-remove {
+          grid-column: 3;
+          justify-self: end;
+        }
+        .media-cleanup-form {
+          grid-template-columns: minmax(0, 1fr);
+          align-items: start;
+        }
+        .security-action-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
 
       @media (max-width: 620px) {
+        .section-heading-row {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .section-heading-row > div { width: 100%; }
         .rich-editor-toolbar-heading,
         .rich-editor-upload-row {
           align-items: flex-start;
@@ -1202,6 +1599,42 @@ export function adminLayout(
         }
         .rich-editor-groups { grid-template-columns: minmax(0, 1fr); }
         .rich-editor-group-wide { grid-column: auto; }
+        .assignment-form {
+          grid-template-columns: minmax(0, 1fr) 88px;
+        }
+        .assignment-form .button {
+          grid-column: 1 / -1;
+          justify-self: start;
+        }
+        .structured-row,
+        .structured-row-menu {
+          grid-template-columns: 20px minmax(0, 1fr);
+        }
+        .structured-row > label,
+        .structured-row-menu > label,
+        .structured-required,
+        .structured-remove {
+          grid-column: 2;
+        }
+        .structured-remove { justify-self: start; }
+        .usage-callout {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .recovery-code-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .security-secret {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 4px;
+        }
+        .session-item {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .editor-autosave-recovery {
+          align-items: flex-start;
+          flex-direction: column;
+        }
       }
 
       /* ---- Scrollbar (webkit) ---- */
@@ -1234,11 +1667,14 @@ export function adminLayout(
     <main class="shell${user ? " shell-admin" : ""}">
       <header class="shell-header">
         <div class="shell-brand">
-          <p class="meta"><span data-i18n="control panel">Control panel</span></p>
+          <div class="shell-brand-row">
+            <p class="meta"><span data-i18n="control panel">Control panel</span></p>
+            ${user ? `<button class="shell-menu-toggle" type="button" aria-expanded="false" aria-controls="control-panel-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span data-i18n="Menu">Menu</span></button>` : ""}
+          </div>
           <h1>${escapeHtml(title)}</h1>
           ${user ? `<p><span data-i18n="Signed in as">Signed in as</span> ${escapeHtml(user.displayName)}.</p>` : `<p data-i18n="Sign in to manage posts and generated fragments.">Sign in to manage posts and generated fragments.</p>`}
         </div>
-        ${nav}
+        ${nav.replace('class="shell-nav"', 'class="shell-nav" id="control-panel-navigation"')}
         ${user ? "" : languageSwitcher}
       </header>
       <section class="shell-card${useWideLayout ? " shell-card-wide-list" : ""}">${enhancedBody}</section>
@@ -1320,6 +1756,7 @@ export function adminLayout(
           }
         });
       }
+      window.applyAdminLocale = applyAdminLocale;
       applyAdminLocale(locale);
       const currentPath = location.pathname.replace(/\\/$/, "") || "/";
       const navLinks = [...document.querySelectorAll(".shell-nav a")];
@@ -1328,6 +1765,12 @@ export function adminLayout(
         .filter(({ path }) => currentPath === path || (path !== ${JSON.stringify(config.controlPanelPath)} && currentPath.startsWith(path + "/")))
         .sort((left, right) => right.path.length - left.path.length);
       matches[0]?.link.classList.add("active");
+      const shellHeader = document.querySelector(".shell-header");
+      const menuToggle = document.querySelector(".shell-menu-toggle");
+      menuToggle?.addEventListener("click", () => {
+        const open = shellHeader?.classList.toggle("menu-open") || false;
+        menuToggle.setAttribute("aria-expanded", String(open));
+      });
       document.querySelectorAll("[data-locale]").forEach((button) => button.addEventListener("click", () => {
         const nextLocale = supportedLocales.has(button.dataset.locale) ? button.dataset.locale : "en";
         localStorage.setItem("hybrid-static-cms-locale", nextLocale);

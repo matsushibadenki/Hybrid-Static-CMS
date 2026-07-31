@@ -35,9 +35,15 @@ location /control-panel {
 location /cms-api/ {
   proxy_pass http://127.0.0.1:3000/cms-api/;
 }
+
+location /cms/uploads/ {
+  add_header X-Content-Type-Options "nosniff" always;
+}
 ```
 
 Everything else should continue to resolve to the normal document root.
+
+When Bun serves the public document root directly, supported static files placed under `PUBLIC_HTML_DIR` are available at the matching URL. For example, `public_html/about.html` is served as `/about.html`, and `public_html/company/index.html` is served as `/company/`. Dot-prefixed paths, PHP source, and unknown file formats remain inaccessible. PHP must continue to be handled by a PHP-capable web server rather than the Bun static-file route.
 
 ## File ownership and write access
 
@@ -99,6 +105,7 @@ These are important for adopters:
 - Existing `public_html` pages should keep working even if the CMS is temporarily unavailable
 - Static fragments are the safest default for high-compatibility installations
 - Use API or embed modes only where dynamic behavior is worth the dependency
+- Serve `/cms/uploads/` with `X-Content-Type-Options: nosniff` so browsers do not reinterpret canonical media files as active content
 
 ## Deployment models
 
