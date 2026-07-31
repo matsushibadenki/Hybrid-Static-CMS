@@ -30,6 +30,18 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.11"
+      - name: Validate optional Stalwart Compose configurations
+        env:
+          APP_ENV_FILE: .env.example
+          POSTGRES_DB: hybrid_static_cms
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          PUBLIC_HTML_HOST_DIR: ./public_html
+          STORAGE_HOST_DIR: ./storage
+        run: |
+          docker compose --env-file .env.example -f docker-compose.yml config
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.stalwart.yml --profile stalwart config
+          docker compose --env-file .env.example -f docker-compose.production.yml -f docker-compose.stalwart.yml -f docker-compose.stalwart-public.yml --profile stalwart config
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run migrate

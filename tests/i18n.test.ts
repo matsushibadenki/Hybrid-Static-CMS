@@ -76,6 +76,9 @@ describe("internationalization", () => {
     const automaticTableHtml = adminLayout("Forms", null, "<table><tbody><tr><td>Form</td></tr></tbody></table>");
 
     expect(defaultHtml).not.toContain('class="shell-card shell-card-wide-list"');
+    expect(defaultHtml).toContain(".shell:not(.shell-admin) .shell-card");
+    expect(defaultHtml).toContain(".shell-admin > .shell-card");
+    expect(defaultHtml).toContain("padding: 64px 48px 104px");
     expect(wideHtml).toContain('class="shell-card shell-card-wide-list"');
     expect(wideHtml).toContain("padding: 2rem");
     expect(wideHtml).toContain("white-space: nowrap");

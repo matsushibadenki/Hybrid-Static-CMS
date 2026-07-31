@@ -23,7 +23,7 @@ services:
       postgres:
         condition: service_healthy
     env_file:
-      - .env
+      - ${APP_ENV_FILE:-.env}
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PUBLIC_HTML_DIR: /app/public_html

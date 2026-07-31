@@ -1,0 +1,28 @@
+services:
+  stalwart:
+    image: ${STALWART_IMAGE:-stalwartlabs/stalwart:v0.16}
+    profiles:
+      - stalwart
+    restart: unless-stopped
+    hostname: ${STALWART_HOSTNAME:-mail.example.test}
+    environment:
+      STALWART_PUBLIC_URL: ${STALWART_PUBLIC_URL:-http://localhost:8080}
+    ports:
+      - "127.0.0.1:${STALWART_ADMIN_PORT:-8080}:8080"
+    expose:
+      - "25"
+      - "443"
+      - "465"
+      - "587"
+      - "993"
+    volumes:
+      - stalwart-config:/etc/stalwart
+      - stalwart-data:/var/lib/stalwart
+    networks:
+      default:
+        aliases:
+          - ${STALWART_HOSTNAME:-mail.example.test}
+
+volumes:
+  stalwart-config:
+  stalwart-data:

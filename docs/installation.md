@@ -44,6 +44,7 @@ Important settings:
 - `TWO_FACTOR_SECRET`: Base32 TOTP secret used when two-factor login is enabled
 - `COOKIE_SECURE`: set to `true` for HTTPS deployments; defaults automatically from an `https://` `APP_URL`
 - `TRUST_PROXY`: set to `true` only when a trusted reverse proxy sets client IP headers
+- `APP_ENV_FILE`: environment file loaded by `docker-compose.production.yml`, default `.env`
 - `PUBLIC_HTML_DIR`: document root used for generated artifacts
 - `CONTROL_PANEL_PATH`: admin route prefix
 - `CMS_API_PREFIX`: API route prefix
@@ -66,6 +67,10 @@ Important settings:
 - `SMTP_USERNAME`, `SMTP_PASSWORD`: optional SMTP `AUTH LOGIN` credentials
 - `SMTP_FROM`: sender address; notifications remain disabled unless this and `FORM_NOTIFICATION_EMAIL` are configured
 - `FORM_NOTIFICATION_EMAIL`: destination address for new public form submissions
+- `COMPOSE_PROFILES`: set to `stalwart` only when starting the optional bundled Stalwart service
+- `STALWART_IMAGE`, `STALWART_HOSTNAME`, `STALWART_PUBLIC_URL`: optional Stalwart image pin, TLS hostname, and public URL
+- `STALWART_ADMIN_PORT`: loopback-only initial setup and diagnostics port, default `8080`
+- `STALWART_*_PORT`: host ports used only with `docker-compose.stalwart-public.yml`
 - `LOG_LEVEL`: minimum application-log severity (`debug`, `info`, `warn`, or `error`), default `info`
 - `LOG_FORMAT`: `json` for structured production logs or `text` for local readability, default `json`
 - `OPERATOR_ALERT_WEBHOOK_URL`: optional HTTPS endpoint for operational alerts; HTTP is allowed only for localhost testing
@@ -134,6 +139,8 @@ Public form submissions are rate-limited in PostgreSQL before reCAPTCHA verifica
 Form administrators can download submissions as UTF-8 CSV from the form edit screen. The export includes the submission timestamp and one column for each configured field. Set `FORM_SUBMISSION_RETENTION_DAYS` only after confirming the site's legal and operational retention requirements; automatic deletion cannot be undone from the CMS.
 
 When all SMTP notification variables are configured, a successful public form submission triggers a plain-text email. SMTP delivery failures do not reject the visitor's submission; they create an operator notification and audit entry. The built-in sender uses implicit TLS (normally port 465), so deployments requiring STARTTLS should place an SMTP relay in front of the CMS or use a provider's implicit-TLS endpoint.
+
+The repository also provides an opt-in Stalwart Docker service. It is disabled by default and does not replace external SMTP support. See [Optional Stalwart Mail Server](./stalwart-mail-server.md) for private-relay, public-server, disabling, DNS, and backup instructions.
 
 ### LaTeX mathematics
 

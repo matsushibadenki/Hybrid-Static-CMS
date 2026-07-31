@@ -219,7 +219,7 @@ export function adminLayout(
         padding: 0 0 24px;
       }
 
-      .shell .shell-card {
+      .shell:not(.shell-admin) .shell-card {
         width: 100%;
         padding: 0;
       }
@@ -310,7 +310,7 @@ export function adminLayout(
 
       /* ---- Main content ---- */
 
-      .shell-card {
+      .shell-admin > .shell-card {
         width: 100%;
         max-width: 880px;
         margin: 0 auto;
@@ -318,7 +318,7 @@ export function adminLayout(
         color: var(--ink);
       }
 
-      .shell-card-wide-list {
+      .shell-admin > .shell-card-wide-list {
         max-width: none;
         margin: 0;
         padding: 2rem;
@@ -1226,7 +1226,7 @@ export function adminLayout(
       @media print {
         .shell-header, .shell-nav, .shell-language, .shell-logout-btn { display: none; }
         .shell-admin { display: block; }
-        .shell-card { padding: 0; max-width: none; }
+        .shell-admin > .shell-card { padding: 0; max-width: none; }
       }
     </style>
   </head>

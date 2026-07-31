@@ -72,6 +72,8 @@ Form submissions can be exported from each form's edit screen as a UTF-8 CSV. Au
 
 SMTP notification errors are visible in operator notifications and audit logs under `form.submit.email_failed`. Monitor these entries if form mail is operationally important; the public submission is retained even when delivery fails.
 
+When using the optional Stalwart profile, monitor and back up its configuration and data volumes separately. PostgreSQL backups do not contain Stalwart mailboxes, queues, certificates, DKIM keys, or server configuration. Review [Optional Stalwart Mail Server](./stalwart-mail-server.md) before publishing mail ports.
+
 Application runtime events use the shared structured logger. Keep `LOG_FORMAT=json`
 in production and configure the process manager to retain and rotate standard
 output. Set `OPERATOR_ALERT_WEBHOOK_URL` when errors must also reach an external

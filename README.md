@@ -20,6 +20,7 @@ Operator-facing notes now live under `docs/README.md`.
 - Installation: `docs/installation.md`
 - Deployment: `docs/deployment.md`
 - Operations and security: `docs/operations.md`
+- Optional Stalwart mail server: `docs/stalwart-mail-server.md`
 - Roadmap: `docs/roadmap.md`
 
 ## MVP included in this repository

@@ -104,6 +104,8 @@ These are important for adopters:
 
 For a production-oriented Docker stack, use `docker-compose.production.yml`. It avoids publishing PostgreSQL's port, waits for database health, does not seed data automatically, and keeps `public_html`, storage, templates, and plugins in explicit host-mounted locations.
 
+Email delivery can continue using an external SMTP provider, remain disabled, or use the optional `docker-compose.stalwart.yml` profile. The private Stalwart extension publishes only its loopback setup port; add `docker-compose.stalwart-public.yml` only when operating a complete public mail server. See [Optional Stalwart Mail Server](./stalwart-mail-server.md).
+
 ### VPS model
 
 Best overall fit.

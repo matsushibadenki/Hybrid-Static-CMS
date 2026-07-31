@@ -13,11 +13,12 @@ This directory collects the design, installation, deployment, and operations not
 7. [Scheduled publishing](./scheduled-publishing.md)
 8. [Control panel layout](./control-panel-layout.md)
 9. [Media upload policies](./media-upload-policies.md)
-10. [Structured logging and operator alerts](./structured-logging.md)
-11. [Roadmap](./roadmap.md)
-12. [VPS production guide](./vps.md)
-13. [Upgrade guide](./upgrade.md)
-14. [Architecture decision records](./adr/0001-public-html-coexistence.md)
+10. [Optional Stalwart mail server](./stalwart-mail-server.md)
+11. [Structured logging and operator alerts](./structured-logging.md)
+12. [Roadmap](./roadmap.md)
+13. [VPS production guide](./vps.md)
+14. [Upgrade guide](./upgrade.md)
+15. [Architecture decision records](./adr/0001-public-html-coexistence.md)
 
 ## Audience
 
