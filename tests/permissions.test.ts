@@ -33,4 +33,36 @@ describe("permissions", () => {
     expect(hasPermission({ roles: ["viewer"] }, "comments.read")).toBe(false);
     expect(hasPermission({ roles: ["author"] }, "comments.manage")).toBe(false);
   });
+
+  test("allows editors to approve content while authors can only submit it", () => {
+    expect(hasPermission({ roles: ["editor"] }, "posts.review")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "pages.review")).toBe(true);
+    expect(hasPermission({ roles: ["author"] }, "posts.write")).toBe(true);
+    expect(hasPermission({ roles: ["author"] }, "posts.review")).toBe(false);
+    expect(hasPermission({ roles: ["viewer"] }, "pages.review")).toBe(false);
+  });
+
+  test("allows editors to manage maps while reserving deletion for administrators", () => {
+    expect(hasPermission({ roles: ["editor"] }, "maps.read")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "maps.write")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "maps.delete")).toBe(false);
+    expect(hasPermission({ roles: ["viewer"] }, "maps.read")).toBe(true);
+    expect(hasPermission({ roles: ["viewer"] }, "maps.write")).toBe(false);
+    expect(hasPermission({ roles: ["admin"] }, "maps.delete")).toBe(true);
+  });
+
+  test("limits content portability to editorial operators", () => {
+    expect(hasPermission({ roles: ["admin"] }, "content.export")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "content.import")).toBe(true);
+    expect(hasPermission({ roles: ["author"] }, "content.export")).toBe(false);
+    expect(hasPermission({ roles: ["viewer"] }, "content.import")).toBe(false);
+  });
+
+  test("allows editors to resolve redirects without destructive cleanup access", () => {
+    expect(hasPermission({ roles: ["editor"] }, "redirects.read")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "redirects.write")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "redirects.delete")).toBe(false);
+    expect(hasPermission({ roles: ["admin"] }, "redirects.delete")).toBe(true);
+    expect(hasPermission({ roles: ["viewer"] }, "redirects.read")).toBe(false);
+  });
 });

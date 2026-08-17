@@ -1,7 +1,7 @@
 export type AdminLocale = "en" | "ja" | "zh";
 
 const ja: Record<string, string> = {
-  Dashboard: "ダッシュボード", Posts: "投稿一覧", Pages: "固定ページ一覧", Forms: "フォーム", Menus: "メニュー", Blocks: "ブロック", Comments: "コメント", Comment: "コメント", Author: "投稿者", Pending: "承認待ち", Approved: "承認済み", Approve: "承認",
+  Dashboard: "ダッシュボード", Posts: "投稿一覧", Pages: "固定ページ一覧", Forms: "フォーム", Menus: "メニュー", Blocks: "ブロック", Comments: "コメント", Comment: "コメント", Author: "投稿者", Pending: "承認待ち", Approve: "承認",
   "AI proposals": "AI提案", "AI Proposals": "AI提案", Media: "メディア", Users: "ユーザー", Logs: "監査ログ", Snapshots: "スナップショット",
   "New post": "投稿を作成", "New Post": "投稿を作成", "New page": "固定ページを作成", "New Page": "固定ページを作成", API: "API", Logout: "ログアウト", "control panel": "コントロールパネル", "Control panel": "コントロールパネル",
   "Signed in as": "ログイン中:", "Sign in to manage posts and generated fragments.": "ログインして投稿と生成ページを管理してください。",
@@ -56,10 +56,14 @@ const ja: Record<string, string> = {
   Sessions: "セッション", "Signed-in devices": "ログイン中の端末", "Review where this account is currently signed in.": "このアカウントがログインしている場所を確認します。", "Sign out other sessions": "他のセッションからログアウト", "Current session": "現在のセッション", "Unknown browser": "不明なブラウザ", "Last active": "最終利用", Expires: "有効期限", "This device": "この端末", "Sign out": "ログアウト", "Other sessions signed out.": "他のセッションからログアウトしました。", "Session signed out.": "セッションからログアウトしました。", "Session was already inactive.": "セッションはすでに無効です。",
   "Required only when two-factor authentication is enabled for your account or installation.": "アカウントまたは設置環境で2要素認証が有効な場合のみ必要です。", "Current password is incorrect.": "現在のパスワードが正しくありません。", "New password confirmation does not match.": "新しいパスワードの確認が一致しません。", "Password changed. Other sessions were signed out.": "パスワードを変更し、他のセッションからログアウトしました。", "Enter the authenticator code to finish enrollment.": "認証コードを入力して設定を完了してください。", "Two-factor authentication disabled.": "2要素認証を無効にしました。", "Authenticator code is invalid.": "認証コードが正しくありません。", "Authenticator or recovery code is invalid.": "認証コードまたは復旧コードが正しくありません。", "Account not found.": "アカウントが見つかりません。", "Two-factor authentication is already enabled.": "2要素認証はすでに有効です。", "Start two-factor enrollment again.": "2要素認証の設定をもう一度開始してください。", "The enrollment request has expired.": "設定リクエストの有効期限が切れました。", "Two-factor authentication is not enabled.": "2要素認証は有効ではありません。", "Use logout to end the current session.": "現在のセッションを終了するにはログアウトしてください。", "Unable to change password.": "パスワードを変更できませんでした。", "Unable to start enrollment.": "設定を開始できませんでした。", "Unable to enable two-factor authentication.": "2要素認証を有効にできませんでした。", "Unable to replace recovery codes.": "復旧コードを更新できませんでした。", "Unable to disable two-factor authentication.": "2要素認証を無効にできませんでした。", "Unable to revoke session.": "セッションを解除できませんでした。",
   "Autosave ready": "自動保存の準備完了", "Unsaved changes were found.": "未保存の変更が見つかりました。", "Restore the automatically saved version or discard it.": "自動保存版を復元するか破棄してください。", "The saved post or page changed after this recovery copy was created. Review restored values before saving.": "この復旧コピーの作成後に保存済みコンテンツが変更されています。復元した内容を確認してから保存してください。", "Restore autosave": "自動保存版を復元", "Discard autosave": "自動保存版を破棄", "Autosaving...": "自動保存中...", Autosaved: "自動保存済み", "Unsaved changes": "未保存の変更", "Autosave failed. Your form remains open.": "自動保存に失敗しました。入力画面は保持されています。", "Saving...": "保存中...", "Autosave restored. Review and save when ready.": "自動保存版を復元しました。内容を確認して保存してください。", "Autosave discarded": "自動保存版を破棄しました", "Recovery copy available": "復旧コピーがあります", "Autosave unavailable": "自動保存を利用できません",
+  "Editorial workflow": "編集ワークフロー", "Review and approval": "レビューと承認", "Review state": "レビュー状態", "Any review state": "すべてのレビュー状態", "Review draft": "レビュー未申請", "In review": "レビュー中", "Changes requested": "修正依頼あり", Approved: "承認済み", "Reviewer note": "レビュアーへのメモ", "Review note": "レビューメモ", "Optional context for the reviewer": "レビュアーへの補足（任意）", "Optional approval note": "承認メモ（任意）", "Submit for review": "レビューを申請", "Approve review": "レビューを承認", "Requested changes": "修正内容", "Explain the requested changes": "必要な修正内容を記入してください", "Request changes": "修正を依頼", "Withdraw review": "レビュー申請を取り下げ", "Latest review note": "最新のレビューメモ", "Workflow history": "ワークフロー履歴", "No workflow activity.": "ワークフロー履歴はありません。", "Submitted for review": "レビューを申請", "Approved review": "レビューを承認", "Withdrew review": "レビューを取り下げ", "Review status is separate from publication status. Direct publishing remains available until review is requested.": "レビュー状態は公開状態とは別に管理されます。レビューを申請するまでは直接公開も利用できます。", "Review requested.": "レビューを申請しました。", "Review approved.": "レビューを承認しました。", "Review withdrawn.": "レビュー申請を取り下げました。", "Approve or withdraw the current review before publishing.": "公開する前に、現在のレビューを承認または取り下げてください。", "Requested changes must be saved and reviewed before publishing.": "修正内容を保存し、再度レビューを受けてから公開してください。", "Approved content changed. Save it and submit it for review again before publishing.": "承認後に内容が変更されています。保存して再度レビューを申請してから公開してください。", "Content changed after review was requested. Submit it for review again.": "レビュー申請後に内容が変更されています。もう一度レビューを申請してください。", "Explain the requested changes.": "必要な修正内容を入力してください。",
+  "Changes requested.": "修正を依頼しました。", "Content not found.": "対象のコンテンツが見つかりません。", "Content is already in review.": "このコンテンツはすでにレビュー中です。", "Only content in review can be approved.": "レビュー中のコンテンツのみ承認できます。", "Only content in review can be returned for changes.": "レビュー中のコンテンツのみ修正依頼を返せます。", "Only content in review can be withdrawn.": "レビュー中のコンテンツのみ取り下げできます。",
+  "Maps and snippets": "地図・スニペット", "Maps and Snippets": "地図・スニペット", "New map": "地図を作成", "New Map": "地図を作成", "Edit Map": "地図を編集", "Map snippet": "地図スニペット", "Map provider": "地図プロバイダー", "Display mode": "表示形式", "Pinpoint marker": "地点をピン表示", Route: "経路", Locations: "地点", "Start and destination": "出発地点と目的地", "Start latitude": "出発地点の緯度", "Start longitude": "出発地点の経度", "Start label": "出発地点名", "Destination latitude": "目的地の緯度", "Destination longitude": "目的地の経度", "Destination label": "目的地名", "Map display": "地図表示", "Travel mode": "移動手段", Driving: "自動車", Walking: "徒歩", Bicycling: "自転車", Transit: "公共交通機関", Zoom: "ズーム", "Height (px)": "高さ（px）", "Shortcode and public snippet": "ショートコードと公開スニペット", "CMS post or page body": "CMSの投稿・固定ページ本文", "Existing HTML or PHP under public_html": "public_html内の既存HTMLまたはPHP", "Publish this map and regenerate public output after changing its settings.": "設定変更後は地図を公開し、公開出力を再生成してください。", "Save map": "地図を保存", "Back to maps": "地図一覧へ戻る", "Map shortcode": "地図ショートコード", "Map slug": "地図スラッグ", "Manage reusable pinpoint and route maps for CMS content and existing public_html files.": "CMSコンテンツと既存のpublic_htmlファイルで再利用できる地点・経路地図を管理します。", "Public HTML / PHP": "公開HTML / PHP", "Reusable loader": "再利用ローダー", "Place a map container and the generated loader in any file served from public_html.": "地図コンテナと生成済みローダーをpublic_htmlから配信する任意のファイルに配置します。", "No maps yet.": "地図はまだありません。", "OpenStreetMap routes use the configured OSRM-compatible service. Transit routes require Google Maps.": "OpenStreetMapの経路は設定済みのOSRM互換サービスを使用します。公共交通経路にはGoogle Mapsが必要です。", "Map saved and public snippets regenerated.": "地図を保存し、公開スニペットを再生成しました。", "Map updated and public snippets regenerated.": "地図を更新し、公開スニペットを再生成しました。", "Map deleted and public snippets regenerated.": "地図を削除し、公開スニペットを再生成しました。", "Select a valid map provider.": "有効な地図プロバイダーを選択してください。", "Select a valid map display mode.": "有効な地図表示形式を選択してください。", "Select a valid travel mode.": "有効な移動手段を選択してください。", "Transit routes require Google Maps.": "公共交通経路にはGoogle Mapsが必要です。", "Zoom must be between 0 and 21.": "ズームは0から21の間で指定してください。", "Map height must be between 200 and 1000 pixels.": "地図の高さは200から1000ピクセルの間で指定してください。",
+  "Published map preview": "公開地図のプレビュー", "Map title must be 200 characters or fewer.": "地図タイトルは200文字以内にしてください。", "Map labels must be 300 characters or fewer.": "地点名は300文字以内にしてください。",
 };
 
 const zh: Record<string, string> = {
-  Dashboard: "仪表盘", Posts: "文章列表", Pages: "页面列表", Forms: "表单", Menus: "菜单", Blocks: "区块", Comments: "评论", Comment: "评论", Author: "评论者", Pending: "待审核", Approved: "已批准", Approve: "批准", "AI proposals": "AI提案", "AI Proposals": "AI提案", Media: "媒体", Users: "用户", Logs: "审计日志", Snapshots: "快照",
+  Dashboard: "仪表盘", Posts: "文章列表", Pages: "页面列表", Forms: "表单", Menus: "菜单", Blocks: "区块", Comments: "评论", Comment: "评论", Author: "评论者", Pending: "待审核", Approve: "批准", "AI proposals": "AI提案", "AI Proposals": "AI提案", Media: "媒体", Users: "用户", Logs: "审计日志", Snapshots: "快照",
   "New post": "创建文章", "New Post": "创建文章", "New page": "创建页面", "New Page": "创建页面", API: "API", Logout: "退出登录", "control panel": "控制面板", "Control panel": "控制面板", "Signed in as": "当前登录:", "Sign in to manage posts and generated fragments.": "请登录以管理文章和生成页面。", "Switch language": "切换语言", Language: "语言", English: "英语", Japanese: "日语", "Simplified Chinese": "简体中文",
   Overview: "概览", Content: "内容", Manage: "管理", Create: "创建", Articles: "文章内容", "Fixed pages": "固定页面内容", "Forms and media": "表单与媒体", "Forms and assets": "表单与资源", Series: "系列管理", "Page groups": "页面分组管理", "Site structure": "网站结构", Extensions: "扩展与集成", Operations: "运营与管理", Menu: "菜单", Presentation: "显示设置", Appearance: "外观",
   Search: "搜索", Save: "保存", Delete: "删除", Edit: "编辑", Open: "打开", Remove: "移除", Filter: "筛选", Actions: "操作", Action: "操作", Status: "状态", Title: "标题", Slug: "别名", Description: "描述", Updated: "更新时间", Created: "创建时间", When: "时间",
@@ -111,7 +115,100 @@ const zh: Record<string, string> = {
   Sessions: "会话", "Signed-in devices": "已登录设备", "Review where this account is currently signed in.": "查看此账户当前的登录位置。", "Sign out other sessions": "退出其他会话", "Current session": "当前会话", "Unknown browser": "未知浏览器", "Last active": "最后活动", Expires: "有效期至", "This device": "此设备", "Sign out": "退出登录", "Other sessions signed out.": "其他会话已退出。", "Session signed out.": "会话已退出。", "Session was already inactive.": "会话已处于非活动状态。",
   "Required only when two-factor authentication is enabled for your account or installation.": "仅在账户或安装环境启用双重身份验证时需要填写。", "Current password is incorrect.": "当前密码不正确。", "New password confirmation does not match.": "新密码确认不一致。", "Password changed. Other sessions were signed out.": "密码已更改，其他会话已退出。", "Enter the authenticator code to finish enrollment.": "请输入验证器代码以完成设置。", "Two-factor authentication disabled.": "双重身份验证已停用。", "Authenticator code is invalid.": "验证器代码无效。", "Authenticator or recovery code is invalid.": "验证器或恢复代码无效。", "Account not found.": "找不到账户。", "Two-factor authentication is already enabled.": "双重身份验证已启用。", "Start two-factor enrollment again.": "请重新开始设置双重身份验证。", "The enrollment request has expired.": "设置请求已过期。", "Two-factor authentication is not enabled.": "双重身份验证未启用。", "Use logout to end the current session.": "请使用退出登录结束当前会话。", "Unable to change password.": "无法更改密码。", "Unable to start enrollment.": "无法开始设置。", "Unable to enable two-factor authentication.": "无法启用双重身份验证。", "Unable to replace recovery codes.": "无法更新恢复代码。", "Unable to disable two-factor authentication.": "无法停用双重身份验证。", "Unable to revoke session.": "无法撤销会话。",
   "Autosave ready": "自动保存已就绪", "Unsaved changes were found.": "发现未保存的更改。", "Restore the automatically saved version or discard it.": "请恢复或丢弃自动保存的版本。", "The saved post or page changed after this recovery copy was created. Review restored values before saving.": "创建此恢复副本后，已保存的文章或页面发生了变化。保存前请检查恢复的内容。", "Restore autosave": "恢复自动保存", "Discard autosave": "丢弃自动保存", "Autosaving...": "正在自动保存...", Autosaved: "已自动保存", "Unsaved changes": "未保存的更改", "Autosave failed. Your form remains open.": "自动保存失败，输入页面仍保持打开。", "Saving...": "正在保存...", "Autosave restored. Review and save when ready.": "已恢复自动保存内容，请检查后保存。", "Autosave discarded": "已丢弃自动保存", "Recovery copy available": "有可用的恢复副本", "Autosave unavailable": "无法使用自动保存",
+  "Editorial workflow": "编辑工作流", "Review and approval": "审核与批准", "Review state": "审核状态", "Any review state": "所有审核状态", "Review draft": "尚未提交审核", "In review": "审核中", "Changes requested": "需要修改", Approved: "已批准", "Reviewer note": "给审核者的备注", "Review note": "审核备注", "Optional context for the reviewer": "给审核者的补充说明（可选）", "Optional approval note": "批准备注（可选）", "Submit for review": "提交审核", "Approve review": "批准审核", "Requested changes": "修改要求", "Explain the requested changes": "请说明需要修改的内容", "Request changes": "要求修改", "Withdraw review": "撤回审核", "Latest review note": "最新审核备注", "Workflow history": "工作流历史", "No workflow activity.": "暂无工作流记录。", "Submitted for review": "已提交审核", "Approved review": "已批准审核", "Withdrew review": "已撤回审核", "Review status is separate from publication status. Direct publishing remains available until review is requested.": "审核状态与发布状态分开管理。在提交审核前仍可直接发布。", "Review requested.": "已提交审核。", "Review approved.": "审核已批准。", "Review withdrawn.": "审核已撤回。", "Approve or withdraw the current review before publishing.": "发布前请先批准或撤回当前审核。", "Requested changes must be saved and reviewed before publishing.": "请保存修改并重新审核后再发布。", "Approved content changed. Save it and submit it for review again before publishing.": "已批准的内容发生了变化。请保存并重新提交审核后再发布。", "Content changed after review was requested. Submit it for review again.": "提交审核后内容发生了变化，请重新提交审核。", "Explain the requested changes.": "请说明需要修改的内容。",
+  "Changes requested.": "已要求修改。", "Content not found.": "找不到目标内容。", "Content is already in review.": "该内容已在审核中。", "Only content in review can be approved.": "只能批准审核中的内容。", "Only content in review can be returned for changes.": "只能退回审核中的内容进行修改。", "Only content in review can be withdrawn.": "只能撤回审核中的内容。",
+  "Maps and snippets": "地图与代码片段", "Maps and Snippets": "地图与代码片段", "New map": "新建地图", "New Map": "新建地图", "Edit Map": "编辑地图", "Map snippet": "地图代码片段", "Map provider": "地图提供商", "Display mode": "显示模式", "Pinpoint marker": "精确位置标记", Route: "路线", Locations: "位置", "Start and destination": "起点和目的地", "Start latitude": "起点纬度", "Start longitude": "起点经度", "Start label": "起点名称", "Destination latitude": "目的地纬度", "Destination longitude": "目的地经度", "Destination label": "目的地名称", "Map display": "地图显示", "Travel mode": "出行方式", Driving: "驾车", Walking: "步行", Bicycling: "骑行", Transit: "公共交通", Zoom: "缩放级别", "Height (px)": "高度（px）", "Shortcode and public snippet": "短代码与公开代码片段", "CMS post or page body": "CMS文章或页面正文", "Existing HTML or PHP under public_html": "public_html中的现有HTML或PHP", "Publish this map and regenerate public output after changing its settings.": "更改设置后请发布地图并重新生成公开内容。", "Save map": "保存地图", "Back to maps": "返回地图列表", "Map shortcode": "地图短代码", "Map slug": "地图别名", "Manage reusable pinpoint and route maps for CMS content and existing public_html files.": "管理可在CMS内容和现有public_html文件中复用的位置及路线地图。", "Public HTML / PHP": "公开HTML / PHP", "Reusable loader": "可复用加载器", "Place a map container and the generated loader in any file served from public_html.": "将地图容器和生成的加载器放入public_html提供的任意文件中。", "No maps yet.": "暂无地图。", "OpenStreetMap routes use the configured OSRM-compatible service. Transit routes require Google Maps.": "OpenStreetMap路线使用已配置的OSRM兼容服务。公共交通路线需要Google Maps。", "Map saved and public snippets regenerated.": "地图已保存，公开代码片段已重新生成。", "Map updated and public snippets regenerated.": "地图已更新，公开代码片段已重新生成。", "Map deleted and public snippets regenerated.": "地图已删除，公开代码片段已重新生成。", "Select a valid map provider.": "请选择有效的地图提供商。", "Select a valid map display mode.": "请选择有效的地图显示模式。", "Select a valid travel mode.": "请选择有效的出行方式。", "Transit routes require Google Maps.": "公共交通路线需要Google Maps。", "Zoom must be between 0 and 21.": "缩放级别必须在0到21之间。", "Map height must be between 200 and 1000 pixels.": "地图高度必须在200到1000像素之间。",
+  "Published map preview": "已发布地图预览", "Map title must be 200 characters or fewer.": "地图标题不得超过200个字符。", "Map labels must be 300 characters or fewer.": "位置名称不得超过300个字符。",
 };
+
+Object.assign(ja, {
+  "Import and export": "インポート・エクスポート",
+  Portability: "データ移行",
+  "Export posts and pages": "投稿・固定ページをエクスポート",
+  "Download a versioned JSON archive containing post and page bodies, SEO settings, terms, and parent collection slugs. User accounts, comments, media files, credentials, and audit logs are excluded.": "投稿・固定ページの本文、SEO設定、分類、親グループのスラッグを含むバージョン付きJSONをダウンロードします。ユーザー、コメント、メディアファイル、認証情報、監査ログは含まれません。",
+  "Download content archive": "コンテンツアーカイブをダウンロード",
+  "Safe import": "安全なインポート",
+  "Import posts and pages": "投稿・固定ページをインポート",
+  "Every imported item is created as a draft. Existing slugs are skipped and never overwritten. Series and page groups are connected only when matching parent slugs already exist.": "すべて下書きとして追加します。既存スラッグは上書きせずスキップします。シリーズとページグループは、同じ親スラッグが既に存在する場合だけ関連付けます。",
+  "Content archive (JSON)": "コンテンツアーカイブ（JSON）",
+  "Maximum file size: 5 MB. Maximum content items: 1000.": "最大ファイルサイズは5 MB、コンテンツは最大1000件です。",
+  "I understand that imported content will be added as drafts.": "インポートしたコンテンツが下書きとして追加されることを確認しました。",
+  "Validate and import": "検証してインポート",
+  "Import result": "インポート結果",
+  "Content import completed": "コンテンツのインポートが完了しました",
+  "Content import completed.": "コンテンツのインポートが完了しました。",
+  "Imported posts": "インポートした投稿",
+  "Imported pages": "インポートした固定ページ",
+  "Skipped existing items": "既存のためスキップ",
+  Warnings: "警告",
+  "Imported content is saved as draft. Review it before publishing.": "インポートしたコンテンツは下書きです。確認してから公開してください。",
+  "Confirm the content import before continuing.": "続行する前にコンテンツのインポートを確認してください。",
+  "Select a JSON content archive.": "JSONコンテンツアーカイブを選択してください。",
+  "The import file exceeds the 5 MB limit.": "インポートファイルが5 MBの上限を超えています。",
+  "The import file is not valid JSON.": "インポートファイルは有効なJSONではありません。",
+  "The import file format or version is not supported.": "インポートファイルの形式またはバージョンには対応していません。",
+  "The import file must contain posts and pages arrays.": "インポートファイルにはpostsとpagesの配列が必要です。",
+  "The import file contains more than 1000 content items.": "インポートファイルのコンテンツが1000件を超えています。",
+});
+
+Object.assign(zh, {
+  "Import and export": "导入与导出",
+  Portability: "数据迁移",
+  "Export posts and pages": "导出文章与页面",
+  "Download a versioned JSON archive containing post and page bodies, SEO settings, terms, and parent collection slugs. User accounts, comments, media files, credentials, and audit logs are excluded.": "下载包含文章与页面正文、SEO设置、分类和父级集合别名的版本化JSON。不会包含用户、评论、媒体文件、凭据和审计日志。",
+  "Download content archive": "下载内容归档",
+  "Safe import": "安全导入",
+  "Import posts and pages": "导入文章与页面",
+  "Every imported item is created as a draft. Existing slugs are skipped and never overwritten. Series and page groups are connected only when matching parent slugs already exist.": "所有内容都将以草稿形式添加。已有别名会被跳过且不会覆盖。仅当相同父级别名已存在时，才会关联系列和页面分组。",
+  "Content archive (JSON)": "内容归档（JSON）",
+  "Maximum file size: 5 MB. Maximum content items: 1000.": "文件最大5 MB，内容最多1000项。",
+  "I understand that imported content will be added as drafts.": "我确认导入的内容将作为草稿添加。",
+  "Validate and import": "验证并导入",
+  "Import result": "导入结果",
+  "Content import completed": "内容导入完成",
+  "Content import completed.": "内容导入完成。",
+  "Imported posts": "已导入文章",
+  "Imported pages": "已导入页面",
+  "Skipped existing items": "因已存在而跳过",
+  Warnings: "警告",
+  "Imported content is saved as draft. Review it before publishing.": "导入内容已保存为草稿，请检查后再发布。",
+  "Confirm the content import before continuing.": "继续前请确认内容导入。",
+  "Select a JSON content archive.": "请选择JSON内容归档。",
+  "The import file exceeds the 5 MB limit.": "导入文件超过5 MB限制。",
+  "The import file is not valid JSON.": "导入文件不是有效的JSON。",
+  "The import file format or version is not supported.": "不支持该导入文件格式或版本。",
+  "The import file must contain posts and pages arrays.": "导入文件必须包含posts和pages数组。",
+  "The import file contains more than 1000 content items.": "导入文件包含超过1000项内容。",
+});
+
+Object.assign(ja, {
+  "Redirects and 404s": "リダイレクト・404",
+  "Redirect manager": "リダイレクト管理",
+  "Add redirect": "リダイレクトを追加",
+  "Use an internal source path. Targets may be internal paths or HTTPS URLs. Permanent redirects are recommended for established URL changes.": "転送元には内部パスを指定します。転送先には内部パスまたはHTTPS URLを使用できます。確定したURL変更には恒久リダイレクトを推奨します。",
+  "Source path": "転送元パス", "Target location": "転送先", "Status code": "ステータスコード", Note: "メモ", "Why this redirect exists": "このリダイレクトの目的", Enabled: "有効",
+  "301 Permanent": "301 恒久", "302 Temporary": "302 一時", "307 Temporary (preserve method)": "307 一時（メソッド維持）", "308 Permanent (preserve method)": "308 恒久（メソッド維持）",
+  "Routing rules": "転送ルール", Redirects: "リダイレクト", "Search paths": "パスを検索", Origin: "作成方法", Hits: "アクセス数", "Last hit": "最終アクセス", Automatic: "自動", Manual: "手動", "No redirects found.": "リダイレクトはありません。",
+  "Broken links": "リンク切れ", "404 report": "404レポート", "Confirm clear": "全消去を確認", "Clear all reports": "レポートをすべて消去",
+  "Reports contain the requested path, aggregate count, timestamps, and only the referrer origin. Visitor IP addresses and complete referrer URLs are not stored.": "要求されたパス、集計回数、日時、参照元オリジンだけを記録します。訪問者のIPアドレスと完全な参照URLは保存しません。",
+  "Missing path": "見つからないパス", "First seen": "初回", "Last seen": "最終", "Referrer origin": "参照元オリジン", Resolution: "解決操作", "Direct or unknown": "直接または不明", "Create redirect": "リダイレクトを作成", Dismiss: "除外", "No 404 reports found.": "404レポートはありません。",
+  "Redirect created.": "リダイレクトを作成しました。", "Redirect updated.": "リダイレクトを更新しました。", "Redirect deleted.": "リダイレクトを削除しました。", "Redirect created and 404 report resolved.": "リダイレクトを作成し、404レポートを解決済みにしました。", "404 report dismissed.": "404レポートを除外しました。", "404 reports cleared.": "404レポートを消去しました。", "Confirm before clearing 404 reports.": "404レポートを消去する前に確認してください。",
+  "Redirect source must be an internal path without a query or fragment.": "転送元はクエリとフラグメントを含まない内部パスにしてください。", "Redirect source contains invalid characters.": "転送元に無効な文字が含まれています。", "Redirect source is too long.": "転送元が長すぎます。", "Redirect source cannot replace a protected application path.": "保護されたアプリケーションパスは転送元にできません。", "Redirect target is invalid or too long.": "転送先が無効または長すぎます。", "Redirect target must be an internal path or an HTTPS URL.": "転送先は内部パスまたはHTTPS URLにしてください。", "External redirect targets must use HTTPS.": "外部の転送先にはHTTPSが必要です。", "Select a valid redirect status code.": "有効なリダイレクトステータスを選択してください。", "Redirect note must be 1000 characters or fewer.": "リダイレクトのメモは1000文字以内にしてください。", "Redirect source and target cannot resolve to the same path.": "転送元と転送先を同じパスにはできません。", "This redirect would create a loop.": "このリダイレクトは循環を発生させます。", "A redirect already exists for this source path.": "この転送元には既にリダイレクトがあります。",
+});
+
+Object.assign(zh, {
+  "Redirects and 404s": "重定向与404",
+  "Redirect manager": "重定向管理", "Add redirect": "添加重定向",
+  "Use an internal source path. Targets may be internal paths or HTTPS URLs. Permanent redirects are recommended for established URL changes.": "来源请使用站内路径。目标可以是站内路径或HTTPS URL。已确定的URL变更建议使用永久重定向。",
+  "Source path": "来源路径", "Target location": "目标位置", "Status code": "状态码", Note: "备注", "Why this redirect exists": "此重定向的用途", Enabled: "启用",
+  "301 Permanent": "301 永久", "302 Temporary": "302 临时", "307 Temporary (preserve method)": "307 临时（保留方法）", "308 Permanent (preserve method)": "308 永久（保留方法）",
+  "Routing rules": "转发规则", Redirects: "重定向", "Search paths": "搜索路径", Origin: "创建方式", Hits: "访问次数", "Last hit": "最近访问", Automatic: "自动", Manual: "手动", "No redirects found.": "暂无重定向。",
+  "Broken links": "失效链接", "404 report": "404报告", "Confirm clear": "确认清空", "Clear all reports": "清空全部报告",
+  "Reports contain the requested path, aggregate count, timestamps, and only the referrer origin. Visitor IP addresses and complete referrer URLs are not stored.": "报告仅保存请求路径、汇总次数、时间和来源站点。不会保存访客IP地址或完整来源URL。",
+  "Missing path": "缺失路径", "First seen": "首次出现", "Last seen": "最近出现", "Referrer origin": "来源站点", Resolution: "处理", "Direct or unknown": "直接访问或未知", "Create redirect": "创建重定向", Dismiss: "忽略", "No 404 reports found.": "暂无404报告。",
+  "Redirect created.": "重定向已创建。", "Redirect updated.": "重定向已更新。", "Redirect deleted.": "重定向已删除。", "Redirect created and 404 report resolved.": "重定向已创建，404报告已解决。", "404 report dismissed.": "404报告已忽略。", "404 reports cleared.": "404报告已清空。", "Confirm before clearing 404 reports.": "清空404报告前请确认。",
+  "Redirect source must be an internal path without a query or fragment.": "来源必须是不含查询参数或片段的站内路径。", "Redirect source contains invalid characters.": "来源路径包含无效字符。", "Redirect source is too long.": "来源路径过长。", "Redirect source cannot replace a protected application path.": "来源不能替换受保护的应用路径。", "Redirect target is invalid or too long.": "目标无效或过长。", "Redirect target must be an internal path or an HTTPS URL.": "目标必须是站内路径或HTTPS URL。", "External redirect targets must use HTTPS.": "外部重定向目标必须使用HTTPS。", "Select a valid redirect status code.": "请选择有效的重定向状态码。", "Redirect note must be 1000 characters or fewer.": "重定向备注不得超过1000个字符。", "Redirect source and target cannot resolve to the same path.": "来源和目标不能解析为同一路径。", "This redirect would create a loop.": "此重定向会形成循环。", "A redirect already exists for this source path.": "此来源路径已存在重定向。",
+});
 
 export const adminTranslations: Record<Exclude<AdminLocale, "en">, Record<string, string>> = { ja, zh };
 

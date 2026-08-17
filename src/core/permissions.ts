@@ -9,11 +9,13 @@ export type Permission =
   | "posts.publish"
   | "posts.delete"
   | "posts.restore"
+  | "posts.review"
   | "pages.read"
   | "pages.write"
   | "pages.publish"
   | "pages.delete"
   | "pages.restore"
+  | "pages.review"
   | "forms.read"
   | "forms.submissions.read"
   | "forms.write"
@@ -35,6 +37,14 @@ export type Permission =
   | "blocks.read"
   | "blocks.write"
   | "blocks.delete"
+  | "maps.read"
+  | "maps.write"
+  | "maps.delete"
+  | "content.export"
+  | "content.import"
+  | "redirects.read"
+  | "redirects.write"
+  | "redirects.delete"
   | "ai.review"
   | "ai.propose"
   | "audit.read"
@@ -47,23 +57,23 @@ export type Permission =
 
 const rolePermissions: Record<UserRole, readonly Permission[]> = {
   owner: [
-    "admin.access", "posts.read", "posts.write", "posts.publish", "posts.delete", "posts.restore",
-    "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "forms.read", "forms.submissions.read", "forms.write", "forms.delete", "series.read", "series.write", "series.delete", "comments.read", "comments.manage", "page_groups.read", "page_groups.write", "page_groups.delete",
-    "media.read", "media.write", "media.delete", "menus.read", "menus.write", "menus.delete", "blocks.read", "blocks.write", "blocks.delete",
+    "admin.access", "posts.read", "posts.write", "posts.publish", "posts.delete", "posts.restore", "posts.review",
+    "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "pages.review", "forms.read", "forms.submissions.read", "forms.write", "forms.delete", "series.read", "series.write", "series.delete", "comments.read", "comments.manage", "page_groups.read", "page_groups.write", "page_groups.delete",
+    "media.read", "media.write", "media.delete", "menus.read", "menus.write", "menus.delete", "blocks.read", "blocks.write", "blocks.delete", "maps.read", "maps.write", "maps.delete", "content.export", "content.import", "redirects.read", "redirects.write", "redirects.delete",
     "ai.review", "ai.propose", "audit.read", "snapshots.read", "snapshots.write", "snapshots.restore", "users.manage", "settings.manage", "publishing.render",
   ],
   admin: [
-    "admin.access", "posts.read", "posts.write", "posts.publish", "posts.delete", "posts.restore",
-    "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "forms.read", "forms.submissions.read", "forms.write", "forms.delete", "series.read", "series.write", "series.delete", "comments.read", "comments.manage", "page_groups.read", "page_groups.write", "page_groups.delete",
-    "media.read", "media.write", "media.delete", "menus.read", "menus.write", "menus.delete", "blocks.read", "blocks.write", "blocks.delete",
+    "admin.access", "posts.read", "posts.write", "posts.publish", "posts.delete", "posts.restore", "posts.review",
+    "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "pages.review", "forms.read", "forms.submissions.read", "forms.write", "forms.delete", "series.read", "series.write", "series.delete", "comments.read", "comments.manage", "page_groups.read", "page_groups.write", "page_groups.delete",
+    "media.read", "media.write", "media.delete", "menus.read", "menus.write", "menus.delete", "blocks.read", "blocks.write", "blocks.delete", "maps.read", "maps.write", "maps.delete", "content.export", "content.import", "redirects.read", "redirects.write", "redirects.delete",
     "ai.review", "ai.propose", "audit.read", "snapshots.read", "snapshots.write", "snapshots.restore", "users.manage", "settings.manage", "publishing.render",
   ],
   editor: [
-    "admin.access", "posts.read", "posts.write", "posts.publish", "pages.read", "pages.write", "pages.publish",
-    "forms.read", "forms.submissions.read", "forms.write", "series.read", "series.write", "comments.read", "comments.manage", "page_groups.read", "page_groups.write", "media.read", "media.write", "menus.read", "menus.write", "blocks.read", "blocks.write", "publishing.render",
+    "admin.access", "posts.read", "posts.write", "posts.publish", "posts.review", "pages.read", "pages.write", "pages.publish", "pages.review",
+    "forms.read", "forms.submissions.read", "forms.write", "series.read", "series.write", "comments.read", "comments.manage", "page_groups.read", "page_groups.write", "media.read", "media.write", "menus.read", "menus.write", "blocks.read", "blocks.write", "maps.read", "maps.write", "content.export", "content.import", "redirects.read", "redirects.write", "publishing.render",
   ],
   author: ["admin.access", "posts.read", "posts.write", "media.read", "media.write"],
-  viewer: ["admin.access", "posts.read", "pages.read", "forms.read", "media.read", "menus.read", "blocks.read"],
+  viewer: ["admin.access", "posts.read", "pages.read", "forms.read", "media.read", "menus.read", "blocks.read", "maps.read"],
   ai_agent: ["posts.read", "pages.read", "ai.propose"],
 };
 
@@ -85,6 +95,8 @@ function adminPermissionForRequest(c: Context): Permission {
   if (path.startsWith("/logs")) return "audit.read";
   if (path.startsWith("/snapshots")) return path.endsWith("/restore") && method === "POST" ? "snapshots.restore" : method === "POST" ? "snapshots.write" : "snapshots.read";
   if (path.startsWith("/proposals")) return "ai.review";
+  if (path.startsWith("/portability")) return method === "GET" ? "content.export" : "content.import";
+  if (path.startsWith("/redirects")) return path.endsWith("/delete") || path.endsWith("/dismiss") || path.endsWith("/clear") ? "redirects.delete" : method === "GET" ? "redirects.read" : "redirects.write";
   if (path.startsWith("/media")) return method === "GET" ? "media.read" : path.endsWith("/delete") || path === "/media/cleanup" ? "media.delete" : "media.write";
   if (path.startsWith("/categories")) return method === "GET" ? "posts.read" : "posts.write";
   if (path.startsWith("/posts")) {
@@ -117,6 +129,7 @@ function adminPermissionForRequest(c: Context): Permission {
   }
   if (path.startsWith("/menus")) return path.endsWith("/delete") ? "menus.delete" : path === "/menus/new" ? "menus.write" : method === "GET" ? "menus.read" : "menus.write";
   if (path.startsWith("/blocks")) return path.endsWith("/delete") ? "blocks.delete" : path === "/blocks/new" ? "blocks.write" : method === "GET" ? "blocks.read" : "blocks.write";
+  if (path.startsWith("/maps")) return path.endsWith("/delete") ? "maps.delete" : path === "/maps/new" ? "maps.write" : method === "GET" ? "maps.read" : "maps.write";
   if (path === "/render") return "publishing.render";
   return "admin.access";
 }
@@ -151,6 +164,7 @@ export function apiPermissionForRequest(c: Context): Permission | null {
   if (path.startsWith("/pages")) return c.req.method === "DELETE" ? "pages.delete" : "pages.write";
   if (path.startsWith("/media")) return c.req.method === "DELETE" ? "media.delete" : "media.write";
   if (path.startsWith("/forms")) return c.req.method === "DELETE" ? "forms.delete" : "forms.write";
+  if (path.startsWith("/maps")) return c.req.method === "DELETE" ? "maps.delete" : "maps.write";
   return "admin.access";
 }
 

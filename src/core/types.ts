@@ -1,4 +1,5 @@
 export type UserRole = "owner" | "admin" | "editor" | "author" | "viewer" | "ai_agent";
+export type EditorialWorkflowState = "draft" | "in_review" | "changes_requested" | "approved";
 
 export type SessionUser = {
   id: number;
@@ -33,6 +34,13 @@ export type PostRecord = {
   tags: string[];
   commentsPolicy: "inherit" | "enabled" | "disabled";
   commentsEnabled: boolean;
+  workflowState: EditorialWorkflowState;
+  workflowContentHash: string | null;
+  workflowNote: string | null;
+  reviewRequestedAt: string | null;
+  reviewRequestedBy: number | null;
+  reviewedAt: string | null;
+  reviewedBy: number | null;
 };
 
 export type PostInput = {
@@ -75,6 +83,13 @@ export type PageRecord = {
   authorId: number | null;
   authorName: string | null;
   stylesheetPath: string | null;
+  workflowState: EditorialWorkflowState;
+  workflowContentHash: string | null;
+  workflowNote: string | null;
+  reviewRequestedAt: string | null;
+  reviewRequestedBy: number | null;
+  reviewedAt: string | null;
+  reviewedBy: number | null;
 };
 
 export type PageInput = {

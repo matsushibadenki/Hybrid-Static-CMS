@@ -9,14 +9,29 @@ import { verifyPreviewToken } from "../../core/previews";
 import { getPostSeriesNavigation } from "../../core/series";
 import { getPostPermalinkPattern } from "../../core/settings";
 import { listApprovedCommentsForPosts } from "../../core/comments";
+import { findPublicRedirect, recordNotFound, recordRedirectHit } from "../../core/redirects";
 
 export const publicRoutes = new Hono();
 
+function publicNotFound(c: Context) {
+  void recordNotFound(c.req.path, c.req.header("referer")).catch(() => undefined);
+  return c.notFound();
+}
+
+async function redirectResponse(c: Context) {
+  const redirect = await findPublicRedirect(c.req.path);
+  if (!redirect) return null;
+  void recordRedirectHit(redirect.id).catch(() => undefined);
+  return c.redirect(redirect.location, redirect.status);
+}
+
 async function sendFile(c: Context, relativePath: string) {
+  const redirect = await redirectResponse(c);
+  if (redirect) return redirect;
   const normalized = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, "");
   const segments = normalized.split(/[\\/]/).filter(Boolean);
   if (segments.some((segment) => segment.startsWith("."))) {
-    return c.notFound();
+    return publicNotFound(c);
   }
   const fullPath = path.join(config.publicHtmlDir, normalized);
   let publicRoot: string;
@@ -27,12 +42,12 @@ async function sendFile(c: Context, relativePath: string) {
       resolvedPath = await realpath(path.join(resolvedPath, "index.html"));
     }
   } catch {
-    return c.notFound();
+    return publicNotFound(c);
   }
   if (resolvedPath !== publicRoot && !resolvedPath.startsWith(`${publicRoot}${path.sep}`)) {
-    return c.notFound();
+    return publicNotFound(c);
   }
-  if (!(await stat(resolvedPath)).isFile()) return c.notFound();
+  if (!(await stat(resolvedPath)).isFile()) return publicNotFound(c);
   const extension = path.extname(resolvedPath).toLowerCase();
   const contentTypes: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -66,14 +81,14 @@ async function sendFile(c: Context, relativePath: string) {
     ".wasm": "application/wasm",
   };
   const contentType = contentTypes[extension];
-  if (!contentType) return c.notFound();
+  if (!contentType) return publicNotFound(c);
   const file = Bun.file(resolvedPath);
   return new Response(file, {
     headers: { "Content-Type": contentType, "X-Content-Type-Options": "nosniff" },
   });
 }
 
-publicRoutes.get("/", (c) => c.redirect("/index.html"));
+publicRoutes.get("/", async (c) => (await redirectResponse(c)) ?? c.redirect("/index.html"));
 publicRoutes.get("/index.html", (c) => sendFile(c, "index.html"));
 publicRoutes.get("/llms.txt", (c) => sendFile(c, "llms.txt"));
 publicRoutes.get("/robots.txt", (c) => sendFile(c, "robots.txt"));

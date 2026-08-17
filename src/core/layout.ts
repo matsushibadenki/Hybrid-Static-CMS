@@ -108,6 +108,14 @@ export function adminLayout(
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
             Blocks
           </a>` : ""}
+          ${can("maps.read") ? `<a data-i18n="Maps and snippets" href="${config.controlPanelPath}/maps">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
+            Maps and snippets
+          </a>` : ""}
+          ${can("redirects.read") ? `<a data-i18n="Redirects and 404s" href="${config.controlPanelPath}/redirects">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h11a5 5 0 010 10H9"/><path d="M8 3L4 7l4 4"/><path d="M19 4v4M19 12v.01"/></svg>
+            Redirects and 404s
+          </a>` : ""}
           </div>
           <div class="shell-nav-subgroup">
             <p class="shell-nav-sublabel" data-i18n="Extensions">Extensions</p>
@@ -139,6 +147,10 @@ export function adminLayout(
           ${can("snapshots.read") ? `<a data-i18n="Snapshots" href="${config.controlPanelPath}/snapshots">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
             Snapshots
+          </a>` : ""}
+          ${can("content.export") ? `<a data-i18n="Import and export" href="${config.controlPanelPath}/portability">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 13v7h14v-7"/></svg>
+            Import and export
           </a>` : ""}
         </div>
         ${languageSwitcher}
@@ -829,6 +841,35 @@ export function adminLayout(
         gap: 16px;
       }
       .section-heading-row .editor-section-title { margin-bottom: 4px; }
+      .workflow-panel {
+        margin-top: 22px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--sidebar-hover) 55%, white);
+      }
+      .workflow-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 4px 9px;
+        border: 1px solid var(--line-strong);
+        background: #fff;
+        color: var(--muted);
+        font-size: 0.75rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .workflow-in_review { border-color: #c79025; color: #795509; background: #fffaf0; }
+      .workflow-changes_requested { border-color: #ce745a; color: #9a3f28; background: #fff6f2; }
+      .workflow-approved { border-color: #64a698; color: #277266; background: #f2fbf9; }
+      .workflow-current-note { padding: 14px 16px; border-left: 3px solid var(--accent); background: #fff; }
+      .workflow-current-note p { margin: 6px 0 0; white-space: pre-wrap; }
+      .workflow-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; align-items: start; }
+      .workflow-action-form { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); background: #fff; }
+      .workflow-action-form textarea { min-height: 64px; }
+      .workflow-history { display: grid; gap: 0; margin: 14px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+      .workflow-history li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+      .workflow-history p { margin: 2px 0 0; white-space: pre-wrap; }
       .assignment-form {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 110px auto;

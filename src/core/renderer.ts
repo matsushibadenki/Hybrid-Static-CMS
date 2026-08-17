@@ -17,6 +17,8 @@ import { postArtifactRelativePath, postPermalinkPath, type PostPermalinkPattern 
 import { getPostPermalinkPattern } from "./settings";
 import { listApprovedCommentsForPosts, type PostCommentRecord } from "./comments";
 import { ensurePublicAssetDirectories, stylesheetPublicUrl } from "./assets";
+import { expandPublishedMaps, listMaps, renderMapsClientScript } from "./maps";
+import { writePublicRedirectManifest } from "./redirects";
 
 const publicCopy = publicTranslations[config.publicLocale];
 const publicDateLocale = config.publicLocale === "zh" ? "zh-CN" : config.publicLocale === "ja" ? "ja-JP" : "en-US";
@@ -731,7 +733,7 @@ function renderFragment(posts: PostRecord[], permalinkPattern: PostPermalinkPatt
 }
 
 export async function renderPage(page: PageRecord) {
-  const expandedBody = await expandPublishedBlocks(page.bodyHtml);
+  const expandedBody = await expandPublishedMaps(await expandPublishedBlocks(page.bodyHtml));
   const canonicalUrl = page.seoCanonicalUrl || `${config.appUrl}${pagePublicPath(page.slug)}`;
   const robots = [page.seoNoindex ? "noindex" : "index", page.seoNofollow ? "nofollow" : "follow"].join(", ");
   const stylesheetUrl = stylesheetPublicUrl(page.stylesheetPath, "pages");
@@ -855,7 +857,7 @@ function renderCommentSection(post: PostRecord, comments: PostCommentRecord[]) {
   return `<section class="post-comments" id="comments"><h2 class="post-comments__title">${escapeHtml(publicCopy.comments)}</h2>${commentsHtml}<form class="post-comment-form" method="post" action="${config.cmsApiPrefix}/comments/${post.id}/submit"><label>${escapeHtml(publicCopy.commentName)}<input name="authorName" maxlength="80" autocomplete="name" required /></label><label>${escapeHtml(publicCopy.commentEmail)}<input type="email" name="authorEmail" maxlength="254" autocomplete="email" required /></label><label>${escapeHtml(publicCopy.commentBody)}<textarea name="body" maxlength="4000" required></textarea></label>${recaptchaMarkup}<p class="post-comment-form__note">${escapeHtml(publicCopy.commentModerationNote)}</p><button type="submit">${escapeHtml(publicCopy.submitComment)}</button></form></section>`;
 }
 
-export function renderPost(post: PostRecord, series: SeriesNavigation | null = null, permalinkPattern: PostPermalinkPattern = "post_name", comments: PostCommentRecord[] = []) {
+export function renderPost(post: PostRecord, series: SeriesNavigation | null = null, permalinkPattern: PostPermalinkPattern = "post_name", comments: PostCommentRecord[] = [], expandedBodyHtml = post.bodyHtml) {
   const canonicalUrl = post.seoCanonicalUrl || `${config.appUrl}${postPermalinkPath(post, permalinkPattern)}`;
   const robots = [post.seoNoindex ? "noindex" : "index", post.seoNofollow ? "nofollow" : "follow"].join(", ");
   const stylesheetUrls = post.categoryStylesheets
@@ -891,7 +893,7 @@ export function renderPost(post: PostRecord, series: SeriesNavigation | null = n
         <h1 class="magazine-prose__title">${escapeHtml(post.title)}</h1>
         ${post.excerpt ? `<p class="magazine-prose__deck">${escapeHtml(post.excerpt)}</p>` : ""}
         </header>
-        <div class="magazine-prose__body">${post.bodyHtml}</div>
+        <div class="magazine-prose__body">${expandedBodyHtml}</div>
         ${renderSeriesPagination(post, series, permalinkPattern)}
         ${renderCommentSection(post, comments)}
       </article>
@@ -1201,7 +1203,8 @@ export async function renderPublishedArtifacts() {
   for (const post of full.items) {
     const relativePath = postArtifactRelativePath(post, permalinkPattern);
     currentPostArtifacts.push(relativePath);
-    await writeArtifact(path.join(config.cmsOutputDir, ...relativePath.split("/")), renderPost(post, seriesNavigation.get(post.id) ?? null, permalinkPattern, commentsByPost.get(post.id) ?? []));
+    const expandedBody = await expandPublishedMaps(await expandPublishedBlocks(post.bodyHtml));
+    await writeArtifact(path.join(config.cmsOutputDir, ...relativePath.split("/")), renderPost(post, seriesNavigation.get(post.id) ?? null, permalinkPattern, commentsByPost.get(post.id) ?? [], expandedBody));
   }
   await writeArtifact(path.join(cmsPageDir, "index.html"), renderPageIndex(pages.items));
   for (const page of pages.items) {
@@ -1211,6 +1214,8 @@ export async function renderPublishedArtifacts() {
   await writeArtifact(path.join(config.publicHtmlDir, "robots.txt"), renderRobotsTxt());
   await writeArtifact(path.join(config.publicHtmlDir, "llms.txt"), renderLlmsTxt(full.items, pages.items, permalinkPattern));
   await writeArtifact(path.join(config.cmsOutputDir, "embed.js"), renderEmbedScript(permalinkPattern));
+  await writeArtifact(path.join(config.cmsOutputDir, "maps.js"), renderMapsClientScript(await listMaps("published")));
+  await writePublicRedirectManifest();
   await renderFormArtifacts();
   await renderMenuArtifacts();
   const legacyPostArtifacts = permalinkPattern === "post_name"

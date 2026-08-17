@@ -48,10 +48,12 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` LaTeX mathematics through MathJax rendering
 - `[Done]` Mermaid chart blocks and static-page rendering
 - `[Done]` Reusable published blocks with separated identity, body, placement, and publication controls via `[[block:slug]]`
+- `[Done]` Managed OpenStreetMap and Google Maps snippets with pinpoint markers, routes, `[[map:slug]]`, public HTML/PHP loaders, and configurable provider services
 - `[Done]` CMS-managed navigation menus with a visual link builder
 - `[Done]` Post and page revisions with review and restore
 - `[Done]` PostgreSQL-backed post/page autosave with per-user crash recovery, conflict warnings, explicit restore/discard controls, and retention cleanup
 - `[Done]` Moderated article comments with series-level safety controls, per-post overrides, rate limiting, and reCAPTCHA v3
+- `[Done]` Versioned post/page JSON export and safe draft import with slug-conflict protection, parent-slug relationship mapping, permissions, and audit logs
 
 ### Publishing and discoverability
 
@@ -63,6 +65,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Canonical URLs, OG images, keywords, indexing controls, and JSON-LD
 - `[Done]` Google reCAPTCHA v3 support for public forms
 - `[Done]` Magazine-style default static page design
+- `[Done]` Redirect manager, automatic old-URL preservation, generated redirect manifest, and privacy-conscious aggregated 404 reporting
 
 ### Security and administration
 
@@ -126,9 +129,9 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 ### Editorial workflow
 
-- `[Next]` Editorial review states and approval workflow separate from publication status
-- `[Next]` Post/page import and export for migration and portability
-- `[Next]` Redirect manager and 404 report for slug changes and broken links
+- `[Done]` Editorial review states and approval workflow separate from publication status, with approval fingerprints, role-based review actions, history, audit logs, list filters, and operator notifications
+- `[Done]` Post/page import and export for migration and portability
+- `[Done]` Redirect manager and 404 report for slug changes and broken links
 - `[Next]` Japanese-aware full-text search and search administration tools
 
 ## Later roadmap
@@ -165,8 +168,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 1. `[Done]` Tests, CI, and permission regression coverage
 2. `[Done]` Atomic publishing, preview, health checks, and structured alerts
 3. `[Done]` Media and upload security hardening
-4. `[Next]` Editorial review states and approval workflow
-5. `[Next]` Forms operations, imports/exports, redirects, and Japanese search
+4. `[Done]` Editorial review states and approval workflow
+5. `[Next]` Japanese-aware full-text search and search administration
 6. `[Later]` Themes, integrations, scale-out operations, and localization
 
 ## Notes for contributors

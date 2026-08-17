@@ -6,6 +6,8 @@ import { createOperatorNotification } from "./notifications";
 import { renderPublishedArtifacts } from "./renderer";
 import { logInfo } from "./logger";
 import { deleteExpiredEditorAutosaves } from "./autosaves";
+import { enableAutomaticRedirectsForPublishedContent } from "./redirects";
+import { getPostPermalinkPattern } from "./settings";
 
 type ScheduledItem = { id: number; attempts: number };
 
@@ -87,6 +89,7 @@ export async function runScheduledJobs(renderer: () => Promise<unknown> = render
     try {
       await Promise.all([markPublishing("posts", posts), markPublishing("pages", pages)]);
       await renderer();
+      await enableAutomaticRedirectsForPublishedContent(posts.map((item) => item.id), pages.map((item) => item.id), await getPostPermalinkPattern());
       await Promise.all([markSucceeded("posts", posts), markSucceeded("pages", pages)]);
       await writeAuditLog({
         action: "scheduler.publish",

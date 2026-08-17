@@ -54,11 +54,30 @@ import { assignPageToGroup, createPageGroup, deletePageGroup, getPageGroupById, 
 import type { FormFieldRecord, SessionUser, UserRole } from "../../core/types";
 import { getPostPermalinkPattern, setPostPermalinkPattern } from "../../core/settings";
 import { isPostPermalinkPattern, postPermalinkExample, postPermalinkPath, postPermalinkPatterns } from "../../core/permalinks";
+import {
+  clearNotFoundReports,
+  createPermalinkPatternRedirects,
+  createRedirect,
+  deleteNotFoundReport,
+  deleteRedirect,
+  getNotFoundReportById,
+  listNotFoundReports,
+  listRedirects,
+  syncPageUrlRedirect,
+  syncPostUrlRedirect,
+  updateRedirect,
+} from "../../core/redirects";
 import { approveComment, deleteComment, listComments } from "../../core/comments";
 import { scheduleTimestampForInput, scheduleTimestampForStorage } from "../../core/scheduling";
 import { logError } from "../../core/logger";
 import { listStylesheets } from "../../core/assets";
 import { listCategories, updateCategoryStylesheet } from "../../core/categories";
+import {
+  contentArchiveMaxBytes,
+  createContentArchive,
+  importContentArchive,
+  parseContentArchive,
+} from "../../core/contentPortability";
 import {
   changeOwnPassword,
   confirmTotpEnrollment,
@@ -71,6 +90,18 @@ import {
   startTotpEnrollment,
 } from "../../core/accountSecurity";
 import { deleteEditorAutosave, getEditorAutosave, saveEditorAutosave, type AutosaveContentType } from "../../core/autosaves";
+import {
+  approveContentReview,
+  listEditorialWorkflowEvents,
+  requestContentChanges,
+  submitContentForReview,
+  withdrawContentReview,
+  type EditorialContentType,
+  type EditorialWorkflowAction,
+  type EditorialWorkflowEvent,
+} from "../../core/editorialWorkflow";
+import type { EditorialWorkflowState, PageRecord, PostRecord } from "../../core/types";
+import { createMap, deleteMap, getMapById, listMaps, updateMap, type MapEmbedInput } from "../../core/maps";
 
 function splitCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
@@ -88,6 +119,69 @@ function noticeCard(message: string, tone: "success" | "error" = "success") {
       ${escapeHtml(message)}
     </div>
   `;
+}
+
+const workflowStateLabels: Record<EditorialWorkflowState, string> = {
+  draft: "Review draft",
+  in_review: "In review",
+  changes_requested: "Changes requested",
+  approved: "Approved",
+};
+
+const workflowActionLabels: Record<EditorialWorkflowAction, string> = {
+  submit: "Submitted for review",
+  approve: "Approved review",
+  request_changes: "Requested changes",
+  withdraw: "Withdrew review",
+};
+
+function workflowBadge(state: EditorialWorkflowState) {
+  const label = workflowStateLabels[state];
+  return `<span class="workflow-badge workflow-${state}" data-i18n="${label}">${label}</span>`;
+}
+
+function editorialWorkflowPanel(
+  contentType: EditorialContentType,
+  content: PostRecord | PageRecord,
+  user: SessionUser | null,
+  events: EditorialWorkflowEvent[],
+) {
+  const base = `${config.controlPanelPath}/${contentType === "post" ? "posts" : "pages"}/${content.id}/workflow`;
+  const reviewPermission = contentType === "post" ? "posts.review" : "pages.review";
+  const canReview = hasPermission(user, reviewPermission);
+  const canWithdraw = Boolean(user && (canReview || user.id === content.authorId || user.id === content.reviewRequestedBy));
+  const submitForm = content.workflowState === "draft" || content.workflowState === "changes_requested"
+    ? `<form method="post" action="${base}/submit" class="workflow-action-form">
+        <label><span data-i18n="Reviewer note">Reviewer note</span><textarea name="note" rows="2" placeholder="Optional context for the reviewer"></textarea></label>
+        <button class="button" type="submit" data-i18n="Submit for review">Submit for review</button>
+      </form>`
+    : "";
+  const reviewForms = content.workflowState === "in_review" && canReview
+    ? `<form method="post" action="${base}/approve" class="workflow-action-form">
+        <label><span data-i18n="Review note">Review note</span><textarea name="note" rows="2" placeholder="Optional approval note"></textarea></label>
+        <button class="button button-primary" type="submit" data-i18n="Approve review">Approve review</button>
+      </form>
+      <form method="post" action="${base}/request_changes" class="workflow-action-form">
+        <label><span data-i18n="Requested changes">Requested changes</span><textarea name="note" rows="2" required placeholder="Explain the requested changes"></textarea></label>
+        <button class="button" type="submit" data-i18n="Request changes">Request changes</button>
+      </form>`
+    : "";
+  const withdrawForm = content.workflowState === "in_review" && canWithdraw
+    ? `<form method="post" action="${base}/withdraw"><button class="button" type="submit" data-i18n="Withdraw review">Withdraw review</button></form>`
+    : "";
+  const history = events.map((event) => `<li>
+      <span data-i18n="${workflowActionLabels[event.action]}">${workflowActionLabels[event.action]}</span>
+      <span class="meta">${escapeHtml(event.actorName ?? "System")} · ${adminDate(event.createdAt)}</span>
+      ${event.note ? `<p>${escapeHtml(event.note)}</p>` : ""}
+    </li>`).join("") || `<li class="meta" data-i18n="No workflow activity.">No workflow activity.</li>`;
+
+  return `<section class="editor-section workflow-panel">
+    <div class="section-heading-row"><div><p class="editor-section-kicker" data-i18n="Editorial workflow">Editorial workflow</p><h2 class="editor-section-title" data-i18n="Review and approval">Review and approval</h2></div>${workflowBadge(content.workflowState)}</div>
+    <p class="meta" data-i18n="Review status is separate from publication status. Direct publishing remains available until review is requested.">Review status is separate from publication status. Direct publishing remains available until review is requested.</p>
+    ${content.workflowNote ? `<div class="workflow-current-note"><strong data-i18n="Latest review note">Latest review note</strong><p>${escapeHtml(content.workflowNote)}</p></div>` : ""}
+    <div class="workflow-actions">${submitForm}${reviewForms}${withdrawForm}</div>
+    <details class="editor-collapsible"><summary><span data-i18n="Workflow history">Workflow history</span></summary><ol class="workflow-history">${history}</ol></details>
+  </section>`;
 }
 
 
@@ -324,6 +418,7 @@ function richEditorTools(uploadUrl?: string) {
               <button class="button" type="button" data-insert-video data-i18n="Video">Video</button>
               <button class="button" type="button" data-insert-iframe data-i18n="Embed iframe">Embed</button>
               <button class="button" type="button" data-insert-footnote data-i18n="Footnote">Footnote</button>
+              <button class="button" type="button" data-insert-map data-i18n="Map shortcode">Map</button>
               ${uploadUrl ? `<label class="button rich-editor-upload-button" data-i18n="Upload file">Upload file <input type="file" data-editor-upload accept="image/*,video/*,audio/*,application/pdf,text/plain" /></label>` : ""}
             </div>
             ${uploadUrl ? `<span class="meta" data-upload-status data-i18n="Images, video, audio, PDF, and text files">Images, video, audio, PDF, and text files</span>` : ""}
@@ -477,6 +572,18 @@ function richEditorTools(uploadUrl?: string) {
           target.value = target.value.slice(0, start) + refSnippet + target.value.slice(end) + noteSnippet;
           target.focus();
           target.selectionStart = target.selectionEnd = start + refSnippet.length;
+        });
+        /* --- Managed map shortcode --- */
+        toolbar.querySelector("button[data-insert-map]")?.addEventListener("click", () => {
+          const slug = window.prompt(adminText("Map slug"), "map-slug");
+          if (!slug) return;
+          const safeSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "");
+          if (!safeSlug) return;
+          const start = target.selectionStart ?? target.value.length;
+          const snippet = "[[map:" + safeSlug + "]]";
+          target.value = target.value.slice(0, start) + snippet + target.value.slice(start);
+          target.focus();
+          target.selectionStart = target.selectionEnd = start + snippet.length;
         });
         /* --- Accordion / Details --- */
         toolbar.querySelector("button[data-insert-details]")?.addEventListener("click", () => {
@@ -1139,6 +1246,102 @@ function blockForm(action: string, values?: Record<string, string>) {
   `;
 }
 
+function mapValuesFromForm(form: FormData) {
+  return {
+    title: String(form.get("title") ?? ""),
+    slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
+    provider: String(form.get("provider") ?? "openstreetmap"),
+    displayMode: String(form.get("displayMode") ?? "marker"),
+    startLat: String(form.get("startLat") ?? ""),
+    startLng: String(form.get("startLng") ?? ""),
+    startLabel: String(form.get("startLabel") ?? ""),
+    endLat: String(form.get("endLat") ?? ""),
+    endLng: String(form.get("endLng") ?? ""),
+    endLabel: String(form.get("endLabel") ?? ""),
+    travelMode: String(form.get("travelMode") ?? "driving"),
+    zoom: String(form.get("zoom") ?? "14"),
+    height: String(form.get("height") ?? "480"),
+    status: String(form.get("status") ?? "draft"),
+  };
+}
+
+function mapInput(values: ReturnType<typeof mapValuesFromForm>): MapEmbedInput {
+  const requiredNumber = (value: string) => value.trim() ? Number(value) : Number.NaN;
+  return {
+    title: values.title,
+    slug: values.slug,
+    provider: values.provider as MapEmbedInput["provider"],
+    displayMode: values.displayMode as MapEmbedInput["displayMode"],
+    startLat: requiredNumber(values.startLat),
+    startLng: requiredNumber(values.startLng),
+    startLabel: values.startLabel,
+    endLat: values.endLat.trim() ? Number(values.endLat) : null,
+    endLng: values.endLng.trim() ? Number(values.endLng) : null,
+    endLabel: values.endLabel,
+    travelMode: values.travelMode as MapEmbedInput["travelMode"],
+    zoom: requiredNumber(values.zoom),
+    height: requiredNumber(values.height),
+    status: values.status as MapEmbedInput["status"],
+  };
+}
+
+function mapForm(action: string, values: Partial<ReturnType<typeof mapValuesFromForm>> = {}) {
+  const slug = values.slug || "map-slug";
+  const shortcode = `[[map:${slug}]]`;
+  const publicSnippet = `<div data-hsc-map="${slug}"></div>\n<script src="/cms/maps.js" defer></script>`;
+  return `<form method="post" action="${action}" class="editor-form form-grid" data-map-form>
+    <section class="editor-section">
+      <p class="editor-section-kicker">Map snippet</p>
+      <h2 class="editor-section-title">Basic information</h2>
+      <div class="form-grid">
+        <label>Title <input name="title" value="${escapeHtml(values.title ?? "")}" required /></label>
+        <label>Slug <input name="slug" value="${escapeHtml(values.slug ?? "")}" placeholder="tokyo-station" required /></label>
+        <div class="grid">
+          <label>Map provider<select name="provider"><option value="openstreetmap" ${values.provider !== "google" ? "selected" : ""}>OpenStreetMap</option><option value="google" ${values.provider === "google" ? "selected" : ""}>Google Maps</option></select></label>
+          <label>Display mode<select name="displayMode"><option value="marker" ${values.displayMode !== "route" ? "selected" : ""}>Pinpoint marker</option><option value="route" ${values.displayMode === "route" ? "selected" : ""}>Route</option></select></label>
+          <label>Status<select name="status"><option value="draft" ${values.status !== "published" ? "selected" : ""}>Draft</option><option value="published" ${values.status === "published" ? "selected" : ""}>Published</option></select></label>
+        </div>
+      </div>
+    </section>
+    <section class="editor-section">
+      <p class="editor-section-kicker">Locations</p>
+      <h2 class="editor-section-title">Start and destination</h2>
+      <div class="grid">
+        <label>Start latitude <input type="number" step="any" min="-90" max="90" name="startLat" value="${escapeHtml(values.startLat ?? "35.681236")}" required /></label>
+        <label>Start longitude <input type="number" step="any" min="-180" max="180" name="startLng" value="${escapeHtml(values.startLng ?? "139.767125")}" required /></label>
+        <label>Start label <input name="startLabel" value="${escapeHtml(values.startLabel ?? "")}" placeholder="Tokyo Station" /></label>
+      </div>
+      <div class="grid" data-route-fields>
+        <label>Destination latitude <input type="number" step="any" min="-90" max="90" name="endLat" value="${escapeHtml(values.endLat ?? "35.658034")}" /></label>
+        <label>Destination longitude <input type="number" step="any" min="-180" max="180" name="endLng" value="${escapeHtml(values.endLng ?? "139.701636")}" /></label>
+        <label>Destination label <input name="endLabel" value="${escapeHtml(values.endLabel ?? "")}" placeholder="Shibuya Station" /></label>
+      </div>
+    </section>
+    <section class="editor-section">
+      <p class="editor-section-kicker">Presentation</p>
+      <h2 class="editor-section-title">Map display</h2>
+      <div class="grid">
+        <label>Travel mode<select name="travelMode"><option value="driving" ${values.travelMode !== "walking" && values.travelMode !== "bicycling" && values.travelMode !== "transit" ? "selected" : ""}>Driving</option><option value="walking" ${values.travelMode === "walking" ? "selected" : ""}>Walking</option><option value="bicycling" ${values.travelMode === "bicycling" ? "selected" : ""}>Bicycling</option><option value="transit" ${values.travelMode === "transit" ? "selected" : ""}>Transit</option></select></label>
+        <label>Zoom <input type="number" name="zoom" min="0" max="21" value="${escapeHtml(values.zoom ?? "14")}" required /></label>
+        <label>Height (px) <input type="number" name="height" min="200" max="1000" value="${escapeHtml(values.height ?? "480")}" required /></label>
+      </div>
+      <p class="meta">OpenStreetMap routes use the configured OSRM-compatible service. Transit routes require Google Maps.</p>
+    </section>
+    <section class="editor-section">
+      <p class="editor-section-kicker">Placement</p>
+      <h2 class="editor-section-title">Shortcode and public snippet</h2>
+      <div class="grid">
+        <div class="usage-callout"><p>CMS post or page body</p><code>${escapeHtml(shortcode)}</code></div>
+        <div class="usage-callout"><p>Existing HTML or PHP under public_html</p><pre><code>${escapeHtml(publicSnippet)}</code></pre></div>
+      </div>
+      <p class="meta">Publish this map and regenerate public output after changing its settings.</p>
+    </section>
+    ${values.status === "published" ? `<section class="editor-section"><p class="editor-section-kicker">Preview</p><h2 class="editor-section-title">Published map preview</h2><div data-hsc-map="${escapeHtml(slug)}"></div><script src="/cms/maps.js" defer></script></section>` : ""}
+    <div class="row"><button class="button button-primary" type="submit">Save map</button><a class="button" href="${config.controlPanelPath}/maps">Back to maps</a></div>
+  </form>
+  <script>(()=>{const form=document.querySelector('[data-map-form]');if(!form)return;const mode=form.querySelector('[name=displayMode]');const fields=form.querySelector('[data-route-fields]');const sync=()=>{const route=mode.value==='route';fields.hidden=!route;fields.querySelectorAll('input[type=number]').forEach((input)=>input.required=route);};mode.addEventListener('change',sync);sync();})();</script>`;
+}
+
 function snapshotHelperCard(returnTo: string, suggestions: string[]) {
   const suggestionButtons = suggestions
     .map(
@@ -1276,6 +1479,287 @@ function fieldsToSpec(fields: FormFieldRecord[]) {
 export const adminRoutes = new Hono();
 
 adminRoutes.use("/*", requireAdminPermission());
+
+function portabilityPage(c: Context) {
+  const importedPosts = Number(c.req.query("importedPosts") ?? 0);
+  const importedPages = Number(c.req.query("importedPages") ?? 0);
+  const skippedPosts = Number(c.req.query("skippedPosts") ?? 0);
+  const skippedPages = Number(c.req.query("skippedPages") ?? 0);
+  const warnings = Number(c.req.query("warnings") ?? 0);
+  const result = c.req.query("success") ? `
+    <section class="editor-section">
+      <p class="editor-section-kicker">Import result</p>
+      <h2 class="editor-section-title">Content import completed</h2>
+      <div class="grid">
+        <div class="stat"><p class="meta">Imported posts</p><h2>${importedPosts}</h2></div>
+        <div class="stat"><p class="meta">Imported pages</p><h2>${importedPages}</h2></div>
+        <div class="stat"><p class="meta">Skipped existing items</p><h2>${skippedPosts + skippedPages}</h2></div>
+        <div class="stat"><p class="meta">Warnings</p><h2>${warnings}</h2></div>
+      </div>
+      <p class="meta">Imported content is saved as draft. Review it before publishing.</p>
+    </section>` : "";
+  return `
+    ${queryNotice(c)}
+    ${result}
+    <section class="editor-section">
+      <p class="editor-section-kicker">Portability</p>
+      <h2 class="editor-section-title">Export posts and pages</h2>
+      <p class="meta">Download a versioned JSON archive containing post and page bodies, SEO settings, terms, and parent collection slugs. User accounts, comments, media files, credentials, and audit logs are excluded.</p>
+      <div><a class="button primary" href="${config.controlPanelPath}/portability/export">Download content archive</a></div>
+    </section>
+    <section class="editor-section">
+      <p class="editor-section-kicker">Safe import</p>
+      <h2 class="editor-section-title">Import posts and pages</h2>
+      <p class="meta">Every imported item is created as a draft. Existing slugs are skipped and never overwritten. Series and page groups are connected only when matching parent slugs already exist.</p>
+      <form method="post" action="${config.controlPanelPath}/portability/import" enctype="multipart/form-data" class="form-grid">
+        <label>Content archive (JSON)
+          <input type="file" name="archive" accept="application/json,.json" required />
+        </label>
+        <p class="meta">Maximum file size: 5 MB. Maximum content items: 1000.</p>
+        <label class="row"><input type="checkbox" name="confirm" value="yes" required /> I understand that imported content will be added as drafts.</label>
+        <div><button class="button primary" type="submit">Validate and import</button></div>
+      </form>
+    </section>
+  `;
+}
+
+adminRoutes.get("/portability", async (c) => c.html(adminLayout("Import and export", c.get("sessionUser"), portabilityPage(c))));
+
+adminRoutes.get("/portability/export", async (c) => {
+  const user = c.get("sessionUser");
+  const archive = await createContentArchive();
+  await writeAuditLog({
+    actorUserId: user?.id ?? null,
+    action: "content.export",
+    targetType: "content_archive",
+    summary: `Exported ${archive.posts.length} posts and ${archive.pages.length} pages.`,
+    ipAddress: requestIp(c),
+  });
+  c.header("Content-Type", "application/json; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="hybrid-static-cms-content-${new Date().toISOString().slice(0, 10)}.json"`);
+  c.header("Cache-Control", "no-store");
+  return c.body(`${JSON.stringify(archive, null, 2)}\n`);
+});
+
+adminRoutes.post("/portability/import", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  try {
+    const contentLength = Number(c.req.header("content-length") ?? 0);
+    if (Number.isFinite(contentLength) && contentLength > contentArchiveMaxBytes + 1_048_576) {
+      throw new AppValidationError("The import file exceeds the 5 MB limit.");
+    }
+    const form = await c.req.formData();
+    const file = form.get("archive");
+    if (form.get("confirm") !== "yes") throw new AppValidationError("Confirm the content import before continuing.");
+    if (!(file instanceof File) || !file.name.toLowerCase().endsWith(".json")) throw new AppValidationError("Select a JSON content archive.");
+    if (file.size > contentArchiveMaxBytes) throw new AppValidationError("The import file exceeds the 5 MB limit.");
+    const result = await importContentArchive(parseContentArchive(await file.text()), user.id);
+    await writeAuditLog({
+      actorUserId: user.id,
+      action: "content.import",
+      targetType: "content_archive",
+      summary: `Imported ${result.importedPosts} posts and ${result.importedPages} pages as drafts; skipped ${result.skippedPosts + result.skippedPages} existing slugs with ${result.warnings.length} warnings.`,
+      ipAddress: requestIp(c),
+    });
+    const params = new URLSearchParams({
+      success: "Content import completed.",
+      importedPosts: String(result.importedPosts), importedPages: String(result.importedPages),
+      skippedPosts: String(result.skippedPosts), skippedPages: String(result.skippedPages), warnings: String(result.warnings.length),
+    });
+    return c.redirect(`${config.controlPanelPath}/portability?${params}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) {
+      return c.html(adminLayout("Import and export", user, noticeCard(error.message, "error") + portabilityPage(c)), 400);
+    }
+    throw error;
+  }
+});
+
+function redirectInputFromForm(form: FormData) {
+  return {
+    sourcePath: String(form.get("sourcePath") ?? ""),
+    targetLocation: String(form.get("targetLocation") ?? ""),
+    statusCode: Number(form.get("statusCode") ?? 301),
+    enabled: form.get("enabled") === "true",
+    note: String(form.get("note") ?? ""),
+  };
+}
+
+function redirectStatusOptions(selected: number) {
+  return [
+    [301, "301 Permanent"], [302, "302 Temporary"], [307, "307 Temporary (preserve method)"], [308, "308 Permanent (preserve method)"],
+  ].map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("");
+}
+
+adminRoutes.get("/redirects", async (c) => {
+  const user = c.get("sessionUser");
+  const q = c.req.query("q") ?? "";
+  const [redirects, reports] = await Promise.all([listRedirects(q), listNotFoundReports(q)]);
+  const canWrite = hasPermission(user, "redirects.write");
+  const canDelete = hasPermission(user, "redirects.delete");
+  const body = `
+    ${queryNotice(c)}
+    ${canWrite ? `<section class="editor-section">
+      <p class="editor-section-kicker">Redirect manager</p>
+      <h2 class="editor-section-title">Add redirect</h2>
+      <p class="meta">Use an internal source path. Targets may be internal paths or HTTPS URLs. Permanent redirects are recommended for established URL changes.</p>
+      <form method="post" action="${config.controlPanelPath}/redirects" class="form-grid">
+        <div class="grid">
+          <label>Source path<input name="sourcePath" placeholder="/old-page.html" required /></label>
+          <label>Target location<input name="targetLocation" placeholder="/new-page.html" required /></label>
+          <label>Status code<select name="statusCode">${redirectStatusOptions(301)}</select></label>
+        </div>
+        <label>Note<input name="note" maxlength="1000" placeholder="Why this redirect exists" /></label>
+        <label class="row"><input type="checkbox" name="enabled" value="true" checked /> Enabled</label>
+        <div><button class="button primary" type="submit">Add redirect</button></div>
+      </form>
+    </section>` : ""}
+    <section class="editor-section">
+      <div class="section-heading-row"><div><p class="editor-section-kicker">Routing rules</p><h2 class="editor-section-title">Redirects</h2></div>
+        <form method="get" action="${config.controlPanelPath}/redirects" class="row"><input name="q" value="${escapeHtml(q)}" placeholder="Search paths" /><button class="button" type="submit">Search</button></form>
+      </div>
+      <div class="table-scroll"><table class="data-table">
+        <thead><tr><th>Source</th><th>Target</th><th>Status</th><th>Enabled</th><th>Origin</th><th>Hits</th><th>Last hit</th><th>Note</th><th>Actions</th></tr></thead>
+        <tbody>${redirects.map((item) => {
+          const formId = `redirect-${item.id}`;
+          return `<tr>
+            <td><input form="${formId}" name="sourcePath" value="${escapeHtml(item.sourcePath)}" ${canWrite ? "" : "readonly"} /></td>
+            <td><input form="${formId}" name="targetLocation" value="${escapeHtml(item.targetLocation)}" ${canWrite ? "" : "readonly"} /></td>
+            <td><select form="${formId}" name="statusCode" ${canWrite ? "" : "disabled"}>${redirectStatusOptions(item.statusCode)}</select></td>
+            <td><input form="${formId}" type="checkbox" name="enabled" value="true" ${item.enabled ? "checked" : ""} ${canWrite ? "" : "disabled"} /></td>
+            <td>${item.automatic ? "Automatic" : "Manual"}</td><td>${item.hitCount}</td><td>${item.lastHitAt ? adminDate(item.lastHitAt) : "Never"}</td>
+            <td class="cell-long"><input form="${formId}" name="note" maxlength="1000" value="${escapeHtml(item.note ?? "")}" ${canWrite ? "" : "readonly"} /></td>
+            <td class="cell-actions">${canWrite ? `<form id="${formId}" method="post" action="${config.controlPanelPath}/redirects/${item.id}"><button class="button" type="submit">Save</button></form>` : ""}${canDelete ? `<form method="post" action="${config.controlPanelPath}/redirects/${item.id}/delete"><button class="button danger" type="submit">Delete</button></form>` : ""}</td>
+          </tr>`;
+        }).join("") || `<tr><td colspan="9">No redirects found.</td></tr>`}</tbody>
+      </table></div>
+    </section>
+    <section class="editor-section">
+      <div class="section-heading-row"><div><p class="editor-section-kicker">Broken links</p><h2 class="editor-section-title">404 report</h2></div>
+        ${canDelete && reports.length ? `<form method="post" action="${config.controlPanelPath}/redirects/reports/clear"><label class="row"><input type="checkbox" name="confirm" value="yes" required /> Confirm clear</label><button class="button danger" type="submit">Clear all reports</button></form>` : ""}
+      </div>
+      <p class="meta">Reports contain the requested path, aggregate count, timestamps, and only the referrer origin. Visitor IP addresses and complete referrer URLs are not stored.</p>
+      <div class="table-scroll"><table class="data-table">
+        <thead><tr><th>Missing path</th><th>Hits</th><th>First seen</th><th>Last seen</th><th>Referrer origin</th><th>Resolution</th></tr></thead>
+        <tbody>${reports.map((report) => `<tr>
+          <td><code>${escapeHtml(report.requestPath)}</code></td><td>${report.hitCount}</td><td>${adminDate(report.firstSeenAt)}</td><td>${adminDate(report.lastSeenAt)}</td><td>${escapeHtml(report.lastReferrerOrigin ?? "Direct or unknown")}</td>
+          <td class="cell-actions">${canWrite ? `<form method="post" action="${config.controlPanelPath}/redirects/reports/${report.id}/resolve" class="row"><input type="hidden" name="sourcePath" value="${escapeHtml(report.requestPath)}" /><input name="targetLocation" placeholder="/replacement.html" required /><select name="statusCode">${redirectStatusOptions(301)}</select><input type="hidden" name="enabled" value="true" /><button class="button" type="submit">Create redirect</button></form>` : ""}${canDelete ? `<form method="post" action="${config.controlPanelPath}/redirects/reports/${report.id}/dismiss"><button class="button" type="submit">Dismiss</button></form>` : ""}</td>
+        </tr>`).join("") || `<tr><td colspan="6">No 404 reports found.</td></tr>`}</tbody>
+      </table></div>
+    </section>`;
+  return c.html(adminLayout("Redirects and 404s", user, body, "wide-list"));
+});
+
+adminRoutes.post("/redirects", async (c) => {
+  const user = c.get("sessionUser");
+  try {
+    const item = await createRedirect(redirectInputFromForm(await c.req.formData()), user?.id ?? null);
+    await writeAuditLog({ actorUserId: user?.id ?? null, action: "redirect.create", targetType: "site_redirect", targetId: item?.id ?? null, summary: `Created redirect from "${item?.sourcePath ?? ""}".`, ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/redirects?success=${encodeURIComponent("Redirect created.")}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.redirect(`${config.controlPanelPath}/redirects?error=${encodeURIComponent(error.message)}`);
+    throw error;
+  }
+});
+
+adminRoutes.post("/redirects/:id", async (c) => {
+  const user = c.get("sessionUser");
+  try {
+    const item = await updateRedirect(Number(c.req.param("id")), redirectInputFromForm(await c.req.formData()));
+    await writeAuditLog({ actorUserId: user?.id ?? null, action: "redirect.update", targetType: "site_redirect", targetId: c.req.param("id"), summary: `Updated redirect from "${item?.sourcePath ?? ""}".`, ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/redirects?success=${encodeURIComponent("Redirect updated.")}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.redirect(`${config.controlPanelPath}/redirects?error=${encodeURIComponent(error.message)}`);
+    throw error;
+  }
+});
+
+adminRoutes.post("/redirects/:id/delete", async (c) => {
+  const user = c.get("sessionUser");
+  await deleteRedirect(Number(c.req.param("id")));
+  await writeAuditLog({ actorUserId: user?.id ?? null, action: "redirect.delete", targetType: "site_redirect", targetId: c.req.param("id"), summary: `Deleted redirect #${c.req.param("id")}.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/redirects?success=${encodeURIComponent("Redirect deleted.")}`);
+});
+
+adminRoutes.post("/redirects/reports/:id/resolve", async (c) => {
+  const user = c.get("sessionUser");
+  const report = await getNotFoundReportById(Number(c.req.param("id")));
+  if (!report) return c.text("Not found", 404);
+  try {
+    const item = await createRedirect(redirectInputFromForm(await c.req.formData()), user?.id ?? null);
+    await deleteNotFoundReport(report.id);
+    await writeAuditLog({ actorUserId: user?.id ?? null, action: "redirect.create_from_404", targetType: "site_redirect", targetId: item?.id ?? null, summary: `Resolved 404 path "${report.requestPath}" with a redirect.`, ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/redirects?success=${encodeURIComponent("Redirect created and 404 report resolved.")}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.redirect(`${config.controlPanelPath}/redirects?error=${encodeURIComponent(error.message)}`);
+    throw error;
+  }
+});
+
+adminRoutes.post("/redirects/reports/:id/dismiss", async (c) => {
+  const report = await getNotFoundReportById(Number(c.req.param("id")));
+  await deleteNotFoundReport(Number(c.req.param("id")));
+  await writeAuditLog({ actorUserId: c.get("sessionUser")?.id ?? null, action: "redirect.404_dismiss", targetType: "not_found_report", targetId: c.req.param("id"), summary: `Dismissed 404 report for "${report?.requestPath ?? "unknown"}".`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/redirects?success=${encodeURIComponent("404 report dismissed.")}`);
+});
+
+adminRoutes.post("/redirects/reports/clear", async (c) => {
+  const form = await c.req.formData();
+  if (form.get("confirm") !== "yes") return c.redirect(`${config.controlPanelPath}/redirects?error=${encodeURIComponent("Confirm before clearing 404 reports.")}`);
+  const count = await clearNotFoundReports();
+  await writeAuditLog({ actorUserId: c.get("sessionUser")?.id ?? null, action: "redirect.404_clear", targetType: "not_found_report", summary: `Cleared ${count} aggregated 404 reports.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/redirects?success=${encodeURIComponent("404 reports cleared.")}`);
+});
+
+async function handleEditorialWorkflow(c: Context, contentType: EditorialContentType) {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const contentId = Number(c.req.param("id"));
+  const action = c.req.param("action") as EditorialWorkflowAction;
+  if (!["submit", "approve", "request_changes", "withdraw"].includes(action)) return c.text("Not found", 404);
+  const content = contentType === "post" ? await getPostById(contentId) : await getPageById(contentId);
+  if (!content) return c.text("Not found", 404);
+  const editPath = `${config.controlPanelPath}/${contentType === "post" ? "posts" : "pages"}/${contentId}/edit`;
+  const reviewPermission = contentType === "post" ? "posts.review" : "pages.review";
+  const form = await c.req.formData();
+  const note = String(form.get("note") ?? "");
+
+  try {
+    if ((action === "approve" || action === "request_changes") && !hasPermission(user, reviewPermission)) {
+      return c.text("Forbidden", 403);
+    }
+    if (action === "withdraw" && !hasPermission(user, reviewPermission) && user.id !== content.authorId && user.id !== content.reviewRequestedBy) {
+      return c.text("Forbidden", 403);
+    }
+    if (action === "submit") await submitContentForReview(contentType, contentId, user.id, note);
+    if (action === "approve") await approveContentReview(contentType, contentId, user.id, note);
+    if (action === "request_changes") await requestContentChanges(contentType, contentId, user.id, note);
+    if (action === "withdraw") await withdrawContentReview(contentType, contentId, user.id);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.redirect(`${editPath}?error=${encodeURIComponent(error.message)}`);
+    throw error;
+  }
+
+  const successMessages: Record<EditorialWorkflowAction, string> = {
+    submit: "Review requested.",
+    approve: "Review approved.",
+    request_changes: "Changes requested.",
+    withdraw: "Review withdrawn.",
+  };
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: `editorial.${contentType}.${action}`,
+    targetType: contentType,
+    targetId: contentId,
+    summary: `${workflowActionLabels[action]} for ${contentType} #${contentId}.`,
+    ipAddress: requestIp(c),
+  });
+  return c.redirect(`${editPath}?success=${encodeURIComponent(successMessages[action])}`);
+}
+
+adminRoutes.post("/posts/:id/workflow/:action", (c) => handleEditorialWorkflow(c, "post"));
+adminRoutes.post("/pages/:id/workflow/:action", (c) => handleEditorialWorkflow(c, "page"));
 
 async function autosaveResponse(c: Context, contentType: AutosaveContentType) {
   const user = c.get("sessionUser");
@@ -1755,12 +2239,18 @@ adminRoutes.post("/settings/permalinks", async (c) => {
     const message = error instanceof Error ? error.message : "Unable to update permalink structure.";
     return c.html(adminLayout("Permalink Settings", user, permalinkSettingsForm(previous, noticeCard(message, "error"))), 500);
   }
+  let redirectCount = 0;
+  try {
+    redirectCount = await createPermalinkPatternRedirects(previous, requested, user.id);
+  } catch (error) {
+    logError("redirect.permalink_sync_failed", "Permalink settings changed but automatic redirects could not be created.", { error, previous, requested });
+  }
   await writeAuditLog({
     actorUserId: user.id,
     action: "settings.permalink_update",
     targetType: "setting",
     targetId: null,
-    summary: `Changed post permalink structure from "${previous}" to "${requested}" and regenerated public artifacts.`,
+    summary: `Changed post permalink structure from "${previous}" to "${requested}", regenerated public artifacts, and created ${redirectCount} redirects.`,
     ipAddress: requestIp(c),
   });
   return c.redirect(`${config.controlPanelPath}/settings/permalinks?success=${encodeURIComponent("Permalink structure saved and public pages regenerated.")}`);
@@ -1770,8 +2260,9 @@ adminRoutes.get("/posts", async (c) => {
   const user = c.get("sessionUser");
   const q = c.req.query("q") ?? "";
   const status = c.req.query("status") ?? "any";
+  const workflow = c.req.query("workflow") ?? "any";
   const category = c.req.query("category") ?? "";
-  const posts = await listPosts({ page: 1, limit: 50, status, category: category || undefined, search: q || undefined });
+  const posts = await listPosts({ page: 1, limit: 50, status, workflow, category: category || undefined, search: q || undefined });
   const series = await listSeries();
   const permalinkPattern = await getPostPermalinkPattern();
   const seriesById = new Map(series.map((item) => [item.id, item.title]));
@@ -1790,12 +2281,19 @@ adminRoutes.get("/posts", async (c) => {
           <option value="published" ${status === "published" ? "selected" : ""}>Published</option>
           <option value="scheduled" ${status === "scheduled" ? "selected" : ""}>Scheduled</option>
         </select>
+        <select name="workflow" aria-label="Review state">
+          <option value="any" ${workflow === "any" ? "selected" : ""}>Any review state</option>
+          <option value="draft" ${workflow === "draft" ? "selected" : ""}>Review draft</option>
+          <option value="in_review" ${workflow === "in_review" ? "selected" : ""}>In review</option>
+          <option value="changes_requested" ${workflow === "changes_requested" ? "selected" : ""}>Changes requested</option>
+          <option value="approved" ${workflow === "approved" ? "selected" : ""}>Approved</option>
+        </select>
         <input name="category" value="${escapeHtml(category)}" placeholder="Category slug" />
         <button class="button" type="submit">Filter</button>
       </div>
     </form>
     <table class="data-table">
-      <thead><tr><th>Title</th><th>Status</th><th>Series</th><th>Comments</th><th>Categories</th><th>Generated page</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Title</th><th>Status</th><th>Review state</th><th>Series</th><th>Comments</th><th>Categories</th><th>Generated page</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${posts.items
           .map(
@@ -1803,6 +2301,7 @@ adminRoutes.get("/posts", async (c) => {
               <tr>
                 <td class="cell-long"><a href="${config.controlPanelPath}/posts/${post.id}/edit">${escapeHtml(post.title)}</a></td>
                 <td>${escapeHtml(post.status)}</td>
+                <td>${workflowBadge(post.workflowState)}</td>
                 <td>${escapeHtml(seriesById.get(postSeriesIds.get(post.id) ?? 0) ?? "No series")}</td>
                 <td><form method="post" action="${config.controlPanelPath}/posts/${post.id}/comments-policy" class="row"><select name="commentsPolicy" aria-label="Comment setting"><option value="inherit" ${post.commentsPolicy === "inherit" ? "selected" : ""}>Inherit series setting</option><option value="enabled" ${post.commentsPolicy === "enabled" ? "selected" : ""}>Allow comments</option><option value="disabled" ${post.commentsPolicy === "disabled" ? "selected" : ""}>Disallow comments</option></select><button class="button" type="submit">Save</button></form><span class="meta">${post.commentsEnabled ? "Comments enabled" : "Comments disabled"}</span></td>
                 <td class="cell-long">${escapeHtml(post.categories.join(", "))}</td>
@@ -2010,12 +2509,13 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
   if (!post) {
     return c.text("Not found", 404);
   }
+  const workflowEvents = await listEditorialWorkflowEvents("post", post.id);
 
   return c.html(
     adminLayout(
       "Edit Post",
       user,
-      queryNotice(c) + `<p class="meta"><a href="/preview/post/${encodeURIComponent(post.slug)}?token=${encodeURIComponent(await createPreviewToken("post", post.slug))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + postForm(`${config.controlPanelPath}/posts/${post.id}`, {
+      queryNotice(c) + `<p class="meta"><a href="/preview/post/${encodeURIComponent(post.slug)}?token=${encodeURIComponent(await createPreviewToken("post", post.slug))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + editorialWorkflowPanel("post", post, user, workflowEvents) + postForm(`${config.controlPanelPath}/posts/${post.id}`, {
         title: post.title,
         slug: post.slug,
         excerpt: post.excerpt ?? "",
@@ -2054,9 +2554,12 @@ adminRoutes.post("/posts/:id", async (c) => {
   const series = await listSeries();
   const values = postValuesFromForm(form);
   const publishAndGenerate = applyPublishAndGenerateAction(form, values);
+  let postUrlChange: { previous: NonNullable<Awaited<ReturnType<typeof getPostById>>>; current: NonNullable<Awaited<ReturnType<typeof getPostById>>> } | null = null;
   try {
     if (values.status !== "draft" && !hasPermission(user, "posts.publish")) throw new AppValidationError("You do not have permission to publish posts.");
-    await updatePost(Number(c.req.param("id")), {
+    const existing = await getPostById(Number(c.req.param("id")));
+    if (!existing) return c.text("Not found", 404);
+    const input = {
       title: values.title,
       slug: values.slug,
       excerpt: values.excerpt,
@@ -2074,14 +2577,20 @@ adminRoutes.post("/posts/:id", async (c) => {
       seoNoindex: values.seoNoindex === "true",
       seoNofollow: values.seoNofollow === "true",
       seriesId: Number(form.get("seriesId")) > 0 ? Number(form.get("seriesId")) : null,
-    }, user?.id);
+    } as const;
+    const updated = await updatePost(Number(c.req.param("id")), input, user?.id);
+    if (updated) postUrlChange = { previous: existing, current: updated };
   } catch (error) {
     if (error instanceof AppValidationError) {
+      const current = await getPostById(Number(c.req.param("id")));
+      const workflowPanel = current
+        ? editorialWorkflowPanel("post", current, user, await listEditorialWorkflowEvents("post", current.id))
+        : "";
       return c.html(
         adminLayout(
           "Edit Post",
           user,
-          noticeCard(error.message, "error") +
+          noticeCard(error.message, "error") + workflowPanel +
             postForm(`${config.controlPanelPath}/posts/${c.req.param("id")}`, values, series) +
             snapshotHelperCard(`${config.controlPanelPath}/posts/${c.req.param("id")}/edit`, [
               "index.html",
@@ -2095,6 +2604,14 @@ adminRoutes.post("/posts/:id", async (c) => {
       );
     }
     throw error;
+  }
+
+  if (postUrlChange) {
+    try {
+      await syncPostUrlRedirect(postUrlChange.previous, postUrlChange.current, await getPostPermalinkPattern(), user?.id ?? null);
+    } catch (error) {
+      logError("redirect.post_sync_failed", "Post updated but its automatic URL redirect could not be synchronized.", { error, postId: c.req.param("id") });
+    }
   }
 
   await writeAuditLog({
@@ -2217,7 +2734,8 @@ adminRoutes.get("/pages", async (c) => {
   const user = c.get("sessionUser");
   const q = c.req.query("q") ?? "";
   const status = c.req.query("status") ?? "any";
-  const pages = await listPages({ page: 1, limit: 50, status, search: q || undefined });
+  const workflow = c.req.query("workflow") ?? "any";
+  const pages = await listPages({ page: 1, limit: 50, status, workflow, search: q || undefined });
   const groups = await listPageGroups();
   const groupById = new Map(groups.map((item) => [item.id, item.title]));
   const pageGroupIds = await listPageGroupAssignments(pages.items.map((page) => page.id));
@@ -2235,11 +2753,18 @@ adminRoutes.get("/pages", async (c) => {
           <option value="published" ${status === "published" ? "selected" : ""}>Published</option>
           <option value="scheduled" ${status === "scheduled" ? "selected" : ""}>Scheduled</option>
         </select>
+        <select name="workflow" aria-label="Review state">
+          <option value="any" ${workflow === "any" ? "selected" : ""}>Any review state</option>
+          <option value="draft" ${workflow === "draft" ? "selected" : ""}>Review draft</option>
+          <option value="in_review" ${workflow === "in_review" ? "selected" : ""}>In review</option>
+          <option value="changes_requested" ${workflow === "changes_requested" ? "selected" : ""}>Changes requested</option>
+          <option value="approved" ${workflow === "approved" ? "selected" : ""}>Approved</option>
+        </select>
         <button class="button" type="submit">Filter</button>
       </div>
     </form>
     <table class="data-table">
-      <thead><tr><th>Title</th><th>Status</th><th>Page group</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Title</th><th>Status</th><th>Review state</th><th>Page group</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${pages.items
           .map(
@@ -2247,6 +2772,7 @@ adminRoutes.get("/pages", async (c) => {
               <tr>
                 <td class="cell-long"><a href="${config.controlPanelPath}/pages/${page.id}/edit">${escapeHtml(page.title)}</a></td>
                 <td>${escapeHtml(page.status)}</td>
+                <td>${workflowBadge(page.workflowState)}</td>
                 <td>${escapeHtml(groupById.get(pageGroupIds.get(page.id) ?? 0) ?? "No page group")}</td>
                 <td>${adminDate(page.updatedAt)}</td>
                 <td class="cell-actions">
@@ -2577,12 +3103,13 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
   if (!page) {
     return c.text("Not found", 404);
   }
+  const workflowEvents = await listEditorialWorkflowEvents("page", page.id);
 
   return c.html(
     adminLayout(
       "Edit Page",
       user,
-      queryNotice(c) + `<p class="meta"><a href="/preview/page/${encodeURIComponent(page.slug)}?token=${encodeURIComponent(await createPreviewToken("page", page.slug))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + pageForm(`${config.controlPanelPath}/pages/${page.id}`, {
+      queryNotice(c) + `<p class="meta"><a href="/preview/page/${encodeURIComponent(page.slug)}?token=${encodeURIComponent(await createPreviewToken("page", page.slug))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + editorialWorkflowPanel("page", page, user, workflowEvents) + pageForm(`${config.controlPanelPath}/pages/${page.id}`, {
         title: page.title,
         slug: page.slug,
         excerpt: page.excerpt ?? "",
@@ -2621,9 +3148,12 @@ adminRoutes.post("/pages/:id", async (c) => {
   const stylesheets = await listStylesheets("pages");
   const values = pageValuesFromForm(form);
   const publishAndGenerate = applyPublishAndGenerateAction(form, values);
+  let pageUrlChange: { previous: NonNullable<Awaited<ReturnType<typeof getPageById>>>; current: NonNullable<Awaited<ReturnType<typeof getPageById>>> } | null = null;
   try {
     if (values.status !== "draft" && !hasPermission(user, "pages.publish")) throw new AppValidationError("You do not have permission to publish pages.");
-    await updatePage(Number(c.req.param("id")), {
+    const existing = await getPageById(Number(c.req.param("id")));
+    if (!existing) return c.text("Not found", 404);
+    const input = {
       title: values.title,
       slug: values.slug,
       excerpt: values.excerpt,
@@ -2640,14 +3170,20 @@ adminRoutes.post("/pages/:id", async (c) => {
       seoNofollow: values.seoNofollow === "true",
       pageGroupId: Number(form.get("pageGroupId")) > 0 ? Number(form.get("pageGroupId")) : null,
       stylesheetPath: values.stylesheetPath,
-    }, user?.id);
+    } as const;
+    const updated = await updatePage(Number(c.req.param("id")), input, user?.id);
+    if (updated) pageUrlChange = { previous: existing, current: updated };
   } catch (error) {
     if (error instanceof AppValidationError) {
+      const current = await getPageById(Number(c.req.param("id")));
+      const workflowPanel = current
+        ? editorialWorkflowPanel("page", current, user, await listEditorialWorkflowEvents("page", current.id))
+        : "";
       return c.html(
         adminLayout(
           "Edit Page",
           user,
-          noticeCard(error.message, "error") +
+          noticeCard(error.message, "error") + workflowPanel +
             pageForm(`${config.controlPanelPath}/pages/${c.req.param("id")}`, values, groups, stylesheets) +
             snapshotHelperCard(`${config.controlPanelPath}/pages/${c.req.param("id")}/edit`, [
               "index.html",
@@ -2661,6 +3197,14 @@ adminRoutes.post("/pages/:id", async (c) => {
       );
     }
     throw error;
+  }
+
+  if (pageUrlChange) {
+    try {
+      await syncPageUrlRedirect(pageUrlChange.previous, pageUrlChange.current, user?.id ?? null);
+    } catch (error) {
+      logError("redirect.page_sync_failed", "Fixed page updated but its automatic URL redirect could not be synchronized.", { error, pageId: c.req.param("id") });
+    }
   }
 
   await writeAuditLog({
@@ -3115,6 +3659,72 @@ adminRoutes.post("/blocks/:id/delete", async (c) => {
   await writeAuditLog({ actorUserId: user?.id ?? null, action: "block.delete", targetType: "content_block", targetId: c.req.param("id"), summary: `Deleted block #${c.req.param("id")}.`, ipAddress: requestIp(c) });
   await renderPublishedArtifacts();
   return c.redirect(`${config.controlPanelPath}/blocks?success=${encodeURIComponent("Block deleted.")}`);
+});
+
+adminRoutes.get("/maps", async (c) => {
+  const user = c.get("sessionUser");
+  const maps = await listMaps("any");
+  const body = `<div class="content-list-page">
+    ${queryNotice(c)}
+    <div class="section-heading-row" style="margin-bottom:20px"><div><h2>Maps and snippets</h2><p class="meta">Manage reusable pinpoint and route maps for CMS content and existing public_html files.</p></div>${hasPermission(user, "maps.write") ? `<a class="button button-primary" href="${config.controlPanelPath}/maps/new">New map</a>` : ""}</div>
+    <table class="data-table"><thead><tr><th>Title</th><th>Provider</th><th>Mode</th><th>Status</th><th>Shortcode</th><th>Updated</th><th>Actions</th></tr></thead><tbody>
+      ${maps.map((map) => `<tr><td class="cell-long">${escapeHtml(map.title)}</td><td>${map.provider === "google" ? "Google Maps" : "OpenStreetMap"}</td><td>${map.displayMode === "route" ? "Route" : "Pinpoint marker"}</td><td>${escapeHtml(map.status)}</td><td><code>[[map:${escapeHtml(map.slug)}]]</code></td><td>${adminDate(map.updatedAt)}</td><td class="cell-actions"><div class="row">${hasPermission(user, "maps.write") ? `<a class="button" href="${config.controlPanelPath}/maps/${map.id}/edit">Edit</a>` : ""}${hasPermission(user, "maps.delete") ? `<form method="post" action="${config.controlPanelPath}/maps/${map.id}/delete"><button class="button" type="submit">Delete</button></form>` : ""}</div></td></tr>`).join("") || `<tr><td colspan="7">No maps yet.</td></tr>`}
+    </tbody></table>
+    <section class="editor-section"><p class="editor-section-kicker">Public HTML / PHP</p><h2 class="editor-section-title">Reusable loader</h2><p>Place a map container and the generated loader in any file served from <code>public_html</code>.</p><pre><code>${escapeHtml('<div data-hsc-map="map-slug"></div>\n<script src="/cms/maps.js" defer></script>')}</code></pre></section>
+  </div>`;
+  return c.html(adminLayout("Maps and Snippets", user, body, "wide-list"));
+});
+
+adminRoutes.get("/maps/new", (c) => c.html(adminLayout("New Map", c.get("sessionUser"), queryNotice(c) + mapForm(`${config.controlPanelPath}/maps`))));
+
+adminRoutes.post("/maps", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const values = mapValuesFromForm(await c.req.formData());
+  try {
+    const map = await createMap(mapInput(values), user.id);
+    await writeAuditLog({ actorUserId: user.id, action: "map.create", targetType: "map_embed", targetId: map?.id ?? null, summary: `Created map "${values.title}".`, ipAddress: requestIp(c) });
+    await renderPublishedArtifacts();
+    return c.redirect(`${config.controlPanelPath}/maps/${map?.id}/edit?success=${encodeURIComponent("Map saved and public snippets regenerated.")}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.html(adminLayout("New Map", user, noticeCard(error.message, "error") + mapForm(`${config.controlPanelPath}/maps`, values)), 400);
+    throw error;
+  }
+});
+
+adminRoutes.get("/maps/:id/edit", async (c) => {
+  const map = await getMapById(Number(c.req.param("id")));
+  if (!map) return c.text("Not found", 404);
+  return c.html(adminLayout("Edit Map", c.get("sessionUser"), queryNotice(c) + mapForm(`${config.controlPanelPath}/maps/${map.id}`, {
+    title: map.title, slug: map.slug, provider: map.provider, displayMode: map.displayMode,
+    startLat: String(map.startLat), startLng: String(map.startLng), startLabel: map.startLabel,
+    endLat: map.endLat == null ? "" : String(map.endLat), endLng: map.endLng == null ? "" : String(map.endLng), endLabel: map.endLabel,
+    travelMode: map.travelMode, zoom: String(map.zoom), height: String(map.height), status: map.status,
+  })));
+});
+
+adminRoutes.post("/maps/:id", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const values = mapValuesFromForm(await c.req.formData());
+  try {
+    const map = await updateMap(Number(c.req.param("id")), mapInput(values));
+    if (!map) return c.text("Not found", 404);
+    await writeAuditLog({ actorUserId: user.id, action: "map.update", targetType: "map_embed", targetId: map.id, summary: `Updated map "${values.title}".`, ipAddress: requestIp(c) });
+    await renderPublishedArtifacts();
+    return c.redirect(`${config.controlPanelPath}/maps/${map.id}/edit?success=${encodeURIComponent("Map updated and public snippets regenerated.")}`);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.html(adminLayout("Edit Map", user, noticeCard(error.message, "error") + mapForm(`${config.controlPanelPath}/maps/${c.req.param("id")}`, values)), 400);
+    throw error;
+  }
+});
+
+adminRoutes.post("/maps/:id/delete", async (c) => {
+  const user = c.get("sessionUser");
+  await deleteMap(Number(c.req.param("id")));
+  await writeAuditLog({ actorUserId: user?.id ?? null, action: "map.delete", targetType: "map_embed", targetId: c.req.param("id"), summary: `Deleted map #${c.req.param("id")}.`, ipAddress: requestIp(c) });
+  await renderPublishedArtifacts();
+  return c.redirect(`${config.controlPanelPath}/maps?success=${encodeURIComponent("Map deleted and public snippets regenerated.")}`);
 });
 
 adminRoutes.get("/proposals", async (c) => {

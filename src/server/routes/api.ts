@@ -12,7 +12,7 @@ import {
   updateForm,
 } from "../../core/forms";
 import { deleteMedia, listMedia, uploadMedia } from "../../core/media";
-import { createPage, deletePage, getPageBySlug, listPages, updatePage } from "../../core/pages";
+import { createPage, deletePage, getPageById, getPageBySlug, listPages, updatePage } from "../../core/pages";
 import { createPost, deletePost, getPostById, getPostBySlug, listPosts, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
 import { getMenuBySlug, listMenus } from "../../core/menus";
@@ -29,6 +29,9 @@ import { createPendingComment } from "../../core/comments";
 import { getPostPermalinkPattern } from "../../core/settings";
 import { postPermalinkPath } from "../../core/permalinks";
 import { scheduleTimestampForStorage } from "../../core/scheduling";
+import { getPublishedMapBySlug, listMaps } from "../../core/maps";
+import { syncPageUrlRedirect, syncPostUrlRedirect } from "../../core/redirects";
+import { logError } from "../../core/logger";
 
 export const apiRoutes = new Hono();
 
@@ -36,6 +39,11 @@ function optionalRelationId(payload: Record<string, unknown>, key: string) {
   if (!(key in payload)) return undefined;
   const id = Number(payload[key]);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function publicMapRecord(map: Awaited<ReturnType<typeof listMaps>>[number]) {
+  const { createdBy: _createdBy, ...publicRecord } = map;
+  return publicRecord;
 }
 
 apiRoutes.use("/*", requireApiPermission());
@@ -129,6 +137,12 @@ apiRoutes.get("/blocks/:slug", async (c) => {
   return block ? c.json(block) : c.json({ error: "Not found" }, 404);
 });
 
+apiRoutes.get("/maps", async (c) => c.json({ items: (await listMaps("published")).map(publicMapRecord) }));
+apiRoutes.get("/maps/:slug", async (c) => {
+  const map = await getPublishedMapBySlug(c.req.param("slug"));
+  return map ? c.json(publicMapRecord(map)) : c.json({ error: "Not found" }, 404);
+});
+
 apiRoutes.post("/ai/proposals", async (c) => {
   const user = c.get("sessionUser");
   if (!user) return c.json({ error: "Unauthorized" }, 401);
@@ -195,7 +209,9 @@ apiRoutes.put("/posts/:id", async (c) => {
   const payload = await c.req.json();
   const status = payload.status ?? "draft";
   if (status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
-  const post = await updatePost(Number(c.req.param("id")), {
+  const existing = await getPostById(Number(c.req.param("id")));
+  if (!existing) return c.json({ error: "Not found" }, 404);
+  const input = {
     title: payload.title,
     slug: payload.slug || slugify(payload.title),
     excerpt: payload.excerpt,
@@ -213,7 +229,21 @@ apiRoutes.put("/posts/:id", async (c) => {
     categorySlugs: payload.categorySlugs ?? [],
     tagSlugs: payload.tagSlugs ?? [],
     seriesId: optionalRelationId(payload, "seriesId"),
-  }, user.id);
+  } as const;
+  let post;
+  try {
+    post = await updatePost(Number(c.req.param("id")), input, user.id);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.json({ error: error.message }, 409);
+    throw error;
+  }
+  if (post) {
+    try {
+      await syncPostUrlRedirect(existing, post, await getPostPermalinkPattern(), user.id);
+    } catch (error) {
+      logError("redirect.post_sync_failed", "API post update succeeded but its automatic URL redirect could not be synchronized.", { error, postId: c.req.param("id") });
+    }
+  }
 
   await writeAuditLog({
     actorUserId: user.id,
@@ -298,7 +328,10 @@ apiRoutes.put("/pages/:id", async (c) => {
   const payload = await c.req.json();
   const status = payload.status ?? "draft";
   if (status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
-  const page = await updatePage(Number(c.req.param("id")), {
+  const pageId = Number(c.req.param("id"));
+  const currentPage = await getPageById(pageId);
+  if (!currentPage) return c.json({ error: "Not found" }, 404);
+  const input = {
     title: payload.title,
     slug: payload.slug || slugify(payload.title),
     excerpt: payload.excerpt,
@@ -315,7 +348,21 @@ apiRoutes.put("/pages/:id", async (c) => {
     pageGroupId: optionalRelationId(payload, "pageGroupId"),
     stylesheetPath: payload.stylesheetPath,
     publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
-  }, user.id);
+  } as const;
+  let page;
+  try {
+    page = await updatePage(pageId, input, user.id);
+  } catch (error) {
+    if (error instanceof AppValidationError) return c.json({ error: error.message }, 409);
+    throw error;
+  }
+  if (page) {
+    try {
+      await syncPageUrlRedirect(currentPage, page, user.id);
+    } catch (error) {
+      logError("redirect.page_sync_failed", "API page update succeeded but its automatic URL redirect could not be synchronized.", { error, pageId });
+    }
+  }
 
   await writeAuditLog({
     actorUserId: user.id,

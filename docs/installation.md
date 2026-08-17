@@ -133,6 +133,8 @@ Published navigation menus are available under `/control-panel/menus`. Their sta
 
 Reusable blocks are managed under `/control-panel/blocks`. Add `[[block:slug]]` to a CMS-managed page's Body HTML to expand a published block during static rendering. Draft or missing blocks are not exposed as published content.
 
+Reusable OpenStreetMap and Google Maps definitions are managed under `/control-panel/maps`. Add `[[map:slug]]` to a CMS-managed post or fixed page, or load `/cms/maps.js` from an existing HTML/PHP file under `public_html`. Pinpoint markers and start-to-destination routes are supported. See [Maps and reusable snippets](./maps-and-snippets.md) before configuring production tile, routing, or Google services.
+
 ## Article editor
 
 The post editor provides a safe HTML writing toolbar for bold, italic, strikethrough, blockquotes, unordered and numbered lists, H1-H4 headings, left/center/right/justified alignment, links, code blocks, and horizontal rules. The editor also supports direct upload and insertion of images, video, audio, PDF, and text files. Uploaded files are stored in the media library under `/cms/uploads/`.

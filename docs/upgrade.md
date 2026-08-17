@@ -43,6 +43,26 @@ its `css`, `img`, `js`, and `video` structure without overwriting existing
 files. Back up `public_html/assets` separately because PostgreSQL stores only
 the selected relative CSS paths.
 
+Migration `027_editorial_workflow.sql` adds review state and immutable workflow
+history to posts and pages. Existing published and scheduled content is marked
+approved so public output does not change. Because legacy rows have no approval
+fingerprint, their first content edit returns them to the review-draft state.
+See [Editorial review workflow](./editorial-workflow.md) for roles and state
+transitions.
+
+Migration `028_map_embeds.sql` adds reusable OpenStreetMap and Google Maps
+definitions. Add the `GOOGLE_MAPS_EMBED_API_KEY`, `OPENSTREETMAP_TILE_URL`, and
+`OPENSTREETMAP_ROUTING_URL` variables from `.env.example`, run migrations, and
+regenerate public output to create `/cms/maps.js`. Existing `public_html` files
+are not modified.
+
+Migration `029_redirects_and_404_reports.sql` adds managed redirect rules and
+privacy-conscious aggregated 404 reports. Run migrations before opening the
+**Redirects and 404s** control-panel page, then regenerate public output to create
+`/cms/redirects.json`. Deployments that serve `public_html` directly from a web
+server should integrate this manifest with their rewrite configuration; requests
+must pass through Bun for built-in redirect responses and 404 collection.
+
 ## PostgreSQL 17 to 18
 
 New deployments use PostgreSQL 18. Do not attach a PostgreSQL 17 data volume directly to the PostgreSQL 18 container. Create a logical backup with `bun run db:backup`, start PostgreSQL 18 with a new volume, restore the backup, and then run `bun run migrate`.

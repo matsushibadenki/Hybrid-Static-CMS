@@ -10,6 +10,7 @@ import {
 import type { PageInput, PageRecord } from "./types";
 import { createContentRevision } from "./revisions";
 import { requireExistingStylesheet } from "./assets";
+import { assertEditorialFingerprintPublishAllowed, pageEditorialFingerprint } from "./editorialFingerprint";
 
 function normalizePage(row: Record<string, unknown>): PageRecord {
   return {
@@ -32,6 +33,13 @@ function normalizePage(row: Record<string, unknown>): PageRecord {
     authorId: row.author_id ? Number(row.author_id) : null,
     authorName: (row.author_name as string | null) ?? null,
     stylesheetPath: (row.stylesheet_path as string | null) ?? null,
+    workflowState: row.workflow_state as PageRecord["workflowState"],
+    workflowContentHash: (row.workflow_content_hash as string | null) ?? null,
+    workflowNote: (row.workflow_note as string | null) ?? null,
+    reviewRequestedAt: row.review_requested_at ? String(row.review_requested_at) : null,
+    reviewRequestedBy: row.review_requested_by ? Number(row.review_requested_by) : null,
+    reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
+    reviewedBy: row.reviewed_by ? Number(row.reviewed_by) : null,
   };
 }
 
@@ -83,17 +91,25 @@ const basePageQuery = `
     p.updated_at,
     p.author_id,
     p.stylesheet_path,
+    p.workflow_state,
+    p.workflow_content_hash,
+    p.workflow_note,
+    p.review_requested_at,
+    p.review_requested_by,
+    p.reviewed_at,
+    p.reviewed_by,
     u.display_name as author_name
   from pages p
   left join users u on u.id = p.author_id
 `;
 
-export async function listPages(options: { page?: number; limit?: number; status?: string; search?: string }) {
+export async function listPages(options: { page?: number; limit?: number; status?: string; search?: string; workflow?: string }) {
   const page = Math.max(1, options.page ?? 1);
   const limit = Math.max(1, Math.min(50, options.limit ?? 10));
   const offset = (page - 1) * limit;
   const status = options.status ?? "published";
   const search = options.search?.trim();
+  const workflow = options.workflow;
 
   const filters: string[] = [];
   const params: (string | number)[] = [];
@@ -101,6 +117,11 @@ export async function listPages(options: { page?: number; limit?: number; status
   if (status !== "any") {
     params.push(status);
     filters.push(`p.status = $${params.length}`);
+  }
+
+  if (workflow && workflow !== "any" && ["draft", "in_review", "changes_requested", "approved"].includes(workflow)) {
+    params.push(workflow);
+    filters.push(`p.workflow_state = $${params.length}`);
   }
 
   if (search) {
@@ -208,6 +229,10 @@ export async function updatePage(id: number, input: PageInput, actorUserId?: num
   const previous = await getPageById(id);
   const bodyHtml = deriveBodyHtml(input);
   const stylesheetPath = await requireExistingStylesheet(input.stylesheetPath, "pages");
+  const editorialFingerprint = pageEditorialFingerprint({ ...input, bodyHtml, stylesheetPath });
+  if (previous && input.status !== "draft") {
+    assertEditorialFingerprintPublishAllowed(previous.workflowState, previous.workflowContentHash, editorialFingerprint);
+  }
   try {
     await withTransaction(async (trx) => {
       await trx`
@@ -228,6 +253,18 @@ export async function updatePage(id: number, input: PageInput, actorUserId?: num
           seo_noindex = ${input.seoNoindex ?? false},
           seo_nofollow = ${input.seoNofollow ?? false},
           stylesheet_path = ${stylesheetPath},
+          workflow_state = case
+            when workflow_state in ('in_review', 'approved') and workflow_content_hash = ${editorialFingerprint} then workflow_state
+            else 'draft'
+          end,
+          workflow_content_hash = case
+            when workflow_state in ('in_review', 'approved') and workflow_content_hash = ${editorialFingerprint} then workflow_content_hash
+            else null
+          end,
+          workflow_note = case
+            when workflow_state in ('in_review', 'approved') and workflow_content_hash = ${editorialFingerprint} then workflow_note
+            else null
+          end,
           scheduled_publish_attempts = 0,
           scheduled_publish_next_retry_at = null,
           scheduled_publish_last_error = null,
@@ -251,5 +288,8 @@ export async function updatePage(id: number, input: PageInput, actorUserId?: num
 }
 
 export async function deletePage(id: number) {
-  await sql`delete from pages where id = ${id}`;
+  await withTransaction(async (trx) => {
+    await trx`delete from editorial_workflow_events where content_type = 'page' and content_id = ${id}`;
+    await trx`delete from pages where id = ${id}`;
+  });
 }

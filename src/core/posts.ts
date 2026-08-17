@@ -9,6 +9,7 @@ import {
 } from "./validation";
 import type { PostInput, PostRecord } from "./types";
 import { createContentRevision } from "./revisions";
+import { assertEditorialFingerprintPublishAllowed, postEditorialFingerprint } from "./editorialFingerprint";
 
 function normalizePost(row: Record<string, unknown>): PostRecord {
   return {
@@ -35,6 +36,13 @@ function normalizePost(row: Record<string, unknown>): PostRecord {
     tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
     commentsPolicy: row.comments_policy as PostRecord["commentsPolicy"],
     commentsEnabled: Boolean(row.comments_enabled),
+    workflowState: row.workflow_state as PostRecord["workflowState"],
+    workflowContentHash: (row.workflow_content_hash as string | null) ?? null,
+    workflowNote: (row.workflow_note as string | null) ?? null,
+    reviewRequestedAt: row.review_requested_at ? String(row.review_requested_at) : null,
+    reviewRequestedBy: row.review_requested_by ? Number(row.review_requested_by) : null,
+    reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
+    reviewedBy: row.reviewed_by ? Number(row.reviewed_by) : null,
   };
 }
 
@@ -123,6 +131,13 @@ const basePostQuery = `
     p.updated_at,
     p.author_id,
     p.comments_policy,
+    p.workflow_state,
+    p.workflow_content_hash,
+    p.workflow_note,
+    p.review_requested_at,
+    p.review_requested_by,
+    p.reviewed_at,
+    p.reviewed_by,
     case
       when exists (select 1 from post_series eps where eps.post_id = p.id) then
         coalesce((select es.comments_enabled from post_series eps join series es on es.id = eps.series_id where eps.post_id = p.id limit 1), false)
@@ -147,12 +162,14 @@ export async function listPosts(options: {
   status?: string;
   category?: string;
   search?: string;
+  workflow?: string;
 }) {
   const page = Math.max(1, options.page ?? 1);
   const limit = Math.max(1, Math.min(50, options.limit ?? 10));
   const offset = (page - 1) * limit;
   const status = options.status ?? "published";
   const search = options.search?.trim();
+  const workflow = options.workflow;
 
   const filters: string[] = [];
   const params: (string | number)[] = [];
@@ -160,6 +177,11 @@ export async function listPosts(options: {
   if (status !== "any") {
     params.push(status);
     filters.push(`p.status = $${params.length}`);
+  }
+
+  if (workflow && workflow !== "any" && ["draft", "in_review", "changes_requested", "approved"].includes(workflow)) {
+    params.push(workflow);
+    filters.push(`p.workflow_state = $${params.length}`);
   }
 
   if (options.category) {
@@ -302,6 +324,10 @@ export async function updatePost(id: number, input: PostInput, actorUserId?: num
   const bodyHtml = deriveBodyHtml(input);
   const categorySlugs = (input.categorySlugs ?? []).filter(Boolean);
   const tagSlugs = (input.tagSlugs ?? []).filter(Boolean);
+  const editorialFingerprint = postEditorialFingerprint({ ...input, bodyHtml });
+  if (previous && input.status !== "draft") {
+    assertEditorialFingerprintPublishAllowed(previous.workflowState, previous.workflowContentHash, editorialFingerprint);
+  }
 
   try {
     await withTransaction(async (trx) => {
@@ -322,6 +348,18 @@ export async function updatePost(id: number, input: PostInput, actorUserId?: num
           seo_keywords = ${input.seoKeywords ?? null},
           seo_noindex = ${input.seoNoindex ?? false},
           seo_nofollow = ${input.seoNofollow ?? false},
+          workflow_state = case
+            when workflow_state in ('in_review', 'approved') and workflow_content_hash = ${editorialFingerprint} then workflow_state
+            else 'draft'
+          end,
+          workflow_content_hash = case
+            when workflow_state in ('in_review', 'approved') and workflow_content_hash = ${editorialFingerprint} then workflow_content_hash
+            else null
+          end,
+          workflow_note = case
+            when workflow_state in ('in_review', 'approved') and workflow_content_hash = ${editorialFingerprint} then workflow_note
+            else null
+          end,
           scheduled_publish_attempts = 0,
           scheduled_publish_next_retry_at = null,
           scheduled_publish_last_error = null,
@@ -347,7 +385,10 @@ export async function updatePost(id: number, input: PostInput, actorUserId?: num
 }
 
 export async function deletePost(id: number) {
-  await sql`delete from posts where id = ${id}`;
+  await withTransaction(async (trx) => {
+    await trx`delete from editorial_workflow_events where content_type = 'post' and content_id = ${id}`;
+    await trx`delete from posts where id = ${id}`;
+  });
 }
 
 export async function setPostCommentsPolicy(id: number, policy: PostRecord["commentsPolicy"]) {

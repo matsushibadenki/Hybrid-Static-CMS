@@ -64,6 +64,9 @@ storage/uploads/*
 
 # Generated CMS artifacts: keep folders, ignore publish output
 public_html/cms/embed.js
+public_html/cms/maps.js
+public_html/cms/redirects.json
+public_html/cms/.post-artifacts.json
 public_html/cms/posts/latest.html
 public_html/cms/posts/list.html
 public_html/cms/posts/rss.xml

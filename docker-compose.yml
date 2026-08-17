@@ -66,6 +66,9 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       FORM_NOTIFICATION_EMAIL: ${FORM_NOTIFICATION_EMAIL:-}
+      GOOGLE_MAPS_EMBED_API_KEY: ${GOOGLE_MAPS_EMBED_API_KEY:-}
+      OPENSTREETMAP_TILE_URL: ${OPENSTREETMAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
+      OPENSTREETMAP_ROUTING_URL: ${OPENSTREETMAP_ROUTING_URL:-https://router.project-osrm.org}
     ports:
       - "3000:3000"
     volumes:

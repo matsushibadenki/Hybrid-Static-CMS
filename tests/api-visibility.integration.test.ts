@@ -15,6 +15,7 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("public API vis
     let postId: number | null = null;
     let pageId: number | null = null;
     let formId: number | null = null;
+    let mapId: number | null = null;
     try {
       const postRows = await sql`
         insert into posts (title, slug, body_html, status)
@@ -34,20 +35,29 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("public API vis
         returning id
       `;
       formId = Number(formRows[0].id);
+      const mapRows = await sql`
+        insert into map_embeds (title, slug, start_lat, start_lng, status)
+        values (${`Hidden Map ${suffix}`}, ${`hidden-map-${suffix}`}, 35.0, 139.0, 'draft')
+        returning id
+      `;
+      mapId = Number(mapRows[0].id);
 
-      const [posts, pages, forms] = await Promise.all([
+      const [posts, pages, forms, maps] = await Promise.all([
         requestJson("http://localhost/cms-api/posts?status=any&limit=50"),
         requestJson("http://localhost/cms-api/pages?status=any&limit=50"),
         requestJson("http://localhost/cms-api/forms?status=any"),
+        requestJson("http://localhost/cms-api/maps"),
       ]);
 
       expect(posts.items.some((item) => item.id === postId)).toBe(false);
       expect(pages.items.some((item) => item.id === pageId)).toBe(false);
       expect(forms.items.some((item) => item.id === formId)).toBe(false);
+      expect(maps.items.some((item) => item.id === mapId)).toBe(false);
     } finally {
       if (postId) await sql`delete from posts where id = ${postId}`;
       if (pageId) await sql`delete from pages where id = ${pageId}`;
       if (formId) await sql`delete from forms where id = ${formId}`;
+      if (mapId) await sql`delete from map_embeds where id = ${mapId}`;
     }
   });
 });

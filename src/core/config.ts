@@ -30,6 +30,9 @@ export type AppConfig = {
   pluginDir: string;
   defaultPageSize: number;
   googleFontsCssUrls: string[];
+  googleMapsEmbedApiKey: string | null;
+  openStreetMapTileUrl: string;
+  openStreetMapRoutingUrl: string;
   maxUploadBytes: number;
   allowSvgUploads: boolean;
   mediaSiteQuotaBytes: number;
@@ -87,6 +90,18 @@ export function parsePublicLocale(value: string | undefined): AppConfig["publicL
 
 export function parseLogLevel(value: string | undefined, fallback: LogLevel = "info"): LogLevel {
   return value === "debug" || value === "info" || value === "warn" || value === "error" ? value : fallback;
+}
+
+function parseHttpsServiceUrl(value: string | undefined, fallback: string, requiredTokens: string[] = []) {
+  const candidate = value?.trim() || fallback;
+  try {
+    const parsed = new URL(candidate.replaceAll("{z}", "0").replaceAll("{x}", "0").replaceAll("{y}", "0"));
+    if (parsed.protocol !== "https:") return fallback;
+    if (!requiredTokens.every((token) => candidate.includes(token))) return fallback;
+    return candidate.replace(/\/$/, "");
+  } catch {
+    return fallback;
+  }
 }
 
 const userRoles = new Set<UserRole>(["owner", "admin", "editor", "author", "viewer", "ai_agent"]);
@@ -177,4 +192,14 @@ export const config: AppConfig = {
     .split("|")
     .map((url) => url.trim())
     .filter(Boolean),
+  googleMapsEmbedApiKey: process.env.GOOGLE_MAPS_EMBED_API_KEY?.trim() || null,
+  openStreetMapTileUrl: parseHttpsServiceUrl(
+    process.env.OPENSTREETMAP_TILE_URL,
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    ["{z}", "{x}", "{y}"],
+  ),
+  openStreetMapRoutingUrl: parseHttpsServiceUrl(
+    process.env.OPENSTREETMAP_ROUTING_URL,
+    "https://router.project-osrm.org",
+  ),
 };

@@ -51,8 +51,15 @@ function postFixture(id: number, title: string, slug: string): PostRecord {
     categoryStylesheets: [],
     tags: [],
     commentsPolicy: "enabled",
-    commentsEnabled: true,
-  };
+  commentsEnabled: true,
+  workflowState: "approved",
+  workflowContentHash: null,
+  workflowNote: null,
+  reviewRequestedAt: null,
+  reviewRequestedBy: null,
+  reviewedAt: null,
+  reviewedBy: null,
+};
 }
 
 describe("content formatting", () => {
