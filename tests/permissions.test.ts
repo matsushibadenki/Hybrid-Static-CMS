@@ -65,4 +65,11 @@ describe("permissions", () => {
     expect(hasPermission({ roles: ["admin"] }, "redirects.delete")).toBe(true);
     expect(hasPermission({ roles: ["viewer"] }, "redirects.read")).toBe(false);
   });
+
+  test("allows editors to search while reserving index maintenance for administrators", () => {
+    expect(hasPermission({ roles: ["editor"] }, "search.read")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "search.manage")).toBe(false);
+    expect(hasPermission({ roles: ["admin"] }, "search.manage")).toBe(true);
+    expect(hasPermission({ roles: ["viewer"] }, "search.read")).toBe(false);
+  });
 });

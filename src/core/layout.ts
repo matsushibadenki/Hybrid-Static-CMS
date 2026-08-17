@@ -116,6 +116,10 @@ export function adminLayout(
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h11a5 5 0 010 10H9"/><path d="M8 3L4 7l4 4"/><path d="M19 4v4M19 12v.01"/></svg>
             Redirects and 404s
           </a>` : ""}
+          ${can("search.read") ? `<a data-i18n="Content search" href="${config.controlPanelPath}/search">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+            Content search
+          </a>` : ""}
           </div>
           <div class="shell-nav-subgroup">
             <p class="shell-nav-sublabel" data-i18n="Extensions">Extensions</p>

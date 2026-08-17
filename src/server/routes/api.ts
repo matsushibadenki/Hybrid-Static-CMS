@@ -32,6 +32,7 @@ import { scheduleTimestampForStorage } from "../../core/scheduling";
 import { getPublishedMapBySlug, listMaps } from "../../core/maps";
 import { syncPageUrlRedirect, syncPostUrlRedirect } from "../../core/redirects";
 import { logError } from "../../core/logger";
+import { searchContent } from "../../core/search";
 
 export const apiRoutes = new Hono();
 
@@ -95,8 +96,11 @@ apiRoutes.get("/pages/:slug", async (c) => {
 
 apiRoutes.get("/search", async (c) => {
   const q = c.req.query("q") ?? "";
-  const data = await listPosts({ page: 1, limit: 20, status: "published", search: q });
-  return c.json(data);
+  const limit = Number(c.req.query("limit") ?? 20);
+  const type = c.req.query("type") ?? "posts";
+  if (type === "all") return c.json(await searchContent(q, { status: "published", limit }));
+  if (type === "pages") return c.json(await listPages({ page: 1, limit, status: "published", search: q }));
+  return c.json(await listPosts({ page: 1, limit, status: "published", search: q }));
 });
 
 apiRoutes.get("/media", async (c) => {

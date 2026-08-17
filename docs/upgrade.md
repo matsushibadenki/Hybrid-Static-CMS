@@ -63,6 +63,15 @@ privacy-conscious aggregated 404 reports. Run migrations before opening the
 server should integrate this manifest with their rewrite configuration; requests
 must pass through Bun for built-in redirect responses and 404 collection.
 
+Migration `030_multilingual_search.sql` enables PostgreSQL `pg_trgm`, adds
+NFKC-normalized generated search columns, and creates GIN trigram indexes for
+posts and fixed pages. It also removes the superseded English-only generated
+columns and indexes. The migration role must be allowed to install the
+extension. After migrating, open **Content search** and verify that extension,
+index, and indexed-content diagnostics are healthy. See
+[Multilingual content search](./multilingual-search.md) for behavior and API
+examples.
+
 ## PostgreSQL 17 to 18
 
 New deployments use PostgreSQL 18. Do not attach a PostgreSQL 17 data volume directly to the PostgreSQL 18 container. Create a logical backup with `bun run db:backup`, start PostgreSQL 18 with a new volume, restore the backup, and then run `bun run migrate`.

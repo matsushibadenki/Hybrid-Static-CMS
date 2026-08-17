@@ -11,6 +11,7 @@ import type { PageInput, PageRecord } from "./types";
 import { createContentRevision } from "./revisions";
 import { requireExistingStylesheet } from "./assets";
 import { assertEditorialFingerprintPublishAllowed, pageEditorialFingerprint } from "./editorialFingerprint";
+import { buildSearchCondition } from "./search";
 
 function normalizePage(row: Record<string, unknown>): PageRecord {
   return {
@@ -113,6 +114,8 @@ export async function listPages(options: { page?: number; limit?: number; status
 
   const filters: string[] = [];
   const params: (string | number)[] = [];
+  let searchRank: string | null = null;
+  let countParameterCount: number | null = null;
 
   if (status !== "any") {
     params.push(status);
@@ -125,8 +128,12 @@ export async function listPages(options: { page?: number; limit?: number; status
   }
 
   if (search) {
-    params.push(search);
-    filters.push(`p.search_vector @@ websearch_to_tsquery('english', $${params.length})`);
+    const built = buildSearchCondition("p", search, params);
+    if (built) {
+      filters.push(built.condition);
+      searchRank = built.rank;
+      countParameterCount = built.filterParameterCount;
+    }
   }
 
   const whereSql = filters.length > 0 ? `where ${filters.join(" and ")}` : "";
@@ -135,14 +142,17 @@ export async function listPages(options: { page?: number; limit?: number; status
     `
       ${basePageQuery}
       ${whereSql}
-      order by coalesce(p.published_at, p.created_at) desc, p.id desc
+      order by ${searchRank ? `${searchRank} desc,` : ""} coalesce(p.published_at, p.created_at) desc, p.id desc
       limit ${limit}
       offset ${offset}
     `,
     params as any[],
   );
 
-  const count = await sql.unsafe(`select count(*)::int as total from pages p ${whereSql}`, params as any[]);
+  const count = await sql.unsafe(
+    `select count(*)::int as total from pages p ${whereSql}`,
+    (countParameterCount === null ? params : params.slice(0, countParameterCount)) as any[],
+  );
 
   return {
     page,

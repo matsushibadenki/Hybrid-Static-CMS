@@ -10,6 +10,7 @@ import {
 import type { PostInput, PostRecord } from "./types";
 import { createContentRevision } from "./revisions";
 import { assertEditorialFingerprintPublishAllowed, postEditorialFingerprint } from "./editorialFingerprint";
+import { buildSearchCondition } from "./search";
 
 function normalizePost(row: Record<string, unknown>): PostRecord {
   return {
@@ -173,6 +174,8 @@ export async function listPosts(options: {
 
   const filters: string[] = [];
   const params: (string | number)[] = [];
+  let searchRank: string | null = null;
+  let countParameterCount: number | null = null;
 
   if (status !== "any") {
     params.push(status);
@@ -190,8 +193,12 @@ export async function listPosts(options: {
   }
 
   if (search) {
-    params.push(search);
-    filters.push(`p.search_vector @@ websearch_to_tsquery('english', $${params.length})`);
+    const built = buildSearchCondition("p", search, params);
+    if (built) {
+      filters.push(built.condition);
+      searchRank = built.rank;
+      countParameterCount = built.filterParameterCount;
+    }
   }
 
   const whereSql = filters.length > 0 ? `where ${filters.join(" and ")}` : "";
@@ -201,7 +208,7 @@ export async function listPosts(options: {
       ${basePostQuery}
       ${whereSql}
       group by p.id, u.id
-      order by coalesce(p.published_at, p.created_at) desc, p.id desc
+      order by ${searchRank ? `${searchRank} desc,` : ""} coalesce(p.published_at, p.created_at) desc, p.id desc
       limit ${limit}
       offset ${offset}
     `,
@@ -210,7 +217,7 @@ export async function listPosts(options: {
 
   const countResult = await sql.unsafe(
     `select count(*)::int as total from posts p ${whereSql}`,
-    params as any[],
+    (countParameterCount === null ? params : params.slice(0, countParameterCount)) as any[],
   );
 
   return {

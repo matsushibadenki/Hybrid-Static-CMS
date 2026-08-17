@@ -66,6 +66,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Google reCAPTCHA v3 support for public forms
 - `[Done]` Magazine-style default static page design
 - `[Done]` Redirect manager, automatic old-URL preservation, generated redirect manifest, and privacy-conscious aggregated 404 reporting
+- `[Done]` Japanese-aware post/page search with Unicode NFKC normalization, short-term matching, trigram relevance, public API support, index diagnostics, and concurrent rebuild controls
 
 ### Security and administration
 
@@ -132,13 +133,13 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Editorial review states and approval workflow separate from publication status, with approval fingerprints, role-based review actions, history, audit logs, list filters, and operator notifications
 - `[Done]` Post/page import and export for migration and portability
 - `[Done]` Redirect manager and 404 report for slug changes and broken links
-- `[Next]` Japanese-aware full-text search and search administration tools
+- `[Done]` Japanese-aware full-text search and search administration tools
 
 ## Later roadmap
 
 ### Site and theme management
 
-- `[Later]` Theme settings UI for colors, typography, spacing, and Google Fonts
+- `[Next]` Theme settings UI for colors, typography, spacing, and Google Fonts
 - `[Later]` Theme starter kits and reusable public templates
 - `[Later]` Visual layout blocks with responsive previews
 - `[Later]` Local font hosting and privacy-first asset mode
@@ -169,8 +170,9 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 2. `[Done]` Atomic publishing, preview, health checks, and structured alerts
 3. `[Done]` Media and upload security hardening
 4. `[Done]` Editorial review states and approval workflow
-5. `[Next]` Japanese-aware full-text search and search administration
-6. `[Later]` Themes, integrations, scale-out operations, and localization
+5. `[Done]` Japanese-aware full-text search and search administration
+6. `[Next]` Theme settings UI for colors, typography, spacing, and Google Fonts
+7. `[Later]` Theme starter kits, integrations, scale-out operations, and content localization
 
 ## Notes for contributors
 

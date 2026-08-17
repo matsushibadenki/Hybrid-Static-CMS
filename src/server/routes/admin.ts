@@ -102,6 +102,7 @@ import {
 } from "../../core/editorialWorkflow";
 import type { EditorialWorkflowState, PageRecord, PostRecord } from "../../core/types";
 import { createMap, deleteMap, getMapById, listMaps, updateMap, type MapEmbedInput } from "../../core/maps";
+import { getSearchDiagnostics, rebuildSearchIndexes, searchContent } from "../../core/search";
 
 function splitCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
@@ -1710,6 +1711,62 @@ adminRoutes.post("/redirects/reports/clear", async (c) => {
   const count = await clearNotFoundReports();
   await writeAuditLog({ actorUserId: c.get("sessionUser")?.id ?? null, action: "redirect.404_clear", targetType: "not_found_report", summary: `Cleared ${count} aggregated 404 reports.`, ipAddress: requestIp(c) });
   return c.redirect(`${config.controlPanelPath}/redirects?success=${encodeURIComponent("404 reports cleared.")}`);
+});
+
+adminRoutes.get("/search", async (c) => {
+  const user = c.get("sessionUser");
+  const q = c.req.query("q") ?? "";
+  const status = c.req.query("status") === "published" ? "published" : "any";
+  const [diagnostics, results] = await Promise.all([
+    getSearchDiagnostics(),
+    q.trim() ? searchContent(q, { status, limit: 100 }) : Promise.resolve({ query: "", total: 0, items: [] }),
+  ]);
+  const canManage = hasPermission(user, "search.manage");
+  const body = `
+    ${queryNotice(c)}
+    <section class="editor-section">
+      <p class="editor-section-kicker">Japanese-aware search</p>
+      <h2 class="editor-section-title">Content search</h2>
+      <p class="meta">Search post and page titles, excerpts, and body text. Full-width and half-width characters are normalized, and short Japanese terms are supported.</p>
+      <form method="get" action="${config.controlPanelPath}/search" class="form-grid">
+        <div class="grid">
+          <label>Search query<input name="q" value="${escapeHtml(q)}" maxlength="200" placeholder="Search posts and pages" /></label>
+          <label>Content status<select name="status"><option value="any" ${status === "any" ? "selected" : ""}>All content</option><option value="published" ${status === "published" ? "selected" : ""}>Published content</option></select></label>
+        </div>
+        <div><button class="button primary" type="submit">Search</button></div>
+      </form>
+    </section>
+    <section class="editor-section">
+      <div class="section-heading-row"><div><p class="editor-section-kicker">Search index</p><h2 class="editor-section-title">Index health</h2></div><span class="badge">${diagnostics.healthy ? "Healthy" : "Needs attention"}</span></div>
+      <div class="grid">
+        <div class="stat"><p class="meta">Indexed posts</p><h2>${diagnostics.posts.indexed} / ${diagnostics.posts.total}</h2></div>
+        <div class="stat"><p class="meta">Indexed pages</p><h2>${diagnostics.pages.indexed} / ${diagnostics.pages.total}</h2></div>
+        <div class="stat"><p class="meta">pg_trgm version</p><h2>${escapeHtml(diagnostics.extensionVersion ?? "Unavailable")}</h2></div>
+        <div class="stat"><p class="meta">Search indexes</p><h2>${diagnostics.indexes.filter((index) => index.healthy).length} / 2</h2></div>
+      </div>
+      ${canManage ? `<form method="post" action="${config.controlPanelPath}/search/reindex"><p class="meta">Rebuild indexes concurrently if diagnostics report a problem. Normal searches remain available during the operation.</p><button class="button" type="submit">Rebuild search indexes</button></form>` : ""}
+    </section>
+    <section class="editor-section">
+      <p class="editor-section-kicker">Results</p>
+      <h2 class="editor-section-title">Search results</h2>
+      ${q.trim() ? `<p class="meta"><strong>${results.total}</strong> <span data-i18n="Matches">Matches</span></p>` : ""}
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Relevance</th><th>Updated</th><th>Actions</th></tr></thead>
+        <tbody>${results.items.map((item) => `<tr><td>${item.type === "post" ? "Post" : "Page"}</td><td class="cell-long"><strong>${escapeHtml(item.title)}</strong>${item.excerpt ? `<br><span class="meta">${escapeHtml(item.excerpt)}</span>` : ""}</td><td>${escapeHtml(item.status)}</td><td>${item.score.toFixed(2)}</td><td>${adminDate(item.updatedAt)}</td><td><a class="button" href="${config.controlPanelPath}/${item.type === "post" ? "posts" : "pages"}/${item.id}/edit">Edit</a></td></tr>`).join("") || `<tr><td colspan="6">${q.trim() ? "No search results." : "Enter a search query."}</td></tr>`}</tbody>
+      </table></div>
+    </section>`;
+  return c.html(adminLayout("Content search", user, body, "wide-list"));
+});
+
+adminRoutes.post("/search/reindex", async (c) => {
+  const user = c.get("sessionUser");
+  try {
+    await rebuildSearchIndexes();
+    await writeAuditLog({ actorUserId: user?.id ?? null, action: "search.reindex", targetType: "search_index", summary: "Rebuilt post and page search indexes.", ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/search?success=${encodeURIComponent("Search indexes rebuilt.")}`);
+  } catch (error) {
+    logError("search.reindex_failed", "Search index rebuild failed.", { error });
+    return c.redirect(`${config.controlPanelPath}/search?error=${encodeURIComponent("Search index rebuild failed.")}`);
+  }
 });
 
 async function handleEditorialWorkflow(c: Context, contentType: EditorialContentType) {

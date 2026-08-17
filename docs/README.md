@@ -21,11 +21,12 @@ This directory collects the design, installation, deployment, and operations not
 15. [Maps and reusable snippets](./maps-and-snippets.md)
 16. [Post and page import/export](./content-portability.md)
 17. [Redirects and 404 reporting](./redirects-and-404s.md)
-18. [Structured logging and operator alerts](./structured-logging.md)
-19. [Roadmap](./roadmap.md)
-20. [VPS production guide](./vps.md)
-21. [Upgrade guide](./upgrade.md)
-22. [Architecture decision records](./adr/0001-public-html-coexistence.md)
+18. [Multilingual content search](./multilingual-search.md)
+19. [Structured logging and operator alerts](./structured-logging.md)
+20. [Roadmap](./roadmap.md)
+21. [VPS production guide](./vps.md)
+22. [Upgrade guide](./upgrade.md)
+23. [Architecture decision records](./adr/0001-public-html-coexistence.md)
 
 ## Audience
 
