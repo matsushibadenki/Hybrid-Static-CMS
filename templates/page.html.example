@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{lang}}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -14,10 +14,15 @@
     {{keywords}}
     {{robots}}
     {{jsonLd}}
+    {{theme}}
     <link rel="stylesheet" href="/assets/css/site.css" />
     {{stylesheets}}
   </head>
   <body>
+    <header class="site-header">
+      <a href="{{siteUrl}}/">{{siteName}}</a>
+    </header>
     <main>{{body}}</main>
+    <footer class="site-footer">{{siteName}} &copy; {{year}}</footer>
   </body>
 </html>

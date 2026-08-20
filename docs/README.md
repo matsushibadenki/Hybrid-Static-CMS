@@ -22,11 +22,15 @@ This directory collects the design, installation, deployment, and operations not
 16. [Post and page import/export](./content-portability.md)
 17. [Redirects and 404 reporting](./redirects-and-404s.md)
 18. [Multilingual content search](./multilingual-search.md)
-19. [Structured logging and operator alerts](./structured-logging.md)
-20. [Roadmap](./roadmap.md)
-21. [VPS production guide](./vps.md)
-22. [Upgrade guide](./upgrade.md)
-23. [Architecture decision records](./adr/0001-public-html-coexistence.md)
+19. [Public theme settings](./theme-settings.md)
+20. [Theme starter kits](./theme-starter-kits.md)
+21. [Visual layout blocks](./visual-layout-blocks.md)
+22. [Local fonts and privacy-first delivery](./local-fonts.md)
+23. [Structured logging and operator alerts](./structured-logging.md)
+24. [Roadmap](./roadmap.md)
+25. [VPS production guide](./vps.md)
+26. [Upgrade guide](./upgrade.md)
+27. [Architecture decision records](./adr/0001-public-html-coexistence.md)
 
 ## Audience
 

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    {{description}}{{canonical}}{{ogTitle}}{{ogDescription}}{{ogType}}{{ogUrl}}{{ogImage}}{{keywords}}{{robots}}{{jsonLd}}
+    {{theme}}
+    <link rel="stylesheet" href="/assets/css/site.css" />
+    {{stylesheets}}
+    <style>
+      .starter-shell { display: grid; grid-template-columns: 180px minmax(0, 1fr); margin: 0 auto; max-width: calc(var(--content-width) + 180px); min-height: 100vh; }
+      .starter-rail { border-right: 2px solid var(--line); display: flex; flex-direction: column; justify-content: space-between; padding: calc(var(--space-unit) * 3) calc(var(--space-unit) * 2); }
+      .starter-brand { color: var(--ink); font-family: var(--font-heading); font-size: 1.25rem; font-weight: 800; line-height: 1.1; text-decoration: none; }
+      .starter-year { color: var(--ink-muted); font-family: var(--font-mono); font-size: .75rem; }
+      .starter-content { min-width: 0; padding: calc(var(--space-unit) * 5) clamp(16px, 5vw, 64px); }
+      @media (max-width: 620px) { .starter-shell { display: block; } .starter-rail { align-items: center; border-bottom: 2px solid var(--line); border-right: 0; flex-direction: row; padding: 18px 16px; } .starter-content { padding-block: 32px; } }
+    </style>
+  </head>
+  <body>
+    <div class="starter-shell">
+      <header class="starter-rail"><a class="starter-brand" href="{{siteUrl}}/">{{siteName}}</a><span class="starter-year">EST. {{year}}</span></header>
+      <main class="starter-content">{{body}}</main>
+    </div>
+  </body>
+</html>

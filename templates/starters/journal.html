@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    {{description}}{{canonical}}{{ogTitle}}{{ogDescription}}{{ogType}}{{ogUrl}}{{ogImage}}{{keywords}}{{robots}}{{jsonLd}}
+    {{theme}}
+    <link rel="stylesheet" href="/assets/css/site.css" />
+    {{stylesheets}}
+    <style>
+      .starter-shell { margin: 0 auto; max-width: var(--content-width); padding: calc(var(--space-unit) * 3) clamp(16px, 5vw, 48px); }
+      .starter-header { border-bottom: 3px double var(--line); border-top: 3px double var(--line); padding: calc(var(--space-unit) * 2) 0; text-align: center; }
+      .starter-brand { color: var(--ink); font-family: var(--font-heading); font-size: clamp(1.4rem, 5vw, 2.4rem); font-weight: 700; letter-spacing: -.025em; text-decoration: none; }
+      .starter-edition { color: var(--ink-muted); display: block; font-size: .72rem; letter-spacing: .12em; margin-top: 6px; text-transform: uppercase; }
+      .starter-content { padding-block: calc(var(--space-unit) * 4); }
+      .starter-footer { border-top: 1px solid var(--line); color: var(--ink-muted); font-style: italic; padding-top: calc(var(--space-unit) * 2); text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="starter-shell">
+      <header class="starter-header"><a class="starter-brand" href="{{siteUrl}}/">{{siteName}}</a><span class="starter-edition">Journal / {{year}}</span></header>
+      <main class="starter-content">{{body}}</main>
+      <footer class="starter-footer">Published by {{siteName}}</footer>
+    </div>
+  </body>
+</html>

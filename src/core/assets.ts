@@ -38,6 +38,7 @@ export async function ensurePublicAssetDirectories(publicHtmlDir = config.public
     path.join(assetsDir, "img"),
     path.join(assetsDir, "js"),
     path.join(assetsDir, "video"),
+    path.join(assetsDir, "fonts"),
   ];
   await Promise.all(directories.map((directory) => mkdir(directory, { recursive: true })));
 

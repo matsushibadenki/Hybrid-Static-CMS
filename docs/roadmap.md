@@ -27,6 +27,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Generated CMS output under `/cms/*`
 - `[Done]` Configurable generated templates through `templates/page.html`
 - `[Done]` Google Fonts configuration through `GOOGLE_FONTS_CSS_URLS`
+- `[Done]` PostgreSQL-backed public theme settings for colors, typography, spacing, Google Fonts, live preview, generated CSS tokens, and safe regeneration rollback
 - `[Done]` Automatic public asset directories for headless frontends and category/fixed-page stylesheet assignment
 
 ### Content and editor
@@ -139,11 +140,11 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 ### Site and theme management
 
-- `[Next]` Theme settings UI for colors, typography, spacing, and Google Fonts
-- `[Later]` Theme starter kits and reusable public templates
-- `[Later]` Visual layout blocks with responsive previews
-- `[Later]` Local font hosting and privacy-first asset mode
-- `[Later]` Multi-language content, locale routing, and translation metadata
+- `[Done]` Theme settings UI for colors, typography, spacing, and Google Fonts
+- `[Done]` Theme starter kits and reusable public templates
+- `[Done]` Visual layout blocks with responsive previews
+- `[Done]` Local font hosting and privacy-first asset mode
+- `[Next]` Multi-language content, locale routing, and translation metadata
 
 ### API and integrations
 
@@ -171,8 +172,12 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 3. `[Done]` Media and upload security hardening
 4. `[Done]` Editorial review states and approval workflow
 5. `[Done]` Japanese-aware full-text search and search administration
-6. `[Next]` Theme settings UI for colors, typography, spacing, and Google Fonts
-7. `[Later]` Theme starter kits, integrations, scale-out operations, and content localization
+6. `[Done]` Theme settings UI for colors, typography, spacing, and Google Fonts
+7. `[Done]` Theme starter kits and reusable public templates
+8. `[Done]` Visual layout blocks with responsive previews
+9. `[Done]` Local font hosting and privacy-first asset mode
+10. `[Next]` Multi-language content, locale routing, and translation metadata
+11. `[Later]` Integrations and scale-out operations
 
 ## Notes for contributors
 

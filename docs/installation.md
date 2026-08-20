@@ -165,7 +165,7 @@ The editor includes four text-size presets (`A-`, `A`, `A+`, and `A++`) and a `R
 
 ## Template overrides
 
-Copy `templates/page.html.example` to `templates/page.html` to override the generated CMS page shell. The renderer replaces `{{title}}`, `{{description}}`, `{{canonical}}`, `{{ogTitle}}`, `{{ogDescription}}`, `{{ogType}}`, `{{ogUrl}}`, `{{robots}}`, `{{jsonLd}}`, and `{{body}}`. If the override is absent, the built-in safe template is used.
+Copy `templates/page.html.example` to `templates/page.html` to override the generated CMS page shell. The renderer replaces `{{lang}}`, `{{siteName}}`, `{{siteUrl}}`, `{{year}}`, `{{title}}`, `{{description}}`, `{{canonical}}`, `{{ogTitle}}`, `{{ogDescription}}`, `{{ogType}}`, `{{ogUrl}}`, `{{ogImage}}`, `{{keywords}}`, `{{robots}}`, `{{jsonLd}}`, `{{theme}}`, `{{stylesheets}}`, and `{{body}}`. If the override is absent, the built-in safe template is used. Four reusable shells are also available under `templates/starters`; see [Theme starter kits](./theme-starter-kits.md).
 
 The built-in template uses an editorial magazine layout: a paper-texture background, masthead, fine rules, oversized headlines, and a responsive asymmetric index. It is applied to generated posts and CMS-managed pages when no `templates/page.html` override exists. Copy the example template when the site needs a different visual system; custom templates remain responsible for their own CSS and shell markup.
 

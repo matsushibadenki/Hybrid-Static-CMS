@@ -1,0 +1,9 @@
+{
+  "scannedAt": "2026-08-20",
+  "framework": "Bun, Hono, server-rendered HTML",
+  "fontStack": "Google Fonts configuration with Japanese sans, serif, and monospace families",
+  "palette": "CSS custom properties with a white editorial base and teal accent",
+  "motion": "motion-cut",
+  "spacing": "8px-oriented scale",
+  "preserved": ["control-panel visual language", "public magazine layout", "CSS custom-property architecture"]
+}

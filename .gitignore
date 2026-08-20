@@ -66,6 +66,7 @@ storage/uploads/*
 public_html/cms/embed.js
 public_html/cms/maps.js
 public_html/cms/redirects.json
+public_html/cms/theme.css
 public_html/cms/.post-artifacts.json
 public_html/cms/posts/latest.html
 public_html/cms/posts/list.html
@@ -81,6 +82,8 @@ public_html/cms/menus/*
 !public_html/cms/menus/.gitkeep
 public_html/cms/uploads/*
 !public_html/cms/uploads/.gitkeep
+# Local font licenses often prohibit repository redistribution
+public_html/assets/fonts/*
 public_html/sitemap.xml
 public_html/robots.txt
 public_html/llms.txt

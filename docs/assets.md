@@ -20,6 +20,7 @@ public_html/
     img/
     js/
     video/
+    fonts/
 ```
 
 Existing files are never overwritten. The setup wizard creates the same
@@ -31,6 +32,7 @@ structure in the selected `public_html` directory.
 - `assets/img`: frontend images that are not managed by the media library
 - `assets/js`: public frontend scripts
 - `assets/video`: frontend video assets that are not managed by the media library
+- `assets/fonts`: locally hosted WOFF2, WOFF, TTF, and OTF files managed from the Local fonts page
 
 All files are publicly available below `/assets/*`. Do not place secrets,
 database dumps, source maps containing private source, or unpublished material
@@ -65,3 +67,5 @@ The JSON API returns `stylesheetPath` for fixed pages and
 Back up the complete `public_html/assets` directory. PostgreSQL backups preserve
 stylesheet selections, but do not contain the asset files.
 
+See [Local fonts and privacy-first delivery](./local-fonts.md) before adding font
+files. Font licensing may prohibit redistribution through a public repository.

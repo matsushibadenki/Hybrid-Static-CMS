@@ -44,6 +44,15 @@ describe("internationalization", () => {
       "Search results",
       "Rebuild search indexes",
       "Search indexes rebuilt.",
+      "Theme settings",
+      "Theme starter kits",
+      "Apply starter kit",
+      "Articles and publications",
+      "Theme starter kit applied and public pages regenerated.",
+      "Public appearance",
+      "Google Fonts CSS URLs",
+      "Save theme and regenerate",
+      "Theme saved and public pages regenerated.",
       "Basic information",
       "Save post",
       "Publish and generate page",
@@ -107,6 +116,17 @@ describe("internationalization", () => {
       "Navigation structure",
       "Add menu item",
       "Block setup",
+      "Block layout",
+      "Responsive preview",
+      "Arrange direct child elements in two responsive columns.",
+      "Scripts, forms, and external requests are disabled in this preview.",
+      "Select a valid block layout.",
+      "Local fonts",
+      "Font delivery mode",
+      "Local only",
+      "Register font face",
+      "Font settings saved and public pages regenerated.",
+      "The file is not a supported WOFF2, WOFF, TTF, or OTF font.",
       "Block body",
       "Embed block",
       "Organization",
@@ -201,6 +221,10 @@ describe("internationalization", () => {
     expect(html).toContain(".structured-row-menu");
     expect(html).toContain(".structured-builder.is-enhanced .structured-source");
     expect(html).toContain("counter-reset: structured-row");
+    expect(html).toContain(".block-layout-picker");
+    expect(html).toContain(".font-mode-grid");
+    expect(html).toContain('[data-preview-viewport="mobile"] iframe');
+    expect(html).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(html).toContain("@media (max-width: 620px)");
   });
 });

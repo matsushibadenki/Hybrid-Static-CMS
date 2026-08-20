@@ -25,7 +25,7 @@ describe("public asset directories", () => {
     await ensurePublicAssetDirectories(publicHtmlDir);
 
     expect(await readFile(categoryCss, "utf8")).toBe("/* customized */\n");
-    for (const directory of ["img", "js", "video"]) {
+    for (const directory of ["img", "js", "video", "fonts"]) {
       expect((await stat(path.join(publicHtmlDir, "assets", directory))).isDirectory()).toBe(true);
     }
     expect(await listStylesheets("categories", publicHtmlDir)).toEqual(["categories/default.css"]);

@@ -49,4 +49,5 @@ controls in the browser:
 - Forms expose one visual row per field, including type, required state, and select options.
 - Menus expose one visual row per link, including its URL and new-tab behavior.
 - Reusable blocks separate identity, body HTML, embedding instructions, and publication status.
+- Reusable blocks provide allowlisted visual structures and sandboxed Desktop, Tablet, and Mobile previews. Split and Grid treat direct body children as layout items.
 - If JavaScript is unavailable, the original line-based definition remains available as the fallback editor.

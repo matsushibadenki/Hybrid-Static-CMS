@@ -72,6 +72,25 @@ index, and indexed-content diagnostics are healthy. See
 [Multilingual content search](./multilingual-search.md) for behavior and API
 examples.
 
+Public theme settings do not require a database migration. After upgrading,
+regenerate public output so `/cms/theme.css` is created. Custom
+`templates/page.html` files may add `{{theme}}` before their site stylesheets;
+older templates remain compatible because the renderer injects the link when
+the placeholder is absent. `GOOGLE_FONTS_CSS_URLS` becomes the initial default,
+while a theme saved in the control panel takes precedence.
+
+This release also adds optional `{{siteName}}`, `{{siteUrl}}`, and `{{year}}`
+placeholders plus reusable shells under `templates/starters`. Existing custom
+templates remain compatible and are not replaced during upgrade.
+
+Migration `031_content_block_layouts.sql` adds the allowlisted visual layout to
+reusable blocks. Run `bun run migrate`; existing blocks receive the backward-
+compatible `plain` layout. See [Visual layout blocks](./visual-layout-blocks.md).
+
+Local font delivery settings require no migration. Existing themes retain
+remote Google Fonts behavior. The application creates `public_html/assets/fonts`
+automatically; see [Local fonts](./local-fonts.md) before deploying font files.
+
 ## PostgreSQL 17 to 18
 
 New deployments use PostgreSQL 18. Do not attach a PostgreSQL 17 data volume directly to the PostgreSQL 18 container. Create a logical backup with `bun run db:backup`, start PostgreSQL 18 with a new volume, restore the backup, and then run `bun run migrate`.

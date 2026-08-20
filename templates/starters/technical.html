@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    {{description}}{{canonical}}{{ogTitle}}{{ogDescription}}{{ogType}}{{ogUrl}}{{ogImage}}{{keywords}}{{robots}}{{jsonLd}}
+    {{theme}}
+    <link rel="stylesheet" href="/assets/css/site.css" />
+    {{stylesheets}}
+    <style>
+      .starter-shell { margin: 0 auto; max-width: var(--content-width); padding: calc(var(--space-unit) * 3) clamp(16px, 4vw, 40px); }
+      .starter-header { align-items: center; border-bottom: 1px dashed var(--line); display: flex; gap: 12px; justify-content: space-between; padding-bottom: calc(var(--space-unit) * 2); }
+      .starter-brand { color: var(--ink); font-family: var(--font-mono); font-size: .95rem; font-weight: 700; overflow-wrap: anywhere; text-decoration: none; }
+      .starter-version { border: 1px solid var(--line); color: var(--ink-muted); font-family: var(--font-mono); font-size: .7rem; padding: 3px 6px; white-space: nowrap; }
+      .starter-content { border-left: 2px solid var(--accent); margin-top: calc(var(--space-unit) * 3); min-width: 0; padding: 0 0 calc(var(--space-unit) * 4) clamp(16px, 4vw, 40px); }
+      .starter-footer { border-top: 1px dashed var(--line); color: var(--ink-muted); font-family: var(--font-mono); font-size: .72rem; padding-top: calc(var(--space-unit) * 2); }
+      @media (max-width: 480px) { .starter-content { border-left: 0; padding-left: 0; } }
+    </style>
+  </head>
+  <body>
+    <div class="starter-shell">
+      <header class="starter-header"><a class="starter-brand" href="{{siteUrl}}/">{{siteName}}</a><span class="starter-version">BUILD {{year}}</span></header>
+      <main class="starter-content">{{body}}</main>
+      <footer class="starter-footer">{{siteUrl}}</footer>
+    </div>
+  </body>
+</html>

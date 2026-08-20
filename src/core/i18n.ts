@@ -122,6 +122,7 @@ const zh: Record<string, string> = {
 };
 
 Object.assign(ja, {
+  files: "ファイル",
   "Import and export": "インポート・エクスポート",
   Portability: "データ移行",
   "Export posts and pages": "投稿・固定ページをエクスポート",
@@ -152,6 +153,7 @@ Object.assign(ja, {
 });
 
 Object.assign(zh, {
+  files: "个文件",
   "Import and export": "导入与导出",
   Portability: "数据迁移",
   "Export posts and pages": "导出文章与页面",
@@ -274,6 +276,80 @@ Object.assign(zh, {
   "Enter a search query.": "请输入搜索词。",
   "Search indexes rebuilt.": "搜索索引已重建。",
   "Search index rebuild failed.": "搜索索引重建失败。",
+});
+
+Object.assign(ja, {
+  "Theme Settings": "テーマ設定", "Theme settings": "テーマ設定", "Public appearance": "公開ページの外観",
+  "Starter library": "スターターライブラリ", "Theme starter kits": "テーマスターターキット", "Apply a complete visual direction, then fine-tune individual settings below. Existing Google Fonts URLs are preserved.": "完成されたデザインを適用してから、下の項目で個別に調整できます。既存のGoogle Fonts URLは保持されます。",
+  "Current kit": "使用中のキット", Applied: "適用済み", "Apply starter kit": "スターターキットを適用", Editorial: "エディトリアル", Studio: "スタジオ", Journal: "ジャーナル", Technical: "テクニカル",
+  "Articles and publications": "記事・出版サイト向け", "Portfolios and agencies": "ポートフォリオ・制作会社向け", "Essays and cultural sites": "エッセイ・文化サイト向け", "Documentation and products": "ドキュメント・製品サイト向け",
+  "Quiet serif hierarchy with generous reading rhythm.": "穏やかな明朝体の階層と、ゆったりした読書リズム。", "Sharp grid, compact spacing, and a confident sans-serif voice.": "明快なグリッド、引き締まった余白、力強いゴシック体。", "Warm paper tones and literary typography for long-form work.": "温かい紙色と文学的な書体による長文向けデザイン。", "Dense documentation rhythm with monospace landmarks.": "等幅書体を目印にした、密度の高いドキュメント構成。",
+  "Select a valid theme starter kit.": "有効なテーマスターターキットを選択してください。", "Theme starter kit applied and public pages regenerated.": "テーマスターターキットを適用し、公開ページを再生成しました。", "Unable to apply theme starter kit.": "テーマスターターキットを適用できませんでした。",
+  "Define shared design tokens for every generated post, fixed page, list, and form. Saving regenerates public output.": "生成される投稿、固定ページ、一覧、フォームで共有するデザイントークンを設定します。保存すると公開出力を再生成します。",
+  Palette: "配色", Colors: "色", "Page background": "ページ背景", Surface: "表面", "Primary text": "本文色", "Muted text": "補助テキスト", Borders: "境界線", Accent: "アクセント",
+  "Font families": "フォントファミリー", "Body font": "本文フォント", "Heading font": "見出しフォント", "Monospace font": "等幅フォント", "Body size (px)": "本文サイズ（px）", "Line height": "行の高さ",
+  "Google Fonts CSS URLs": "Google Fonts CSS URL", "Use one URL per line or separate URLs with a pipe. Commas inside Google Fonts axis definitions remain unchanged. Leave empty to disable remote fonts.": "1行に1つ、またはパイプで区切って指定します。Google Fontsの軸指定に含まれるカンマはそのまま利用できます。空欄にすると外部フォントを無効にします。",
+  "Layout rhythm": "レイアウトリズム", "Width and spacing": "横幅と余白", "Content width (px)": "コンテンツ幅（px）", "Spacing unit (px)": "余白の基準値（px）", "Corner radius (px)": "角丸（px）",
+  "Save theme and regenerate": "テーマを保存して再生成", "Restore defaults": "初期設定に戻す", "Theme preview": "テーマプレビュー", "Live preview": "ライブプレビュー", "Preview headline": "見出しのプレビュー",
+  "This preview shows the shared colors, typography, width, spacing, and corners before public pages are regenerated.": "公開ページを再生成する前に、共通の色、書体、横幅、余白、角の形を確認できます。", "Readable structure should remain clear in every language.": "どの言語でも読みやすい構造を保ちます。", "Example link": "リンクの例",
+  "Theme saved and public pages regenerated.": "テーマを保存し、公開ページを再生成しました。", "Default theme restored and public pages regenerated.": "初期テーマに戻し、公開ページを再生成しました。", "Unable to update theme settings.": "テーマ設定を更新できませんでした。",
+  "Select valid six-digit theme colors.": "6桁の有効なテーマカラーを選択してください。", "Font family names may contain letters, numbers, spaces, dots, underscores, and hyphens.": "フォント名には文字、数字、空白、ピリオド、アンダースコア、ハイフンを使用できます。", "Theme sizing values are outside the allowed range.": "テーマのサイズ値が許容範囲外です。",
+  "Google Fonts URLs must use HTTPS and an approved Google Fonts host.": "Google Fonts URLはHTTPSと許可されたGoogle Fontsホストを使用してください。", "A Google Fonts URL is too long.": "Google Fonts URLが長すぎます。", "Enter valid Google Fonts CSS URLs separated by new lines or pipes.": "有効なGoogle Fonts CSS URLを改行またはパイプで区切って入力してください。", "Use no more than 8 Google Fonts CSS URLs.": "Google Fonts CSS URLは8件以内にしてください。",
+});
+
+Object.assign(zh, {
+  "Theme Settings": "主题设置", "Theme settings": "主题设置", "Public appearance": "公开页面外观",
+  "Starter library": "入门模板库", "Theme starter kits": "主题入门套件", "Apply a complete visual direction, then fine-tune individual settings below. Existing Google Fonts URLs are preserved.": "先应用完整的视觉方案，再在下方微调各项设置。现有Google Fonts URL会被保留。",
+  "Current kit": "当前套件", Applied: "已应用", "Apply starter kit": "应用入门套件", Editorial: "编辑风格", Studio: "工作室", Journal: "期刊", Technical: "技术文档",
+  "Articles and publications": "适合文章与出版网站", "Portfolios and agencies": "适合作品集与创意机构", "Essays and cultural sites": "适合随笔与文化网站", "Documentation and products": "适合文档与产品网站",
+  "Quiet serif hierarchy with generous reading rhythm.": "安静的衬线层次与舒展的阅读节奏。", "Sharp grid, compact spacing, and a confident sans-serif voice.": "清晰网格、紧凑间距与有力的无衬线表达。", "Warm paper tones and literary typography for long-form work.": "以温暖纸张色调和文学字体呈现长篇内容。", "Dense documentation rhythm with monospace landmarks.": "使用等宽字体标记构建紧凑的文档节奏。",
+  "Select a valid theme starter kit.": "请选择有效的主题入门套件。", "Theme starter kit applied and public pages regenerated.": "主题入门套件已应用，公开页面已重新生成。", "Unable to apply theme starter kit.": "无法应用主题入门套件。",
+  "Define shared design tokens for every generated post, fixed page, list, and form. Saving regenerates public output.": "设置所有生成文章、页面、列表和表单共用的设计令牌。保存后会重新生成公开内容。",
+  Palette: "配色", Colors: "颜色", "Page background": "页面背景", Surface: "表面", "Primary text": "主要文字", "Muted text": "辅助文字", Borders: "边框", Accent: "强调色",
+  "Font families": "字体系列", "Body font": "正文字体", "Heading font": "标题字体", "Monospace font": "等宽字体", "Body size (px)": "正文字号（px）", "Line height": "行高",
+  "Google Fonts CSS URLs": "Google Fonts CSS URL", "Use one URL per line or separate URLs with a pipe. Commas inside Google Fonts axis definitions remain unchanged. Leave empty to disable remote fonts.": "每行输入一个URL，或使用竖线分隔。Google Fonts轴定义中的逗号会保持不变。留空可停用远程字体。",
+  "Layout rhythm": "布局节奏", "Width and spacing": "宽度与间距", "Content width (px)": "内容宽度（px）", "Spacing unit (px)": "间距单位（px）", "Corner radius (px)": "圆角（px）",
+  "Save theme and regenerate": "保存主题并重新生成", "Restore defaults": "恢复默认设置", "Theme preview": "主题预览", "Live preview": "实时预览", "Preview headline": "标题预览",
+  "This preview shows the shared colors, typography, width, spacing, and corners before public pages are regenerated.": "在重新生成公开页面前，预览共用颜色、字体、宽度、间距和圆角。", "Readable structure should remain clear in every language.": "在任何语言中都保持清晰易读的结构。", "Example link": "链接示例",
+  "Theme saved and public pages regenerated.": "主题已保存，公开页面已重新生成。", "Default theme restored and public pages regenerated.": "已恢复默认主题并重新生成公开页面。", "Unable to update theme settings.": "无法更新主题设置。",
+  "Select valid six-digit theme colors.": "请选择有效的六位主题颜色。", "Font family names may contain letters, numbers, spaces, dots, underscores, and hyphens.": "字体名称可包含文字、数字、空格、句点、下划线和连字符。", "Theme sizing values are outside the allowed range.": "主题尺寸值超出允许范围。",
+  "Google Fonts URLs must use HTTPS and an approved Google Fonts host.": "Google Fonts URL必须使用HTTPS和获准的Google Fonts主机。", "A Google Fonts URL is too long.": "Google Fonts URL过长。", "Enter valid Google Fonts CSS URLs separated by new lines or pipes.": "请输入以换行或竖线分隔的有效Google Fonts CSS URL。", "Use no more than 8 Google Fonts CSS URLs.": "Google Fonts CSS URL不得超过8个。",
+});
+
+Object.assign(ja, {
+  Layout: "レイアウト", "Visual structure": "視覚構造", "Block layout": "ブロックレイアウト",
+  "Choose how this reusable content responds inside generated posts and fixed pages.": "生成される投稿や固定ページ内で、この再利用コンテンツがどのように配置されるかを選びます。",
+  Plain: "標準", Feature: "特集", Split: "2カラム", Grid: "グリッド", Notice: "お知らせ",
+  "Keep the content in the surrounding article flow.": "周囲の記事本文と同じ流れで表示します。", "Give one message more space and visual emphasis.": "ひとつのメッセージに広い余白と視覚的な強調を与えます。", "Arrange direct child elements in two responsive columns.": "直下の要素をレスポンシブな2列に配置します。", "Arrange direct child elements as responsive cards.": "直下の要素をレスポンシブなカードとして配置します。", "Set supporting or important information apart.": "補足情報や重要な内容を本文から区別します。",
+  "Responsive preview": "レスポンシブプレビュー", "Generated block": "生成されるブロック", "Preview width": "プレビュー幅", Desktop: "デスクトップ", Tablet: "タブレット", Mobile: "モバイル",
+  "Scripts, forms, and external requests are disabled in this preview.": "このプレビューではスクリプト、フォーム、外部通信を無効にしています。", "Select a valid block layout.": "有効なブロックレイアウトを選択してください。",
+});
+
+Object.assign(zh, {
+  Layout: "布局", "Visual structure": "视觉结构", "Block layout": "区块布局",
+  "Choose how this reusable content responds inside generated posts and fixed pages.": "选择此可复用内容在生成的文章和页面中的响应式布局方式。",
+  Plain: "标准", Feature: "重点展示", Split: "双栏", Grid: "网格", Notice: "提示",
+  "Keep the content in the surrounding article flow.": "让内容保持在周围正文的正常流程中。", "Give one message more space and visual emphasis.": "用更宽裕的空间突出一条信息。", "Arrange direct child elements in two responsive columns.": "将直接子元素排列为响应式双栏。", "Arrange direct child elements as responsive cards.": "将直接子元素排列为响应式卡片。", "Set supporting or important information apart.": "将补充或重要信息与正文区分开。",
+  "Responsive preview": "响应式预览", "Generated block": "生成的区块", "Preview width": "预览宽度", Desktop: "桌面", Tablet: "平板", Mobile: "手机",
+  "Scripts, forms, and external requests are disabled in this preview.": "此预览已禁用脚本、表单和外部请求。", "Select a valid block layout.": "请选择有效的区块布局。",
+});
+
+Object.assign(ja, {
+  "Local fonts": "ローカルフォント", "Local Fonts": "ローカルフォント", "Privacy-first typography": "プライバシー優先の書体設定", "Host licensed font files from /assets/fonts and control whether generated CSS may contact Google Fonts.": "利用許諾のあるフォントを/assets/fontsから配信し、生成CSSがGoogle Fontsへ接続できるかを管理します。",
+  "Font library": "フォントライブラリ", "Upload a font file": "フォントファイルをアップロード", "Font file": "フォントファイル", "Upload font": "フォントをアップロード", "Allowed: WOFF2, WOFF, TTF, OTF. Maximum 10 MB. Confirm that the font license permits web hosting.": "対応形式: WOFF2、WOFF、TTF、OTF。最大10 MB。フォントのライセンスがWeb配信を許可していることを確認してください。",
+  "Delivery policy": "配信方針", "Font delivery mode": "フォント配信モード", "Remote and local": "リモートとローカル", "Allow configured Google Fonts requests and registered local files.": "設定済みGoogle Fontsへの通信と登録済みローカルファイルを許可します。", "Local only": "ローカルのみ", "Block Google Fonts imports and serve registered files from this site.": "Google Fontsの読み込みを停止し、登録済みファイルをこのサイトから配信します。", "System only": "システムフォントのみ", "Generate no remote imports or local font-face rules.": "外部読み込みもローカルfont-face規則も生成しません。",
+  Registration: "登録", "Local font faces": "ローカルフォントフェイス", "Enable a file and use the same family name in Theme settings. Variable fonts can use a range such as 100 900.": "ファイルを有効にし、テーマ設定でも同じファミリー名を使用します。可変フォントは100 900のような範囲を指定できます。", "Register font face": "フォントフェイスを登録", Family: "ファミリー", Weight: "ウェイト", Style: "スタイル", Normal: "標準", Italic: "イタリック", "No local font files yet.": "ローカルフォントファイルはまだありません。", "Save font settings and regenerate": "フォント設定を保存して再生成",
+  "Select a valid font delivery mode.": "有効なフォント配信モードを選択してください。", "Enter valid local font family, file, weight, and style values.": "有効なローカルフォントのファミリー、ファイル、ウェイト、スタイルを入力してください。", "Use no more than 16 local font faces.": "ローカルフォントフェイスは16件以内にしてください。", "Select a valid local font file.": "有効なローカルフォントファイルを選択してください。", "A font file is required.": "フォントファイルを選択してください。", "Font files must be between 4 bytes and 10 MB.": "フォントファイルは4バイト以上10 MB以下にしてください。", "No more than 32 local font files can be stored.": "保存できるローカルフォントファイルは32件までです。", "The file is not a supported WOFF2, WOFF, TTF, or OTF font.": "対応するWOFF2、WOFF、TTF、OTFフォントではありません。", "The selected local font no longer exists.": "選択したローカルフォントは存在しません。",
+  "Font settings saved and public pages regenerated.": "フォント設定を保存し、公開ページを再生成しました。", "Unable to update font settings.": "フォント設定を更新できませんでした。", "Font file uploaded. Register it before use.": "フォントファイルをアップロードしました。使用前に登録してください。", "Unable to upload font file.": "フォントファイルをアップロードできませんでした。", "Remove this font face before deleting the file.": "ファイルを削除する前にフォントフェイスの登録を解除してください。", "Font file deleted.": "フォントファイルを削除しました。", "Unable to delete font file.": "フォントファイルを削除できませんでした。",
+});
+
+Object.assign(zh, {
+  "Local fonts": "本地字体", "Local Fonts": "本地字体", "Privacy-first typography": "隐私优先字体设置", "Host licensed font files from /assets/fonts and control whether generated CSS may contact Google Fonts.": "从/assets/fonts托管已获许可的字体，并控制生成的CSS是否可以连接Google Fonts。",
+  "Font library": "字体库", "Upload a font file": "上传字体文件", "Font file": "字体文件", "Upload font": "上传字体", "Allowed: WOFF2, WOFF, TTF, OTF. Maximum 10 MB. Confirm that the font license permits web hosting.": "支持WOFF2、WOFF、TTF、OTF，最大10 MB。请确认字体许可允许网页托管。",
+  "Delivery policy": "交付策略", "Font delivery mode": "字体交付模式", "Remote and local": "远程与本地", "Allow configured Google Fonts requests and registered local files.": "允许已配置的Google Fonts请求和已注册的本地文件。", "Local only": "仅本地", "Block Google Fonts imports and serve registered files from this site.": "阻止Google Fonts导入，并从本站提供已注册文件。", "System only": "仅系统字体", "Generate no remote imports or local font-face rules.": "不生成远程导入或本地font-face规则。",
+  Registration: "注册", "Local font faces": "本地字体面", "Enable a file and use the same family name in Theme settings. Variable fonts can use a range such as 100 900.": "启用文件，并在主题设置中使用相同的字体系列名称。可变字体可使用100 900这样的范围。", "Register font face": "注册字体面", Family: "字体系列", Weight: "字重", Style: "样式", Normal: "常规", Italic: "斜体", "No local font files yet.": "暂无本地字体文件。", "Save font settings and regenerate": "保存字体设置并重新生成",
+  "Select a valid font delivery mode.": "请选择有效的字体交付模式。", "Enter valid local font family, file, weight, and style values.": "请输入有效的本地字体系列、文件、字重和样式。", "Use no more than 16 local font faces.": "本地字体面不得超过16个。", "Select a valid local font file.": "请选择有效的本地字体文件。", "A font file is required.": "请选择字体文件。", "Font files must be between 4 bytes and 10 MB.": "字体文件必须在4字节到10 MB之间。", "No more than 32 local font files can be stored.": "最多可存储32个本地字体文件。", "The file is not a supported WOFF2, WOFF, TTF, or OTF font.": "该文件不是受支持的WOFF2、WOFF、TTF或OTF字体。", "The selected local font no longer exists.": "所选本地字体已不存在。",
+  "Font settings saved and public pages regenerated.": "字体设置已保存，公开页面已重新生成。", "Unable to update font settings.": "无法更新字体设置。", "Font file uploaded. Register it before use.": "字体文件已上传，请在使用前注册。", "Unable to upload font file.": "无法上传字体文件。", "Remove this font face before deleting the file.": "删除文件前请先移除该字体面。", "Font file deleted.": "字体文件已删除。", "Unable to delete font file.": "无法删除字体文件。",
 });
 
 export const adminTranslations: Record<Exclude<AdminLocale, "en">, Record<string, string>> = { ja, zh };

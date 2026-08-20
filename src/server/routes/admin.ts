@@ -45,14 +45,25 @@ import { config } from "../../core/config";
 import { AppValidationError } from "../../core/validation";
 import { getContentRevision, listContentRevisions } from "../../core/revisions";
 import { createMenu, deleteMenu, getMenuById, listMenus, updateMenu } from "../../core/menus";
-import { createBlock, deleteBlock, getBlockById, listBlocks, updateBlock } from "../../core/blocks";
+import { contentBlockLayouts, createBlock, deleteBlock, getBlockById, isContentBlockLayout, listBlocks, updateBlock, type ContentBlockLayout } from "../../core/blocks";
+import { blockPreviewScript } from "../../core/blockPreview";
 import { getAiFileProposal, getAiProposalDiff, listAiFileProposals, reviewAiFileProposal } from "../../core/aiProposals";
 import { listOperatorNotifications, markOperatorNotificationRead } from "../../core/notifications";
 import { createPreviewToken } from "../../core/previews";
 import { assignPostToSeries, createSeries, deleteSeries, getPostSeriesId, getSeriesById, listPostSeriesAssignments, listSeries, listSeriesPosts, removePostFromSeries, updateSeries } from "../../core/series";
 import { assignPageToGroup, createPageGroup, deletePageGroup, getPageGroupById, getPageGroupId, listPageGroupAssignments, listPageGroupMembers, listPageGroups, removePageFromGroup, updatePageGroup } from "../../core/pageGroups";
 import type { FormFieldRecord, SessionUser, UserRole } from "../../core/types";
-import { getPostPermalinkPattern, setPostPermalinkPattern } from "../../core/settings";
+import {
+  defaultPublicThemeSettings,
+  getPostPermalinkPattern,
+  getPublicThemeSettings,
+  setPostPermalinkPattern,
+  setPublicThemeSettings,
+  validatePublicThemeSettings,
+  fontDeliveryModes,
+  normalizeLocalFontFaces,
+  type PublicThemeSettings,
+} from "../../core/settings";
 import { isPostPermalinkPattern, postPermalinkExample, postPermalinkPath, postPermalinkPatterns } from "../../core/permalinks";
 import {
   clearNotFoundReports,
@@ -71,6 +82,7 @@ import { approveComment, deleteComment, listComments } from "../../core/comments
 import { scheduleTimestampForInput, scheduleTimestampForStorage } from "../../core/scheduling";
 import { logError } from "../../core/logger";
 import { listStylesheets } from "../../core/assets";
+import { deleteLocalFont, listLocalFontFiles, uploadLocalFont, type LocalFontFile } from "../../core/fonts";
 import { listCategories, updateCategoryStylesheet } from "../../core/categories";
 import {
   contentArchiveMaxBytes,
@@ -103,6 +115,7 @@ import {
 import type { EditorialWorkflowState, PageRecord, PostRecord } from "../../core/types";
 import { createMap, deleteMap, getMapById, listMaps, updateMap, type MapEmbedInput } from "../../core/maps";
 import { getSearchDiagnostics, rebuildSearchIndexes, searchContent } from "../../core/search";
+import { isPublicThemeKitId, publicThemeKits, themeSettingsForKit } from "../../core/themeKits";
 
 function splitCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
@@ -229,6 +242,91 @@ function permalinkSettingsForm(current: (typeof postPermalinkPatterns)[number], 
         <div class="row"><button class="button button-primary" type="submit">Save permalink structure and regenerate</button></div>
       </form>
     </section>`;
+}
+
+function themeSettingsForm(theme: PublicThemeSettings, notice = "") {
+  const colorInput = (name: keyof PublicThemeSettings, label: string) => `
+    <label class="theme-color-control"><span>${label}</span><input type="color" name="${name}" value="${escapeHtml(String(theme[name]))}" /></label>`;
+  const starterKits = publicThemeKits.map((kit) => `<article class="theme-kit-card ${theme.kitId === kit.id ? "theme-kit-card--active" : ""}" style="--kit-paper:${kit.swatches[0]};--kit-ink:${kit.swatches[1]};--kit-accent:${kit.swatches[2]};">
+    <div class="theme-kit-card__swatches" aria-hidden="true"><span></span><span></span><span></span></div>
+    <p class="theme-kit-card__status">${theme.kitId === kit.id ? "Current kit" : kit.bestFor}</p><h3>${kit.name}</h3><p>${kit.description}</p>
+    <form method="post" action="${config.controlPanelPath}/settings/theme/starter"><input type="hidden" name="kitId" value="${kit.id}" /><button class="button ${theme.kitId === kit.id ? "" : "button-primary"}" type="submit" ${theme.kitId === kit.id ? "disabled" : ""}>${theme.kitId === kit.id ? "Applied" : "Apply starter kit"}</button></form>
+  </article>`).join("");
+  return `${notice}
+    <section class="editor-section"><p class="editor-section-kicker">Starter library</p><h2 class="editor-section-title">Theme starter kits</h2><p class="meta">Apply a complete visual direction, then fine-tune individual settings below. Existing Google Fonts URLs are preserved.</p><div class="theme-kit-grid">${starterKits}</div></section>
+    <form id="theme-settings-form" method="post" action="${config.controlPanelPath}/settings/theme" class="theme-workbench">
+      <input type="hidden" name="kitId" value="${theme.kitId}" />
+      <div class="theme-controls form-grid">
+        <section class="editor-section"><p class="editor-section-kicker">Public appearance</p><h2 class="editor-section-title">Theme settings</h2><p class="meta">Define shared design tokens for every generated post, fixed page, list, and form. Saving regenerates public output.</p></section>
+        <section class="editor-section"><p class="editor-section-kicker">Palette</p><h2 class="editor-section-title">Colors</h2><div class="theme-color-grid">
+          ${colorInput("backgroundColor", "Page background")}${colorInput("surfaceColor", "Surface")}${colorInput("textColor", "Primary text")}${colorInput("mutedColor", "Muted text")}${colorInput("borderColor", "Borders")}${colorInput("accentColor", "Accent")}
+        </div></section>
+        <section class="editor-section">
+          <p class="editor-section-kicker">Typography</p><h2 class="editor-section-title">Font families</h2>
+          <div class="grid">
+            <label>Body font<input name="bodyFont" maxlength="80" value="${escapeHtml(theme.bodyFont)}" required /></label>
+            <label>Heading font<input name="headingFont" maxlength="80" value="${escapeHtml(theme.headingFont)}" required /></label>
+            <label>Monospace font<input name="monoFont" maxlength="80" value="${escapeHtml(theme.monoFont)}" required /></label>
+            <label>Body size (px)<input type="number" name="bodyFontSize" min="14" max="20" step="1" value="${theme.bodyFontSize}" required /></label>
+            <label>Line height<input type="number" name="lineHeight" min="1.4" max="2.2" step="0.1" value="${theme.lineHeight}" required /></label>
+          </div>
+          <label>Google Fonts CSS URLs<textarea name="googleFontsCssUrls" rows="5" placeholder="https://fonts.googleapis.com/css2?family=...">${escapeHtml(theme.googleFontsCssUrls.join("\n"))}</textarea><span class="meta">Use one URL per line or separate URLs with a pipe. Commas inside Google Fonts axis definitions remain unchanged. Leave empty to disable remote fonts.</span></label>
+        </section>
+        <section class="editor-section">
+          <p class="editor-section-kicker">Layout rhythm</p><h2 class="editor-section-title">Width and spacing</h2>
+          <div class="grid">
+            <label>Content width (px)<input type="number" name="contentWidth" min="560" max="1200" step="10" value="${theme.contentWidth}" required /></label>
+            <label>Spacing unit (px)<input type="number" name="spacingUnit" min="4" max="16" step="1" value="${theme.spacingUnit}" required /></label>
+            <label>Corner radius (px)<input type="number" name="cornerRadius" min="0" max="24" step="1" value="${theme.cornerRadius}" required /></label>
+          </div>
+        </section>
+        <div class="theme-actions"><button class="button button-primary" type="submit" name="intent" value="save">Save theme and regenerate</button><button class="button" type="submit" name="intent" value="reset" formnovalidate>Restore defaults</button></div>
+      </div>
+      <aside class="theme-preview" aria-label="Theme preview"><p class="theme-preview__label">Live preview</p><div class="theme-preview__page">
+        <p class="theme-preview__kicker">Hybrid-Static-CMS</p><h2>Preview headline</h2><p>This preview shows the shared colors, typography, width, spacing, and corners before public pages are regenerated.</p><blockquote>Readable structure should remain clear in every language.</blockquote><code>const theme = "portable";</code><a href="#theme-settings-form">Example link</a>
+      </div></aside>
+    </form>
+    <script>
+      (() => {
+        const form = document.getElementById("theme-settings-form");
+        const preview = form?.querySelector(".theme-preview__page");
+        if (!form || !preview) return;
+        const value = (name) => form.elements.namedItem(name)?.value || "";
+        const update = () => {
+          preview.style.setProperty("--preview-bg", value("backgroundColor")); preview.style.setProperty("--preview-surface", value("surfaceColor"));
+          preview.style.setProperty("--preview-ink", value("textColor")); preview.style.setProperty("--preview-muted", value("mutedColor"));
+          preview.style.setProperty("--preview-line", value("borderColor")); preview.style.setProperty("--preview-accent", value("accentColor"));
+          preview.style.setProperty("--preview-body-font", JSON.stringify(value("bodyFont")) + ", sans-serif"); preview.style.setProperty("--preview-heading-font", JSON.stringify(value("headingFont")) + ", serif");
+          preview.style.setProperty("--preview-mono-font", JSON.stringify(value("monoFont")) + ", monospace"); preview.style.setProperty("--preview-size", value("bodyFontSize") + "px");
+          preview.style.setProperty("--preview-leading", value("lineHeight")); preview.style.setProperty("--preview-space", value("spacingUnit") + "px"); preview.style.setProperty("--preview-radius", value("cornerRadius") + "px");
+        };
+        form.addEventListener("input", update); update();
+      })();
+    </script>`;
+}
+
+function localFontsPage(theme: PublicThemeSettings, files: LocalFontFile[], notice = "") {
+  const activeFiles = new Set(theme.localFontFaces.map((face) => face.file));
+  const modes = [
+    ["remote", "Remote and local", "Allow configured Google Fonts requests and registered local files."],
+    ["local", "Local only", "Block Google Fonts imports and serve registered files from this site."],
+    ["system", "System only", "Generate no remote imports or local font-face rules."],
+  ].map(([value, title, description]) => `<label class="font-mode-option"><input type="radio" name="fontDeliveryMode" value="${value}" ${theme.fontDeliveryMode === value ? "checked" : ""} /><span><strong>${title}</strong><small>${description}</small></span></label>`).join("");
+  const rows = files.map((file, index) => {
+    const face = theme.localFontFaces.find((item) => item.file === file.name);
+    const safeName = escapeHtml(file.name);
+    return `<tr><td><input type="hidden" name="fontFile" value="${safeName}" /><code>${safeName}</code><span class="meta">${escapeHtml(file.format.toUpperCase())} · ${formatByteSize(file.sizeBytes)}</span></td><td><label class="checkbox-label"><input type="checkbox" name="fontEnabled" value="${safeName}" ${face ? "checked" : ""} /><span>Register font face</span></label></td><td><input name="fontFamily:${safeName}" value="${escapeHtml(face?.family ?? "")}" placeholder="Example Sans" /></td><td><input name="fontWeight:${safeName}" value="${escapeHtml(face?.weight ?? "400")}" placeholder="400 or 100 900" /></td><td><select name="fontStyle:${safeName}"><option value="normal" ${face?.style !== "italic" ? "selected" : ""}>Normal</option><option value="italic" ${face?.style === "italic" ? "selected" : ""}>Italic</option></select></td><td class="cell-actions"><button class="button" form="delete-font-${index}" type="submit" ${activeFiles.has(file.name) ? "disabled title=\"Remove this font face before deleting the file.\"" : ""}>Delete</button></td></tr>`;
+  }).join("");
+  const deleteForms = files.map((file, index) => `<form id="delete-font-${index}" method="post" action="${config.controlPanelPath}/settings/fonts/delete"><input type="hidden" name="file" value="${escapeHtml(file.name)}" /></form>`).join("");
+  return `<div class="content-list-page local-font-page">${notice}
+    <section class="editor-section"><p class="editor-section-kicker">Privacy-first typography</p><h2 class="editor-section-title">Local fonts</h2><p class="meta">Host licensed font files from /assets/fonts and control whether generated CSS may contact Google Fonts.</p></section>
+    <section class="editor-section"><p class="editor-section-kicker">Font library</p><h2 class="editor-section-title">Upload a font file</h2><form method="post" action="${config.controlPanelPath}/settings/fonts/upload" enctype="multipart/form-data" class="font-upload-row"><label>Font file<input type="file" name="font" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" required /></label><button class="button button-primary" type="submit">Upload font</button></form><p class="meta">Allowed: WOFF2, WOFF, TTF, OTF. Maximum 10 MB. Confirm that the font license permits web hosting.</p></section>
+    <form method="post" action="${config.controlPanelPath}/settings/fonts" class="form-grid">
+      <section class="editor-section"><p class="editor-section-kicker">Delivery policy</p><h2 class="editor-section-title">Font delivery mode</h2><div class="font-mode-grid">${modes}</div></section>
+      <section class="editor-section"><div class="section-heading-row"><div><p class="editor-section-kicker">Registration</p><h2 class="editor-section-title">Local font faces</h2></div><span class="meta">${files.length} <span>files</span></span></div><p class="meta">Enable a file and use the same family name in Theme settings. Variable fonts can use a range such as 100 900.</p><table><thead><tr><th>File</th><th>Use</th><th>Family</th><th>Weight</th><th>Style</th><th>Action</th></tr></thead><tbody>${rows || `<tr><td colspan="6">No local font files yet.</td></tr>`}</tbody></table></section>
+      <div class="row"><button class="button button-primary" type="submit">Save font settings and regenerate</button><a class="button" href="${config.controlPanelPath}/settings/theme">Theme settings</a></div>
+    </form>${deleteForms}
+  </div>`;
 }
 
 function userForm(action: string, values: { email?: string; displayName?: string; roles?: string[]; password?: string } = {}, includePassword = true) {
@@ -1201,15 +1299,23 @@ function structuredBuilderScript() {
 }
 
 function blockValuesFromForm(form: FormData) {
+  const requestedLayout = String(form.get("layoutType") ?? "plain");
   return {
     title: String(form.get("title") ?? ""),
     slug: String(form.get("slug") ?? "") || slugify(String(form.get("title") ?? "")),
     status: String(form.get("status") ?? "draft"),
     bodyHtml: String(form.get("bodyHtml") ?? ""),
+    layoutType: requestedLayout as ContentBlockLayout,
   };
 }
 
 function blockForm(action: string, values?: Record<string, string>) {
+  const selectedLayout = isContentBlockLayout(values?.layoutType) ? values.layoutType : "plain";
+  const layoutOptions = contentBlockLayouts.map((layout) => `<label class="block-layout-option">
+    <input type="radio" name="layoutType" value="${layout.id}" ${selectedLayout === layout.id ? "checked" : ""} />
+    <span class="block-layout-option__visual block-layout-option__visual--${layout.id}" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="block-layout-option__copy"><strong>${layout.name}</strong><small>${layout.description}</small></span>
+  </label>`).join("");
   return `
     <form method="post" action="${action}" class="editor-form form-grid">
       <section class="editor-section">
@@ -1221,10 +1327,26 @@ function blockForm(action: string, values?: Record<string, string>) {
         </div>
       </section>
       <section class="editor-section">
+        <p class="editor-section-kicker">Visual structure</p>
+        <h2 class="editor-section-title">Block layout</h2>
+        <p class="meta">Choose how this reusable content responds inside generated posts and fixed pages.</p>
+        <fieldset class="block-layout-picker"><legend class="sr-only">Block layout</legend>${layoutOptions}</fieldset>
+      </section>
+      <section class="editor-section">
         <p class="editor-section-kicker">Reusable content</p>
         <h2 class="editor-section-title">Block body</h2>
-        <label>Body HTML <textarea name="bodyHtml" required>${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>
-        ${richEditorTools()}
+        <div class="block-layout-workbench">
+          <div class="block-layout-editor"><label>Body HTML <textarea name="bodyHtml" rows="14" required>${escapeHtml(values?.bodyHtml ?? "")}</textarea></label>${richEditorTools()}</div>
+          <aside class="block-preview" data-block-preview>
+            <div class="block-preview__heading"><div><p class="editor-section-kicker">Responsive preview</p><h3>Generated block</h3></div><div class="block-preview__sizes" role="group" aria-label="Preview width">
+              <button class="button is-active" type="button" data-preview-size="desktop" aria-pressed="true">Desktop</button>
+              <button class="button" type="button" data-preview-size="tablet" aria-pressed="false">Tablet</button>
+              <button class="button" type="button" data-preview-size="mobile" aria-pressed="false">Mobile</button>
+            </div></div>
+            <div class="block-preview__viewport" data-preview-viewport="desktop"><iframe title="Block preview" sandbox></iframe></div>
+            <p class="meta">Scripts, forms, and external requests are disabled in this preview.</p>
+          </aside>
+        </div>
       </section>
       <section class="editor-section editor-section-compact">
         <p class="editor-section-kicker">Placement</p>
@@ -1244,6 +1366,7 @@ function blockForm(action: string, values?: Record<string, string>) {
       </details>
       <div class="row"><button class="button button-primary" type="submit">Save block</button></div>
     </form>
+    ${blockPreviewScript()}
   `;
 }
 
@@ -2311,6 +2434,118 @@ adminRoutes.post("/settings/permalinks", async (c) => {
     ipAddress: requestIp(c),
   });
   return c.redirect(`${config.controlPanelPath}/settings/permalinks?success=${encodeURIComponent("Permalink structure saved and public pages regenerated.")}`);
+});
+
+adminRoutes.get("/settings/theme", async (c) => {
+  return c.html(adminLayout("Theme Settings", c.get("sessionUser"), themeSettingsForm(await getPublicThemeSettings(config.googleFontsCssUrls), queryNotice(c)), "wide-list"));
+});
+
+adminRoutes.post("/settings/theme", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const form = await c.req.formData();
+  const previous = await getPublicThemeSettings(config.googleFontsCssUrls);
+  try {
+    const requested = form.get("intent") === "reset" ? { ...defaultPublicThemeSettings(config.googleFontsCssUrls), fontDeliveryMode: previous.fontDeliveryMode, localFontFaces: previous.localFontFaces } : validatePublicThemeSettings({
+      kitId: form.get("kitId"),
+      backgroundColor: form.get("backgroundColor"), surfaceColor: form.get("surfaceColor"), textColor: form.get("textColor"), mutedColor: form.get("mutedColor"), borderColor: form.get("borderColor"), accentColor: form.get("accentColor"),
+      bodyFont: form.get("bodyFont"), headingFont: form.get("headingFont"), monoFont: form.get("monoFont"), googleFontsCssUrls: form.get("googleFontsCssUrls"),
+      fontDeliveryMode: previous.fontDeliveryMode, localFontFaces: previous.localFontFaces,
+      contentWidth: form.get("contentWidth"), spacingUnit: form.get("spacingUnit"), bodyFontSize: form.get("bodyFontSize"), lineHeight: form.get("lineHeight"), cornerRadius: form.get("cornerRadius"),
+    });
+    await setPublicThemeSettings(requested);
+    try { await renderPublishedArtifacts(); } catch (error) {
+      await setPublicThemeSettings(previous); await renderPublishedArtifacts().catch(() => undefined); throw error;
+    }
+    await writeAuditLog({ actorUserId: user.id, action: "settings.theme_update", targetType: "setting", summary: form.get("intent") === "reset" ? "Restored the default public theme and regenerated public artifacts." : "Updated the public theme and regenerated public artifacts.", ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/settings/theme?success=${encodeURIComponent(form.get("intent") === "reset" ? "Default theme restored and public pages regenerated." : "Theme saved and public pages regenerated.")}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to update theme settings.";
+    return c.html(adminLayout("Theme Settings", user, themeSettingsForm(previous, noticeCard(message, "error")), "wide-list"), error instanceof AppValidationError ? 400 : 500);
+  }
+});
+
+adminRoutes.post("/settings/theme/starter", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const form = await c.req.formData();
+  const kitId = form.get("kitId");
+  const previous = await getPublicThemeSettings(config.googleFontsCssUrls);
+  if (!isPublicThemeKitId(kitId)) return c.html(adminLayout("Theme Settings", user, themeSettingsForm(previous, noticeCard("Select a valid theme starter kit.", "error")), "wide-list"), 400);
+  const requested = themeSettingsForKit(kitId, previous.googleFontsCssUrls, { fontDeliveryMode: previous.fontDeliveryMode, localFontFaces: previous.localFontFaces });
+  try {
+    await setPublicThemeSettings(requested);
+    try { await renderPublishedArtifacts(); } catch (error) {
+      await setPublicThemeSettings(previous); await renderPublishedArtifacts().catch(() => undefined); throw error;
+    }
+    await writeAuditLog({ actorUserId: user.id, action: "settings.theme_starter_apply", targetType: "setting", summary: `Applied the ${kitId} theme starter kit and regenerated public artifacts.`, ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/settings/theme?success=${encodeURIComponent("Theme starter kit applied and public pages regenerated.")}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to apply theme starter kit.";
+    return c.html(adminLayout("Theme Settings", user, themeSettingsForm(previous, noticeCard(message, "error")), "wide-list"), 500);
+  }
+});
+
+adminRoutes.get("/settings/fonts", async (c) => {
+  const [theme, files] = await Promise.all([getPublicThemeSettings(config.googleFontsCssUrls), listLocalFontFiles()]);
+  return c.html(adminLayout("Local Fonts", c.get("sessionUser"), localFontsPage(theme, files, queryNotice(c)), "wide-list"));
+});
+
+adminRoutes.post("/settings/fonts", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const form = await c.req.formData();
+  const previous = await getPublicThemeSettings(config.googleFontsCssUrls);
+  try {
+    const mode = String(form.get("fontDeliveryMode") ?? "");
+    if (!fontDeliveryModes.includes(mode as (typeof fontDeliveryModes)[number])) throw new AppValidationError("Select a valid font delivery mode.");
+    const files = await listLocalFontFiles();
+    const available = new Set(files.map((file) => file.name));
+    const enabled = new Set(form.getAll("fontEnabled").map(String));
+    const requestedFaces = [...enabled].map((file) => {
+      if (!available.has(file)) throw new AppValidationError("The selected local font no longer exists.");
+      return { file, family: String(form.get(`fontFamily:${file}`) ?? ""), weight: String(form.get(`fontWeight:${file}`) ?? ""), style: String(form.get(`fontStyle:${file}`) ?? "") };
+    });
+    const requested = { ...previous, fontDeliveryMode: mode as (typeof fontDeliveryModes)[number], localFontFaces: normalizeLocalFontFaces(requestedFaces, true) };
+    await setPublicThemeSettings(requested);
+    try { await renderPublishedArtifacts(); } catch (error) { await setPublicThemeSettings(previous); await renderPublishedArtifacts().catch(() => undefined); throw error; }
+    await writeAuditLog({ actorUserId: user.id, action: "settings.fonts_update", targetType: "setting", summary: `Updated font delivery mode to ${mode} with ${requested.localFontFaces.length} local font faces.`, ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/settings/fonts?success=${encodeURIComponent("Font settings saved and public pages regenerated.")}`);
+  } catch (error) {
+    const files = await listLocalFontFiles();
+    const message = error instanceof Error ? error.message : "Unable to update font settings.";
+    return c.html(adminLayout("Local Fonts", user, localFontsPage(previous, files, noticeCard(message, "error")), "wide-list"), error instanceof AppValidationError ? 400 : 500);
+  }
+});
+
+adminRoutes.post("/settings/fonts/upload", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  try {
+    const file = (await c.req.formData()).get("font");
+    if (!(file instanceof File)) throw new AppValidationError("A font file is required.");
+    const name = await uploadLocalFont(file);
+    await writeAuditLog({ actorUserId: user.id, action: "settings.font_upload", targetType: "public_asset", targetId: name, summary: `Uploaded local font file "${name}".`, ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/settings/fonts?success=${encodeURIComponent("Font file uploaded. Register it before use.")}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to upload font file.";
+    return c.redirect(`${config.controlPanelPath}/settings/fonts?error=${encodeURIComponent(message)}`);
+  }
+});
+
+adminRoutes.post("/settings/fonts/delete", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const file = String((await c.req.formData()).get("file") ?? "");
+  const theme = await getPublicThemeSettings(config.googleFontsCssUrls);
+  if (theme.localFontFaces.some((face) => face.file === file)) return c.redirect(`${config.controlPanelPath}/settings/fonts?error=${encodeURIComponent("Remove this font face before deleting the file.")}`);
+  try {
+    await deleteLocalFont(file);
+    await writeAuditLog({ actorUserId: user.id, action: "settings.font_delete", targetType: "public_asset", targetId: file, summary: `Deleted local font file "${file}".`, ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/settings/fonts?success=${encodeURIComponent("Font file deleted.")}`);
+  } catch (error) {
+    return c.redirect(`${config.controlPanelPath}/settings/fonts?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to delete font file.")}`);
+  }
 });
 
 adminRoutes.get("/posts", async (c) => {
@@ -3653,22 +3888,23 @@ adminRoutes.get("/blocks", async (c) => {
     ${queryNotice(c)}
     <div class="row" style="margin-bottom:16px;"><a class="button button-primary" href="${config.controlPanelPath}/blocks/new">New block</a></div>
     <table>
-      <thead><tr><th>Title</th><th>Slug</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Title</th><th>Slug</th><th>Layout</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${blocks.map((block) => `<tr>
           <td class="cell-long">${escapeHtml(block.title)}</td>
           <td><code>${escapeHtml(block.slug)}</code></td>
+          <td>${escapeHtml(contentBlockLayouts.find((layout) => layout.id === block.layoutType)?.name ?? "Plain")}</td>
           <td>${escapeHtml(block.status)}</td>
           <td>${adminDate(block.updatedAt)}</td>
           <td class="cell-actions"><div class="row"><a class="button" href="${config.controlPanelPath}/blocks/${block.id}/edit">Edit</a><form method="post" action="${config.controlPanelPath}/blocks/${block.id}/delete"><button class="button" type="submit">Delete</button></form></div></td>
-        </tr>`).join("") || "<tr><td colspan='5'>No blocks yet.</td></tr>"}
+        </tr>`).join("") || "<tr><td colspan='6'>No blocks yet.</td></tr>"}
       </tbody>
     </table>
   `;
   return c.html(adminLayout("Reusable Blocks", user, body));
 });
 
-adminRoutes.get("/blocks/new", (c) => c.html(adminLayout("New Block", c.get("sessionUser"), queryNotice(c) + blockForm(`${config.controlPanelPath}/blocks`))));
+adminRoutes.get("/blocks/new", (c) => c.html(adminLayout("New Block", c.get("sessionUser"), queryNotice(c) + blockForm(`${config.controlPanelPath}/blocks`), "wide-list")));
 
 adminRoutes.post("/blocks", async (c) => {
   const user = c.get("sessionUser");
@@ -3676,12 +3912,12 @@ adminRoutes.post("/blocks", async (c) => {
   const form = await c.req.formData();
   const values = blockValuesFromForm(form);
   try {
-    const block = await createBlock({ title: values.title, slug: values.slug, bodyHtml: values.bodyHtml, status: values.status as "draft" | "published" }, user.id);
+    const block = await createBlock({ title: values.title, slug: values.slug, bodyHtml: values.bodyHtml, layoutType: values.layoutType, status: values.status as "draft" | "published" }, user.id);
     await writeAuditLog({ actorUserId: user.id, action: "block.create", targetType: "content_block", targetId: block?.id ?? null, summary: `Created block "${values.title}".`, ipAddress: requestIp(c) });
     await renderPublishedArtifacts();
     return c.redirect(`${config.controlPanelPath}/blocks?success=${encodeURIComponent("Block saved.")}`);
   } catch (error) {
-    if (error instanceof AppValidationError) return c.html(adminLayout("New Block", user, noticeCard(error.message, "error") + blockForm(`${config.controlPanelPath}/blocks`, values)), 400);
+    if (error instanceof AppValidationError) return c.html(adminLayout("New Block", user, noticeCard(error.message, "error") + blockForm(`${config.controlPanelPath}/blocks`, values), "wide-list"), 400);
     throw error;
   }
 });
@@ -3690,8 +3926,8 @@ adminRoutes.get("/blocks/:id/edit", async (c) => {
   const block = await getBlockById(Number(c.req.param("id")));
   if (!block) return c.text("Not found", 404);
   return c.html(adminLayout("Edit Block", c.get("sessionUser"), queryNotice(c) + blockForm(`${config.controlPanelPath}/blocks/${block.id}`, {
-    title: block.title, slug: block.slug, status: block.status, bodyHtml: block.bodyHtml,
-  })));
+    title: block.title, slug: block.slug, status: block.status, bodyHtml: block.bodyHtml, layoutType: block.layoutType,
+  }), "wide-list"));
 });
 
 adminRoutes.post("/blocks/:id", async (c) => {
@@ -3700,12 +3936,12 @@ adminRoutes.post("/blocks/:id", async (c) => {
   const form = await c.req.formData();
   const values = blockValuesFromForm(form);
   try {
-    const block = await updateBlock(Number(c.req.param("id")), { title: values.title, slug: values.slug, bodyHtml: values.bodyHtml, status: values.status as "draft" | "published" });
+    const block = await updateBlock(Number(c.req.param("id")), { title: values.title, slug: values.slug, bodyHtml: values.bodyHtml, layoutType: values.layoutType, status: values.status as "draft" | "published" });
     await writeAuditLog({ actorUserId: user.id, action: "block.update", targetType: "content_block", targetId: c.req.param("id"), summary: `Updated block "${values.title}".`, ipAddress: requestIp(c) });
     await renderPublishedArtifacts();
     return c.redirect(`${config.controlPanelPath}/blocks/${block?.id ?? c.req.param("id")}/edit?success=${encodeURIComponent("Block updated.")}`);
   } catch (error) {
-    if (error instanceof AppValidationError) return c.html(adminLayout("Edit Block", user, noticeCard(error.message, "error") + blockForm(`${config.controlPanelPath}/blocks/${c.req.param("id")}`, values)), 400);
+    if (error instanceof AppValidationError) return c.html(adminLayout("Edit Block", user, noticeCard(error.message, "error") + blockForm(`${config.controlPanelPath}/blocks/${c.req.param("id")}`, values), "wide-list"), 400);
     throw error;
   }
 });

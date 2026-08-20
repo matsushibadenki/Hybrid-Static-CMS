@@ -14,7 +14,7 @@ import type { PageRecord, PostRecord } from "./types";
 import { listPostSeriesNavigation, type SeriesNavigation } from "./series";
 import { publicTranslations } from "./i18n";
 import { postArtifactRelativePath, postPermalinkPath, type PostPermalinkPattern } from "./permalinks";
-import { getPostPermalinkPattern } from "./settings";
+import { getPostPermalinkPattern, getPublicThemeSettings, publicThemeCss } from "./settings";
 import { listApprovedCommentsForPosts, type PostCommentRecord } from "./comments";
 import { ensurePublicAssetDirectories, stylesheetPublicUrl } from "./assets";
 import { expandPublishedMaps, listMaps, renderMapsClientScript } from "./maps";
@@ -39,23 +39,6 @@ type SeoMeta = {
 
 function safeJsonLd(value: string) {
   return value.replaceAll("</script>", "<\\/script>");
-}
-
-function googleFontLinks() {
-  const urls = config.googleFontsCssUrls.filter((value) => {
-    try {
-      const url = new URL(value);
-      return url.protocol === "https:" && (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com");
-    } catch {
-      return false;
-    }
-  });
-
-  return `
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    ${urls.map((url) => `<link rel="stylesheet" href="${escapeHtml(url)}" />`).join("\n    ")}
-  `;
 }
 
 function pagePublicPath(slug: string) {
@@ -105,6 +88,7 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
   const stylesheets = [...new Set(stylesheetUrls)]
     .map((url) => `<link rel="stylesheet" href="${escapeHtml(url)}" />`)
     .join("\n    ");
+  const themeStylesheet = `<link rel="stylesheet" href="/cms/theme.css" />`;
   const fallback = `<!doctype html>
 <html lang="${config.publicLocale === "zh" ? "zh-CN" : config.publicLocale}">
   <head>
@@ -121,10 +105,6 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
     ${keywords}
     ${robots}
     ${jsonLd}
-    ${googleFontLinks()}
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script>
       window.MathJax = {
         tex: {
@@ -660,6 +640,7 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
       ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: #bbb; }
     </style>
+    ${themeStylesheet}
     ${stylesheets}
   </head>
   <body>
@@ -677,8 +658,12 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
   try {
     const template = readFileSync(path.join(config.templateDir, "page.html"), "utf8");
     const hasStylesheetSlot = template.includes("{{stylesheets}}");
-    const rendered = template
+    const hasThemeSlot = template.includes("{{theme}}");
+    let rendered = template
       .replaceAll("{{lang}}", config.publicLocale === "zh" ? "zh-CN" : config.publicLocale)
+      .replaceAll("{{siteName}}", escapeHtml(config.appName))
+      .replaceAll("{{siteUrl}}", escapeHtml(config.appUrl))
+      .replaceAll("{{year}}", String(new Date().getFullYear()))
       .replaceAll("{{title}}", escapeHtml(meta.title))
       .replaceAll("{{description}}", description)
       .replaceAll("{{canonical}}", canonical)
@@ -690,11 +675,12 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
       .replaceAll("{{keywords}}", keywords)
       .replaceAll("{{robots}}", robots)
       .replaceAll("{{jsonLd}}", jsonLd)
+      .replaceAll("{{theme}}", themeStylesheet)
       .replaceAll("{{stylesheets}}", stylesheets)
       .replaceAll("{{body}}", body);
-    return hasStylesheetSlot || !stylesheets
-      ? rendered
-      : rendered.replace("</head>", `    ${stylesheets}\n  </head>`);
+    if (!hasThemeSlot) rendered = rendered.replace(/<head([^>]*)>/i, (head) => `${head}\n    ${themeStylesheet}`);
+    if (!hasStylesheetSlot && stylesheets) rendered = rendered.replace("</head>", `    ${stylesheets}\n  </head>`);
+    return rendered;
   } catch {
     return fallback;
   }
@@ -1176,6 +1162,7 @@ export async function renderPublishedArtifacts() {
   await ensurePublicAssetDirectories();
   await emitHook("beforeRender", { outputDir: config.cmsOutputDir });
   const permalinkPattern = await getPostPermalinkPattern();
+  const theme = await getPublicThemeSettings(config.googleFontsCssUrls);
   const latest = await listPosts({ page: 1, limit: 5, status: "published" });
   const full = await listAllPublishedPosts();
   const pages = await listAllPublishedPages();
@@ -1186,6 +1173,7 @@ export async function renderPublishedArtifacts() {
   await mkdir(path.join(config.cmsOutputDir, "posts"), { recursive: true });
   await mkdir(pageDir, { recursive: true });
   await mkdir(cmsPageDir, { recursive: true });
+  await writeArtifact(path.join(config.cmsOutputDir, "theme.css"), publicThemeCss(theme));
 
   await writeArtifact(path.join(config.cmsOutputDir, "posts", "latest.html"), renderFragment(latest.items, permalinkPattern));
   await writeArtifact(path.join(config.cmsOutputDir, "posts", "list.html"), renderList("All Posts", full.items, undefined, permalinkPattern));

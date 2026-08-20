@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    {{description}}
+    {{canonical}}
+    {{ogTitle}}
+    {{ogDescription}}
+    {{ogType}}
+    {{ogUrl}}
+    {{ogImage}}
+    {{keywords}}
+    {{robots}}
+    {{jsonLd}}
+    {{theme}}
+    <link rel="stylesheet" href="/assets/css/site.css" />
+    {{stylesheets}}
+    <style>
+      .starter-shell { margin: 0 auto; max-width: var(--content-width); padding: calc(var(--space-unit) * 3) clamp(16px, 4vw, 40px); }
+      .starter-header { align-items: baseline; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; padding-bottom: calc(var(--space-unit) * 2); }
+      .starter-brand { color: var(--ink); font-family: var(--font-heading); font-size: 1.2rem; font-weight: 700; text-decoration: none; }
+      .starter-year { color: var(--ink-muted); font-size: .8rem; }
+      .starter-content { padding-block: calc(var(--space-unit) * 3); }
+      .starter-footer { border-top: 1px solid var(--line); color: var(--ink-muted); font-size: .8rem; padding-top: calc(var(--space-unit) * 2); text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="starter-shell">
+      <header class="starter-header"><a class="starter-brand" href="{{siteUrl}}/">{{siteName}}</a><span class="starter-year">{{year}}</span></header>
+      <main class="starter-content">{{body}}</main>
+      <footer class="starter-footer">{{siteName}} &copy; {{year}}</footer>
+    </div>
+  </body>
+</html>
