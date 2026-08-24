@@ -1,5 +1,21 @@
 # Upgrade Guide
 
+## Bun 1.4.0 runtime baseline
+
+The Docker image, GitHub Actions runtime, and `packageManager` declaration are
+pinned to Bun 1.4.0. Rebuild the application image with `--pull` when upgrading
+from Bun 1.3 so Docker fetches the new base image rather than reusing a cached
+layer:
+
+```bash
+docker compose build --pull app
+docker compose up -d app
+docker compose exec app bun --version
+```
+
+The final command should report `1.4.0`. For a non-container installation,
+upgrade Bun first and confirm `bun --version` before installing dependencies.
+
 1. Read the release notes and inspect the migration files added since the current version.
 2. Back up PostgreSQL with `bun run db:backup`.
 3. Back up `public_html`, `storage/uploads`, `templates`, `plugins`, and `.env` using protected storage.

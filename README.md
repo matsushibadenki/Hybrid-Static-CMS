@@ -89,6 +89,9 @@ Operator-facing notes now live under `docs/README.md`.
 
 ## Quick start
 
+Use Bun 1.4.0 for local development. Docker deployments use the pinned
+`oven/bun:1.4.0` image.
+
 1. Install dependencies.
 
 ```bash

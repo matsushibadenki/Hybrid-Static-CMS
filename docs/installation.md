@@ -4,7 +4,7 @@
 
 Before installing Hybrid-Static-CMS, the operator should understand these prerequisites:
 
-- Bun runtime is required for the application server
+- Bun 1.4.0 is required for the application server; Docker deployments use the pinned `oven/bun:1.4.0` image
 - TypeScript 7-compatible tooling is expected for local development
 - PostgreSQL 18 is required for persistence and full-text search
 - PostgreSQL client tools (`pg_dump` and `psql`) are required for the optional backup and restore commands
@@ -86,6 +86,15 @@ Important settings:
 - `GOOGLE_FONTS_CSS_URLS`: pipe-separated (`|`) Google Fonts CSS URLs for generated static pages; the bundled default includes Google Sans Flex, Noto Sans JP, Noto Sans Mono, Noto Serif JP, Roboto, Zen Maru Gothic, and Material Symbols Outlined
 
 ## Local setup
+
+Confirm that the local runtime matches the project baseline:
+
+```bash
+bun --version
+```
+
+The expected output is `1.4.0`. Keeping local development, CI, and production on
+the same patch version avoids runtime-specific differences.
 
 1. Install dependencies.
 
