@@ -12,6 +12,7 @@ function archiveFixture(): ContentArchive {
     version: contentArchiveVersion,
     exportedAt: "2026-08-05T00:00:00.000Z",
     posts: [{
+      locale: "en", translationGroup: "00000000-0000-4000-8000-000000000001",
       title: "Portable post", slug: "portable-post", excerpt: null, bodyMd: "Body", bodyHtml: "<p>Body</p>",
       sourceStatus: "published", publishedAt: "2026-08-05T00:00:00.000Z",
       seoTitle: null, seoDescription: null, seoCanonicalUrl: null, seoOgImage: null, seoKeywords: null,
@@ -19,6 +20,7 @@ function archiveFixture(): ContentArchive {
       commentsPolicy: "inherit", seriesSlug: "release-notes",
     }],
     pages: [{
+      locale: "ja", translationGroup: "00000000-0000-4000-8000-000000000002",
       title: "Portable page", slug: "portable-page", excerpt: null, bodyMd: null, bodyHtml: "",
       sourceStatus: "draft", publishedAt: null,
       seoTitle: null, seoDescription: null, seoCanonicalUrl: null, seoOgImage: null, seoKeywords: null,
@@ -41,7 +43,7 @@ describe("content portability archive", () => {
     expect(() => parseContentArchive(JSON.stringify(unsafe))).toThrow("single hyphens");
     const duplicate = archiveFixture();
     duplicate.posts.push({ ...duplicate.posts[0] });
-    expect(() => parseContentArchive(JSON.stringify(duplicate))).toThrow("duplicate post slugs");
+    expect(() => parseContentArchive(JSON.stringify(duplicate))).toThrow("duplicate post locale and slug pairs");
   });
 
   test("rejects non-JSON input and excessive item counts", () => {

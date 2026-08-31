@@ -1,7 +1,11 @@
 import { config } from "../core/config";
 
 export function postgresCommandEnvironment(databaseName?: string) {
-  const url = new URL(config.databaseUrl);
+  return postgresCommandEnvironmentForUrl(config.databaseUrl, databaseName);
+}
+
+export function postgresCommandEnvironmentForUrl(databaseUrl: string, databaseName?: string) {
+  const url = new URL(databaseUrl);
   const environment = { ...process.env } as Record<string, string | undefined>;
 
   environment.PGHOST = url.hostname;

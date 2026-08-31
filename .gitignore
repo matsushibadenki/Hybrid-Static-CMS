@@ -76,6 +76,8 @@ public_html/cms/posts/page/*
 !public_html/cms/posts/page/.gitkeep
 public_html/cms/pages/*
 !public_html/cms/pages/.gitkeep
+public_html/cms/ja/
+public_html/cms/zh/
 public_html/cms/forms/*
 !public_html/cms/forms/.gitkeep
 public_html/cms/menus/*

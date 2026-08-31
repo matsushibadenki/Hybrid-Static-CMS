@@ -30,6 +30,8 @@ const submissionForm: FormRecord = {
 function postFixture(id: number, title: string, slug: string): PostRecord {
   return {
     id,
+    locale: "en",
+    translationGroup: "00000000-0000-4000-8000-000000000001",
     title,
     slug,
     excerpt: null,
@@ -182,6 +184,17 @@ describe("content formatting", () => {
     expect(html).toContain('href="/assets/css/categories/news.css"');
     expect(html).not.toContain("private.css");
     expect(html.indexOf("</style>")).toBeLessThan(html.indexOf('href="/assets/css/categories/news.css"'));
+  });
+
+  test("emits locale metadata and translation links for published content", () => {
+    const post = { ...postFixture(9, "日本語の記事", "same-slug"), locale: "ja" as const };
+    const html = renderPost(post, null, "post_name", [], post.bodyHtml, [
+      { locale: "en", title: "English article", url: "https://example.test/cms/posts/same-slug.html" },
+      { locale: "ja", title: post.title, url: "https://example.test/cms/ja/posts/same-slug.html" },
+    ]);
+    expect(html).toContain('lang="ja"');
+    expect(html).toContain('hreflang="ja"');
+    expect(html).toContain('href="https://example.test/cms/ja/posts/same-slug.html"');
   });
 
   test("renders approved comments without exposing email addresses", () => {

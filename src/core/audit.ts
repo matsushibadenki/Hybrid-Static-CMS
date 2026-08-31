@@ -3,6 +3,8 @@ import { sql } from "./db";
 import { config } from "./config";
 import { createOperatorNotification } from "./notifications";
 import { emitHook } from "./hooks";
+import { notifyAuditWebhook } from "./webhooks";
+import { incrementOperationalMetric, metricForAuditAction } from "./metrics";
 
 const notificationActions = new Set([
   "auth.login",
@@ -79,6 +81,9 @@ export async function writeAuditLog(input: {
     await createOperatorNotification({ level, action: input.action, message: input.summary }).catch(() => undefined);
   }
   await emitHook("audit", { ...input });
+  notifyAuditWebhook(input);
+  const metric = metricForAuditAction(input.action);
+  if (metric) void incrementOperationalMetric(metric).catch(() => undefined);
 }
 
 export async function listAuditLogs(limit = 100, search?: string, action?: string) {

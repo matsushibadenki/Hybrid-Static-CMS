@@ -1,5 +1,6 @@
 export type UserRole = "owner" | "admin" | "editor" | "author" | "viewer" | "ai_agent";
 export type EditorialWorkflowState = "draft" | "in_review" | "changes_requested" | "approved";
+export type ContentLocale = "en" | "ja" | "zh";
 
 export type SessionUser = {
   id: number;
@@ -12,6 +13,8 @@ export type SessionUser = {
 
 export type PostRecord = {
   id: number;
+  locale: ContentLocale;
+  translationGroup: string;
   title: string;
   slug: string;
   excerpt: string | null;
@@ -61,10 +64,14 @@ export type PostInput = {
   categorySlugs?: string[];
   tagSlugs?: string[];
   seriesId?: number | null;
+  locale?: ContentLocale;
+  translationGroup?: string;
 };
 
 export type PageRecord = {
   id: number;
+  locale: ContentLocale;
+  translationGroup: string;
   title: string;
   slug: string;
   excerpt: string | null;
@@ -109,6 +116,8 @@ export type PageInput = {
   publishedAt?: string | null;
   pageGroupId?: number | null;
   stylesheetPath?: string | null;
+  locale?: ContentLocale;
+  translationGroup?: string;
 };
 
 export type FormFieldType = "text" | "email" | "textarea" | "select" | "checkbox";

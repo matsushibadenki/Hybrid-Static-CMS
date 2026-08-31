@@ -3,12 +3,23 @@ import { parseScheduleTimeZone } from "./scheduling";
 import type { LogLevel } from "./logger";
 import type { UserRole } from "./types";
 
+export type MailDeliveryMode = "smtp" | "sendmail" | "http" | "disabled";
+
 export type AppConfig = {
   port: number;
   appUrl: string;
   appName: string;
   publicLocale: "en" | "ja" | "zh";
   scheduleTimeZone: string;
+  schedulerLockEnabled: boolean;
+  schedulerLockName: string;
+  backupDirectory: string;
+  backupAutomationEnabled: boolean;
+  backupScheduleHourUtc: number;
+  backupRetentionCount: number;
+  backupOffsiteRclonePath: string | null;
+  backupOffsiteRcloneRemote: string | null;
+  backupRestoreDrillDatabaseUrl: string | null;
   sessionSecret: string;
   accountEncryptionKey: string;
   databaseUrl: string;
@@ -51,6 +62,10 @@ export type AppConfig = {
   formRateLimitAttempts: number;
   formRateLimitWindowSeconds: number;
   formSubmissionRetentionDays: number;
+  databaseAuditLogRetentionDays: number;
+  databaseReadNotificationRetentionDays: number;
+  databaseSlowQuerySeconds: number;
+  metricsRetentionDays: number;
   smtpHost: string | null;
   smtpPort: number;
   smtpTls: boolean;
@@ -59,12 +74,22 @@ export type AppConfig = {
   smtpPassword: string | null;
   smtpFrom: string | null;
   formNotificationEmail: string | null;
+  mailDeliveryMode: MailDeliveryMode;
+  mailFrom: string | null;
+  mailTo: string | null;
+  mailHttpApiUrl: string | null;
+  mailHttpApiToken: string | null;
+  mailSendmailPath: string;
+  mailSendmailArgs: string[];
   logLevel: LogLevel;
   logFormat: "json" | "text";
   operatorAlertWebhookUrl: string | null;
   operatorAlertWebhookSecret: string | null;
   operatorAlertMinLevel: LogLevel;
   operatorAlertTimeoutMs: number;
+  outboundWebhookUrl: string | null;
+  outboundWebhookSecret: string | null;
+  outboundWebhookTimeoutMs: number;
 };
 
 function requireEnv(name: string, fallback?: string) {
@@ -90,6 +115,25 @@ export function parsePublicLocale(value: string | undefined): AppConfig["publicL
 
 export function parseLogLevel(value: string | undefined, fallback: LogLevel = "info"): LogLevel {
   return value === "debug" || value === "info" || value === "warn" || value === "error" ? value : fallback;
+}
+
+export function parseMailDeliveryMode(value: string | undefined): MailDeliveryMode {
+  return value === "disabled" || value === "sendmail" || value === "http" || value === "smtp" ? value : "smtp";
+}
+
+export function parseCommandArguments(value: string | undefined, fallback: string[] = []) {
+  if (value === undefined) return fallback;
+  return value.trim().split(/\s+/).filter((argument) => argument.length > 0 && argument.length <= 256 && !argument.includes("\0"));
+}
+
+export function parseRcloneRemote(value: string | undefined) {
+  const candidate = value?.trim() || "";
+  return /^[A-Za-z0-9][A-Za-z0-9_.-]*:[^\0\r\n]+$/.test(candidate) ? candidate.replace(/\/+$/, "") : null;
+}
+
+function parseAbsoluteExecutable(value: string | undefined) {
+  const candidate = value?.trim();
+  return candidate && path.isAbsolute(candidate) ? candidate : null;
 }
 
 function parseHttpsServiceUrl(value: string | undefined, fallback: string, requiredTokens: string[] = []) {
@@ -129,6 +173,15 @@ export const config: AppConfig = {
   appName: requireEnv("APP_NAME", "Hybrid-Static-CMS"),
   publicLocale: parsePublicLocale(process.env.PUBLIC_LOCALE),
   scheduleTimeZone: parseScheduleTimeZone(process.env.SCHEDULE_TIME_ZONE),
+  schedulerLockEnabled: process.env.SCHEDULER_LOCK_ENABLED !== "false",
+  schedulerLockName: process.env.SCHEDULER_LOCK_NAME?.trim().slice(0, 200) || "hybrid-static-cms:scheduler",
+  backupDirectory: path.resolve(requireEnv("BACKUP_DIRECTORY", path.join(process.cwd(), "storage", "backups"))),
+  backupAutomationEnabled: process.env.BACKUP_AUTOMATION_ENABLED === "true",
+  backupScheduleHourUtc: parseConfigNumber(process.env.BACKUP_SCHEDULE_HOUR_UTC, 3, { min: 0, max: 23 }),
+  backupRetentionCount: parseConfigNumber(process.env.BACKUP_RETENTION_COUNT, 14, { min: 1, max: 365 }),
+  backupOffsiteRclonePath: parseAbsoluteExecutable(process.env.BACKUP_OFFSITE_RCLONE_PATH),
+  backupOffsiteRcloneRemote: parseRcloneRemote(process.env.BACKUP_OFFSITE_RCLONE_REMOTE),
+  backupRestoreDrillDatabaseUrl: process.env.BACKUP_RESTORE_DRILL_DATABASE_URL?.trim() || null,
   sessionSecret: requireEnv("SESSION_SECRET", "change-me"),
   accountEncryptionKey: requireEnv("ACCOUNT_ENCRYPTION_KEY", requireEnv("SESSION_SECRET", "change-me")),
   databaseUrl: requireEnv("DATABASE_URL"),
@@ -171,6 +224,10 @@ export const config: AppConfig = {
   formRateLimitAttempts: parseConfigNumber(process.env.FORM_RATE_LIMIT_ATTEMPTS, 5, { min: 1 }),
   formRateLimitWindowSeconds: parseConfigNumber(process.env.FORM_RATE_LIMIT_WINDOW_SECONDS, 300, { min: 60 }),
   formSubmissionRetentionDays: parseConfigNumber(process.env.FORM_SUBMISSION_RETENTION_DAYS, 0, { min: 0 }),
+  databaseAuditLogRetentionDays: parseConfigNumber(process.env.DATABASE_AUDIT_LOG_RETENTION_DAYS, 0, { min: 0 }),
+  databaseReadNotificationRetentionDays: parseConfigNumber(process.env.DATABASE_READ_NOTIFICATION_RETENTION_DAYS, 0, { min: 0 }),
+  databaseSlowQuerySeconds: parseConfigNumber(process.env.DATABASE_SLOW_QUERY_SECONDS, 30, { min: 1, max: 86_400 }),
+  metricsRetentionDays: parseConfigNumber(process.env.METRICS_RETENTION_DAYS, 90, { min: 0, max: 3_650 }),
   smtpHost: process.env.SMTP_HOST?.trim() || null,
   smtpPort: parseConfigNumber(process.env.SMTP_PORT, 465, { min: 1, max: 65_535 }),
   smtpTls: process.env.SMTP_TLS !== "false",
@@ -179,12 +236,22 @@ export const config: AppConfig = {
   smtpPassword: process.env.SMTP_PASSWORD || null,
   smtpFrom: process.env.SMTP_FROM?.trim() || null,
   formNotificationEmail: process.env.FORM_NOTIFICATION_EMAIL?.trim() || null,
+  mailDeliveryMode: parseMailDeliveryMode(process.env.MAIL_DELIVERY_MODE),
+  mailFrom: process.env.MAIL_FROM?.trim() || process.env.SMTP_FROM?.trim() || null,
+  mailTo: process.env.MAIL_TO?.trim() || process.env.FORM_NOTIFICATION_EMAIL?.trim() || null,
+  mailHttpApiUrl: process.env.MAIL_HTTP_API_URL?.trim() || null,
+  mailHttpApiToken: process.env.MAIL_HTTP_API_TOKEN || null,
+  mailSendmailPath: process.env.MAIL_SENDMAIL_PATH?.trim() || "/usr/sbin/sendmail",
+  mailSendmailArgs: parseCommandArguments(process.env.MAIL_SENDMAIL_ARGS, ["-i"]),
   logLevel: parseLogLevel(process.env.LOG_LEVEL),
   logFormat: process.env.LOG_FORMAT === "text" ? "text" : "json",
   operatorAlertWebhookUrl: process.env.OPERATOR_ALERT_WEBHOOK_URL?.trim() || null,
   operatorAlertWebhookSecret: process.env.OPERATOR_ALERT_WEBHOOK_SECRET || null,
   operatorAlertMinLevel: parseLogLevel(process.env.OPERATOR_ALERT_MIN_LEVEL, "error"),
   operatorAlertTimeoutMs: parseConfigNumber(process.env.OPERATOR_ALERT_TIMEOUT_MS, 5_000, { min: 500, max: 30_000 }),
+  outboundWebhookUrl: process.env.OUTBOUND_WEBHOOK_URL?.trim() || null,
+  outboundWebhookSecret: process.env.OUTBOUND_WEBHOOK_SECRET || null,
+  outboundWebhookTimeoutMs: parseConfigNumber(process.env.OUTBOUND_WEBHOOK_TIMEOUT_MS, 5_000, { min: 500, max: 30_000 }),
   googleFontsCssUrls: (process.env.GOOGLE_FONTS_CSS_URLS ?? [
     "https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&family=Noto+Sans+JP:wght@100..900&family=Noto+Sans+Mono:wght@100..900&family=Noto+Serif+JP:wght@200..900&family=Roboto:ital,wght@0,100..900;1,100..900&family=Zen+Maru+Gothic&display=swap",
     "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=search",

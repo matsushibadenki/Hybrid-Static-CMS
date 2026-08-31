@@ -33,6 +33,19 @@ Each failed attempt creates an operator notification and an audit entry. When a 
 
 Restarting the Bun process does not lose retry state because it is stored in PostgreSQL.
 
+## Multiple application instances
+
+When two or more Hybrid-Static-CMS application containers share one PostgreSQL database, scheduled publishing and housekeeping must run only once per interval. The scheduler uses a PostgreSQL session advisory lock before beginning work. An instance that cannot acquire the lock records `scheduler.lock_unavailable` and skips that interval; it does not report an error or retry concurrently.
+
+The default settings are:
+
+```env
+SCHEDULER_LOCK_ENABLED=true
+SCHEDULER_LOCK_NAME=hybrid-static-cms:scheduler
+```
+
+Keep the same `SCHEDULER_LOCK_NAME` on every application instance that serves one site. Use a different name only for an intentionally separate site sharing the same PostgreSQL database. Set `SCHEDULER_LOCK_ENABLED=false` only when a single, externally managed scheduler is guaranteed; disabling it on a multi-instance deployment can produce duplicate rendering and housekeeping work.
+
 ## Upgrade
 
 Existing installations must run:

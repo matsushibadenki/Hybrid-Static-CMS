@@ -29,7 +29,9 @@ describe("security primitives", () => {
     const encrypted = await encryptAccountSecret(secret);
     expect(encrypted).not.toContain(secret);
     expect(await decryptAccountSecret(encrypted)).toBe(secret);
-    expect(await decryptAccountSecret(`${encrypted.slice(0, -1)}x`)).toBeNull();
+    const [version, iv, ciphertext] = encrypted.split(".");
+    const changedFirstCharacter = ciphertext[0] === "A" ? "B" : "A";
+    expect(await decryptAccountSecret(`${version}.${iv}.${changedFirstCharacter}${ciphertext.slice(1)}`)).toBeNull();
   });
 
   test("generates valid TOTP enrollment data and codes", async () => {

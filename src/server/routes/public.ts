@@ -4,6 +4,7 @@ import { Context, Hono } from "hono";
 import { config } from "../../core/config";
 import { getPageBySlug } from "../../core/pages";
 import { getPostBySlug } from "../../core/posts";
+import { contentLocaleFrom } from "../../core/locales";
 import { renderPage, renderPost } from "../../core/renderer";
 import { verifyPreviewToken } from "../../core/previews";
 import { getPostSeriesNavigation } from "../../core/series";
@@ -97,16 +98,17 @@ publicRoutes.get("/preview/:type/:slug", async (c) => {
   const type = c.req.param("type");
   const slug = c.req.param("slug");
   const token = c.req.query("token") ?? "";
+  const locale = contentLocaleFrom(c.req.query("locale"));
   if (type !== "post" && type !== "page") return c.notFound();
   const previewType = type as "post" | "page";
-  if (!(await verifyPreviewToken(token, previewType, slug))) return c.text("Preview link is invalid or expired.", 403);
+  if (!(await verifyPreviewToken(token, previewType, slug, locale))) return c.text("Preview link is invalid or expired.", 403);
   if (type === "post") {
-    const post = await getPostBySlug(slug, "any");
+    const post = await getPostBySlug(slug, "any", locale);
     if (!post) return c.notFound();
     const comments = await listApprovedCommentsForPosts([post.id]);
     return c.html(renderPost(post, await getPostSeriesNavigation(post.id), await getPostPermalinkPattern(), comments.get(post.id) ?? []));
   }
-  const page = await getPageBySlug(slug, "any");
+  const page = await getPageBySlug(slug, "any", locale);
   return page ? c.html(await renderPage(page)) : c.notFound();
 });
 publicRoutes.get("/cms/*", (c) => {

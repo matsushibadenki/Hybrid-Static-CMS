@@ -352,6 +352,48 @@ Object.assign(zh, {
   "Font settings saved and public pages regenerated.": "字体设置已保存，公开页面已重新生成。", "Unable to update font settings.": "无法更新字体设置。", "Font file uploaded. Register it before use.": "字体文件已上传，请在使用前注册。", "Unable to upload font file.": "无法上传字体文件。", "Remove this font face before deleting the file.": "删除文件前请先移除该字体面。", "Font file deleted.": "字体文件已删除。", "Unable to delete font file.": "无法删除字体文件。",
 });
 
+Object.assign(ja, {
+  "Content language": "コンテンツ言語", Translations: "翻訳", Localization: "ローカライズ", "All languages": "すべての言語",
+  "Translations share a content group but are independently drafted, reviewed, and published.": "翻訳は同じコンテンツグループに属しますが、下書き、レビュー、公開はそれぞれ独立して管理します。",
+  "Translation draft created.": "翻訳用の下書きを作成しました。", "Create translation": "翻訳を作成",
+});
+
+Object.assign(zh, {
+  "Content language": "内容语言", Translations: "翻译", Localization: "本地化", "All languages": "所有语言",
+  "Translations share a content group but are independently drafted, reviewed, and published.": "翻译内容属于同一内容组，但草稿、审核和发布均可独立管理。",
+  "Translation draft created.": "已创建翻译草稿。", "Create translation": "创建翻译",
+});
+
+Object.assign(ja, {
+  "API keys": "APIキー", "Key name": "キー名", "Expires at": "有効期限", "Leave blank for no expiration": "無期限にする場合は空欄にします", "API permissions": "API権限",
+  "Grant only the permissions required by this integration.": "この連携に必要な権限だけを付与してください。", "Create API key": "APIキーを作成", "Copy this API key now": "このAPIキーを今すぐコピー", "It is shown only once and cannot be recovered later.": "この値は一度だけ表示され、後から復元できません。", "Back to API keys": "APIキー一覧へ戻る", "Active API keys": "有効なAPIキー", "Key prefix": "キープレフィックス", "Last used": "最終使用", Revoke: "失効", "No API keys created.": "APIキーはまだ作成されていません。",
+  "Create scoped credentials for server-to-server CMS API access. API keys inherit the active permissions of your user account and can only narrow them.": "サーバー間CMS APIアクセス用のスコープ付き認証情報を作成します。APIキーは作成者の有効な権限を継承し、その範囲を狭めることだけができます。",
+  "Read posts": "投稿を読む", "Write posts": "投稿を書く", "Publish posts": "投稿を公開", "Delete posts": "投稿を削除", "Read pages": "固定ページを読む", "Write pages": "固定ページを書く", "Publish pages": "固定ページを公開", "Delete pages": "固定ページを削除", "Read forms": "フォームを読む", "Write forms": "フォームを書く", "Delete forms": "フォームを削除", "Read media": "メディアを読む", "Upload media": "メディアをアップロード", "Delete media": "メディアを削除", "Read maps": "地図を読む", "Write maps": "地図を書く", "Delete maps": "地図を削除", "Create AI proposals": "AI提案を作成",
+});
+
+Object.assign(zh, {
+  "API keys": "API密钥", "Key name": "密钥名称", "Expires at": "过期时间", "Leave blank for no expiration": "留空表示永不过期", "API permissions": "API权限",
+  "Grant only the permissions required by this integration.": "仅授予此集成所需的权限。", "Create API key": "创建API密钥", "Copy this API key now": "立即复制此API密钥", "It is shown only once and cannot be recovered later.": "此值仅显示一次，之后无法恢复。", "Back to API keys": "返回API密钥", "Active API keys": "有效API密钥", "Key prefix": "密钥前缀", "Last used": "最后使用", Revoke: "撤销", "No API keys created.": "尚未创建API密钥。",
+  "Create scoped credentials for server-to-server CMS API access. API keys inherit the active permissions of your user account and can only narrow them.": "创建用于服务器间CMS API访问的范围受限凭据。API密钥继承创建者账户的有效权限，并且只能缩小权限范围。",
+  "Read posts": "读取文章", "Write posts": "编辑文章", "Publish posts": "发布文章", "Delete posts": "删除文章", "Read pages": "读取页面", "Write pages": "编辑页面", "Publish pages": "发布页面", "Delete pages": "删除页面", "Read forms": "读取表单", "Write forms": "编辑表单", "Delete forms": "删除表单", "Read media": "读取媒体", "Upload media": "上传媒体", "Delete media": "删除媒体", "Read maps": "读取地图", "Write maps": "编辑地图", "Delete maps": "删除地图", "Create AI proposals": "创建AI提案",
+});
+
+Object.assign(ja, {
+  "Database health": "データベース健全性", "Review database capacity, active work, and automatic retention without exposing SQL text or application data.": "SQL本文やアプリケーションデータを公開せず、データベース容量、実行中の処理、自動保持を確認します。", "Database size": "データベース容量", Connections: "接続数", "Slow active queries": "長時間実行中のクエリ", "Longest transaction": "最長トランザクション", "Retention policy": "保持ポリシー", "Zero means automatic deletion is disabled. Changes are configured with environment variables and applied by scheduled housekeeping.": "0は自動削除を無効にします。変更は環境変数で設定し、定期メンテナンスで適用されます。", Data: "データ", Retention: "保持期間", "Audit logs": "監査ログ", "Read notifications": "既読通知", "Table statistics": "テーブル統計", Table: "テーブル", "Estimated live rows": "推定ライブ行数", "Estimated dead rows": "推定削除済み行数", "No table statistics available.": "テーブル統計はありません。", Maintenance: "メンテナンス", "ANALYZE refreshes PostgreSQL planner statistics without changing content. Schedule VACUUM through your database platform for larger installations.": "ANALYZEはコンテンツを変更せず、PostgreSQLのプランナー統計を更新します。大規模な環境ではデータベース基盤側でVACUUMを計画してください。", "I understand that ANALYZE uses database resources.": "ANALYZEがデータベースリソースを使用することを理解しました。", "Run ANALYZE": "ANALYZEを実行",
+});
+
+Object.assign(zh, {
+  "Database health": "数据库健康状况", "Review database capacity, active work, and automatic retention without exposing SQL text or application data.": "在不公开SQL文本或应用数据的前提下，查看数据库容量、活动工作和自动保留策略。", "Database size": "数据库大小", Connections: "连接数", "Slow active queries": "慢速活动查询", "Longest transaction": "最长事务", "Retention policy": "保留策略", "Zero means automatic deletion is disabled. Changes are configured with environment variables and applied by scheduled housekeeping.": "0表示禁用自动删除。请通过环境变量配置，并由定期维护任务执行。", Data: "数据", Retention: "保留期", "Audit logs": "审计日志", "Read notifications": "已读通知", "Table statistics": "表统计信息", Table: "表", "Estimated live rows": "预计活动行数", "Estimated dead rows": "预计死行数", "No table statistics available.": "暂无表统计信息。", Maintenance: "维护", "ANALYZE refreshes PostgreSQL planner statistics without changing content. Schedule VACUUM through your database platform for larger installations.": "ANALYZE会刷新PostgreSQL规划器统计信息，不会修改内容。大型安装请通过数据库平台安排VACUUM。", "I understand that ANALYZE uses database resources.": "我了解ANALYZE会使用数据库资源。", "Run ANALYZE": "运行ANALYZE",
+});
+
+Object.assign(ja, {
+  "Operational metrics": "運用メトリクス", "Hourly aggregate counts only. No IP addresses, visitor identifiers, URLs, search terms, or form values are stored.": "時間単位の集計値だけを保存します。IPアドレス、訪問者識別子、URL、検索語、フォーム値は保存しません。", "Public requests": "公開リクエスト", "Public 4xx responses": "公開4xxレスポンス", "Public 5xx responses": "公開5xxレスポンス", "Public regenerations": "公開再生成", "Form submissions": "フォーム送信", "Media changes": "メディア変更", "Backups created": "作成したバックアップ", "Hourly activity": "時間別アクティビティ", Hour: "時間", Metric: "メトリクス", Count: "件数", "No metrics collected yet.": "収集済みメトリクスはまだありません。", Update: "更新",
+});
+
+Object.assign(zh, {
+  "Operational metrics": "运维指标", "Hourly aggregate counts only. No IP addresses, visitor identifiers, URLs, search terms, or form values are stored.": "仅保存按小时聚合的计数。不会保存IP地址、访客标识、URL、搜索词或表单值。", "Public requests": "公开请求", "Public 4xx responses": "公开4xx响应", "Public 5xx responses": "公开5xx响应", "Public regenerations": "公开重新生成", "Form submissions": "表单提交", "Media changes": "媒体变更", "Backups created": "已创建备份", "Hourly activity": "每小时活动", Hour: "小时", Metric: "指标", Count: "计数", "No metrics collected yet.": "尚未收集指标。", Update: "更新",
+});
+
 export const adminTranslations: Record<Exclude<AdminLocale, "en">, Record<string, string>> = { ja, zh };
 
 export const publicTranslations = {

@@ -135,6 +135,10 @@ export function adminLayout(
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
               API
             </a>
+            ${can("api_keys.manage") ? `<a data-i18n="API keys" href="${config.controlPanelPath}/api-keys">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="3.5"/><path d="M10.5 13.5 20 4l2 2-2 2 2 2-3 3-2-2-4.5 4.5"/></svg>
+              API keys
+            </a>` : ""}
             ${listAdminLinks().map((link) => `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`).join("")}
           </div>
         </div>
@@ -155,6 +159,14 @@ export function adminLayout(
           ${can("audit.read") ? `<a data-i18n="Logs" href="${config.controlPanelPath}/logs">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             Logs
+          </a>` : ""}
+          ${can("database.manage") ? `<a data-i18n="Database health" href="${config.controlPanelPath}/database">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>
+            Database health
+          </a>` : ""}
+          ${can("metrics.read") ? `<a data-i18n="Operational metrics" href="${config.controlPanelPath}/metrics">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20V7"/></svg>
+            Operational metrics
           </a>` : ""}
           ${can("snapshots.read") ? `<a data-i18n="Snapshots" href="${config.controlPanelPath}/snapshots">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>

@@ -15,6 +15,11 @@ function fromBase64Url(value: string) {
   return Uint8Array.from(Buffer.from(value.replaceAll("-", "+").replaceAll("_", "/"), "base64"));
 }
 
+function isCanonicalBase64Url(value: string) {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return false;
+  return toBase64Url(fromBase64Url(value)) === value;
+}
+
 export async function hashPassword(password: string) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const material = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, [
@@ -96,7 +101,15 @@ export async function encryptAccountSecret(secret: string) {
 
 export async function decryptAccountSecret(value: string) {
   const [version, ivValue, encryptedValue] = value.split(".");
-  if (version !== "v1" || !ivValue || !encryptedValue) return null;
+  if (
+    version !== "v1" ||
+    !ivValue ||
+    !encryptedValue ||
+    !isCanonicalBase64Url(ivValue) ||
+    !isCanonicalBase64Url(encryptedValue)
+  ) {
+    return null;
+  }
   try {
     const decrypted = await crypto.subtle.decrypt(
       { name: "AES-GCM", iv: fromBase64Url(ivValue) },

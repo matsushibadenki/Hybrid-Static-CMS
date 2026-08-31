@@ -31,6 +31,11 @@ export const csrfMiddleware: MiddlewareHandler = async (c, next) => {
     return;
   }
 
+  if (c.get("apiKey")) {
+    await next();
+    return;
+  }
+
   const suppliedToken = c.req.header("x-csrf-token");
   let tokenMatches = Boolean(suppliedToken && suppliedToken === user.csrfToken);
   const contentType = c.req.header("content-type") ?? "";

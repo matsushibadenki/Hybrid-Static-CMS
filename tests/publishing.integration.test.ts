@@ -89,6 +89,59 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("publishing int
     }
   });
 
+  test("renders locale-specific artifacts and alternate language links for a translation group", async () => {
+    const testId = crypto.randomUUID();
+    const localizedSlug = `localized-${testId}`;
+    const translationGroup = crypto.randomUUID();
+    const englishArtifact = path.join(config.cmsOutputDir, "posts", `${localizedSlug}.html`);
+    const japaneseArtifact = path.join(config.cmsOutputDir, "ja", "posts", `${localizedSlug}.html`);
+    let localUserId: number | null = null;
+    let englishPostId: number | null = null;
+    let japanesePostId: number | null = null;
+    try {
+      localUserId = await createUser({
+        email: `localized-publisher-${testId}@example.test`,
+        password: "integration-password-123",
+        displayName: "Localized Publisher",
+        roles: ["owner"],
+      });
+      const english = await createPost({
+        title: "Localized article",
+        slug: localizedSlug,
+        bodyHtml: "<p>English body</p>",
+        status: "published",
+        locale: "en",
+        translationGroup,
+      }, localUserId);
+      const japanese = await createPost({
+        title: "多言語の記事",
+        slug: localizedSlug,
+        bodyHtml: "<p>日本語本文</p>",
+        status: "published",
+        locale: "ja",
+        translationGroup,
+      }, localUserId);
+      englishPostId = english?.id ?? null;
+      japanesePostId = japanese?.id ?? null;
+
+      await renderPublishedArtifacts();
+
+      expect(await Bun.file(englishArtifact).exists()).toBe(true);
+      expect(await Bun.file(japaneseArtifact).exists()).toBe(true);
+      const japaneseHtml = await Bun.file(japaneseArtifact).text();
+      expect(japaneseHtml).toContain('<html lang="ja">');
+      expect(japaneseHtml).toContain(`/cms/posts/${localizedSlug}.html`);
+      expect(japaneseHtml).toContain(`/cms/ja/posts/${localizedSlug}.html`);
+    } finally {
+      if (englishPostId) await deletePost(englishPostId);
+      if (japanesePostId) await deletePost(japanesePostId);
+      if (localUserId) await sql`delete from users where id = ${localUserId}`;
+      await unlink(englishArtifact).catch(() => undefined);
+      await unlink(japaneseArtifact).catch(() => undefined);
+      await renderPublishedArtifacts().catch(() => undefined);
+    }
+  });
+
   test("regenerates article paths and removes the previous permalink artifact", async () => {
     const testId = crypto.randomUUID();
     const permalinkSlug = `permalink-${testId}`;

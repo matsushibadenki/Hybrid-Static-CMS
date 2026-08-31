@@ -1,4 +1,5 @@
 import { bigintArray, sql } from "./db";
+import type { ContentLocale } from "./locales";
 import { AppValidationError, isUniqueConstraintError, requireNonEmpty, validateSlug } from "./validation";
 
 export type SeriesRecord = {
@@ -20,6 +21,7 @@ export type SeriesNavigationPost = {
   publishedAt: string | null;
   updatedAt: string;
   categories: string[];
+  locale?: ContentLocale;
 };
 
 export type SeriesNavigation = {
@@ -102,7 +104,7 @@ export async function listPostSeriesAssignments(postIds: number[]) {
   return new Map(rows.map((row) => [Number(row.post_id), Number(row.series_id)]));
 }
 
-export async function listPostSeriesNavigation(postIds: number[]) {
+export async function listPostSeriesNavigation(postIds: number[], locale?: ContentLocale) {
   const navigation = new Map<number, SeriesNavigation>();
   if (postIds.length === 0) return navigation;
 
@@ -116,7 +118,7 @@ export async function listPostSeriesNavigation(postIds: number[]) {
 
   const seriesIds = [...new Set(assignments.map((row) => Number(row.series_id)))];
   const members = await sql`
-    select ps.series_id, p.id, p.title, p.slug, p.published_at, p.updated_at, ps.position,
+    select ps.series_id, p.id, p.title, p.slug, p.content_locale, p.published_at, p.updated_at, ps.position,
       coalesce((
         select json_agg(c.slug order by c.slug)
         from post_categories pc join categories c on c.id = pc.category_id
@@ -126,6 +128,7 @@ export async function listPostSeriesNavigation(postIds: number[]) {
     join posts p on p.id = ps.post_id
     where ps.series_id = any(${bigintArray(seriesIds)})
       and (p.status = 'published' or p.id = any(${bigintArray(postIds)}))
+      and (${locale ?? null}::text is null or p.content_locale = ${locale ?? null})
     order by ps.series_id asc, ps.position asc, p.id asc
   `;
   const membersBySeries = new Map<number, SeriesNavigationPost[]>();
@@ -136,6 +139,7 @@ export async function listPostSeriesNavigation(postIds: number[]) {
       id: Number(row.id),
       title: String(row.title),
       slug: String(row.slug),
+      locale: String(row.content_locale) as ContentLocale,
       position: Number(row.position),
       publishedAt: (row.published_at as string | null) ?? null,
       updatedAt: String(row.updated_at),

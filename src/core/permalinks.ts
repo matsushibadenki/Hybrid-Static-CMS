@@ -8,6 +8,7 @@ export type PermalinkPost = {
   publishedAt: string | null;
   updatedAt: string;
   categories: string[];
+  locale?: ContentLocale;
 };
 
 export function isPostPermalinkPattern(value: string): value is PostPermalinkPattern {
@@ -20,17 +21,18 @@ function publicationDate(post: PermalinkPost) {
 }
 
 export function postPermalinkPath(post: PermalinkPost, pattern: PostPermalinkPattern) {
-  if (pattern === "numeric") return `/cms/posts/${post.id}.html`;
+  const basePath = `${cmsLocalePath(post.locale ?? "en")}/posts`;
+  if (pattern === "numeric") return `${basePath}/${post.id}.html`;
   if (pattern === "category") {
-    return `/cms/posts/category/${post.categories[0] || "uncategorized"}/${post.slug}.html`;
+    return `${basePath}/category/${post.categories[0] || "uncategorized"}/${post.slug}.html`;
   }
   if (pattern === "year_month") {
     const date = publicationDate(post);
     const year = String(date.getUTCFullYear()).padStart(4, "0");
     const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-    return `/cms/posts/${year}/${month}/${post.slug}.html`;
+    return `${basePath}/${year}/${month}/${post.slug}.html`;
   }
-  return `/cms/posts/${post.slug}.html`;
+  return `${basePath}/${post.slug}.html`;
 }
 
 export function postArtifactRelativePath(post: PermalinkPost, pattern: PostPermalinkPattern) {
@@ -47,3 +49,4 @@ export function postPermalinkExample(pattern: PostPermalinkPattern) {
   };
   return postPermalinkPath(example, pattern);
 }
+import { cmsLocalePath, type ContentLocale } from "./locales";

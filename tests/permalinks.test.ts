@@ -21,4 +21,13 @@ describe("post permalinks", () => {
     expect(postPermalinkPath({ ...post, categories: [] }, "category")).toBe("/cms/posts/category/uncategorized/release-notes.html");
     expect(postArtifactRelativePath(post, "year_month")).toBe("posts/2026/07/release-notes.html");
   });
+
+  test("keeps English paths stable and scopes translated paths by locale", () => {
+    const english = { id: 12, slug: "same-slug", publishedAt: null, updatedAt: "2026-01-01T00:00:00.000Z", categories: [], locale: "en" as const };
+    const japanese = { ...english, locale: "ja" as const };
+    const chinese = { ...english, locale: "zh" as const };
+    expect(postPermalinkPath(english, "post_name")).toBe("/cms/posts/same-slug.html");
+    expect(postPermalinkPath(japanese, "post_name")).toBe("/cms/ja/posts/same-slug.html");
+    expect(postPermalinkPath(chinese, "category")).toBe("/cms/zh/posts/category/uncategorized/same-slug.html");
+  });
 });

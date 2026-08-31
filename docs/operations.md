@@ -44,7 +44,7 @@ The current codebase includes:
 
 ### PostgreSQL backup and restore
 
-The repository includes portable SQL backup commands. The host running the commands must have the PostgreSQL client tools `pg_dump` and `psql` installed, and `DATABASE_URL` must point to the target database.
+The repository includes portable SQL backup commands. The Docker application image includes PostgreSQL 18 client tools `pg_dump` and `psql`; non-container installations must install PostgreSQL 18 or newer clients on the host. `DATABASE_URL` must point to the target database.
 
 Create a backup in the Git-ignored `storage/backups` directory:
 

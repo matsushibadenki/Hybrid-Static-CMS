@@ -68,11 +68,19 @@ Important settings:
 - `FORM_RATE_LIMIT_ATTEMPTS`: accepted public form submissions per client and form in one window, default `5`
 - `FORM_RATE_LIMIT_WINDOW_SECONDS`: public form rate-limit window, default `300`
 - `FORM_SUBMISSION_RETENTION_DAYS`: delete stored form submissions older than this many days during scheduled housekeeping; `0` disables automatic deletion
+- `DATABASE_AUDIT_LOG_RETENTION_DAYS`: delete audit records older than this many days during scheduled housekeeping; `0` disables automatic deletion
+- `DATABASE_READ_NOTIFICATION_RETENTION_DAYS`: delete read operator notifications older than this many days; `0` disables automatic deletion
+- `DATABASE_SLOW_QUERY_SECONDS`: threshold used by the database-health page to count active slow queries, default `30`
+- `METRICS_RETENTION_DAYS`: retain hourly operational metric buckets for this many days, default `90`; `0` disables deletion
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS`: implicit-TLS SMTP server settings for form notifications; defaults target port `465` with TLS enabled
 - `SMTP_HOSTNAME`: hostname sent in `EHLO`, default `localhost`
 - `SMTP_USERNAME`, `SMTP_PASSWORD`: optional SMTP `AUTH LOGIN` credentials
 - `SMTP_FROM`: sender address; notifications remain disabled unless this and `FORM_NOTIFICATION_EMAIL` are configured
 - `FORM_NOTIFICATION_EMAIL`: destination address for new public form submissions
+- `MAIL_DELIVERY_MODE`: `smtp` (default), `sendmail`, `http`, or `disabled`; selects the common form-notification transport
+- `MAIL_FROM`, `MAIL_TO`: preferred common sender and recipient; fall back to `SMTP_FROM` and `FORM_NOTIFICATION_EMAIL`
+- `MAIL_SENDMAIL_PATH`, `MAIL_SENDMAIL_ARGS`: absolute local Sendmail-compatible executable and safe direct arguments, used only in `sendmail` mode
+- `MAIL_HTTP_API_URL`, `MAIL_HTTP_API_TOKEN`: HTTPS bearer-authenticated mail gateway used only in `http` mode
 - `COMPOSE_PROFILES`: set to `stalwart` only when starting the optional bundled Stalwart service
 - `STALWART_IMAGE`, `STALWART_HOSTNAME`, `STALWART_PUBLIC_URL`: optional Stalwart image pin, TLS hostname, and public URL
 - `STALWART_ADMIN_PORT`: loopback-only initial setup and diagnostics port, default `8080`
@@ -156,7 +164,7 @@ Public form submissions are rate-limited in PostgreSQL before reCAPTCHA verifica
 
 Form administrators can download submissions as UTF-8 CSV from the form edit screen. The export includes the submission timestamp and one column for each configured field. Set `FORM_SUBMISSION_RETENTION_DAYS` only after confirming the site's legal and operational retention requirements; automatic deletion cannot be undone from the CMS.
 
-When all SMTP notification variables are configured, a successful public form submission triggers a plain-text email. SMTP delivery failures do not reject the visitor's submission; they create an operator notification and audit entry. The built-in sender uses implicit TLS (normally port 465), so deployments requiring STARTTLS should place an SMTP relay in front of the CMS or use a provider's implicit-TLS endpoint.
+When mail delivery is configured, a successful public form submission triggers a plain-text email. SMTP delivery failures do not reject the visitor's submission; they create an operator notification and audit entry. The built-in SMTP sender uses implicit TLS (normally port 465), so deployments requiring STARTTLS should place an SMTP relay in front of the CMS or use a provider's implicit-TLS endpoint. Local Sendmail and provider-neutral HTTP gateway modes are also available; see [Configurable mail delivery](./mail-delivery.md).
 
 The repository also provides an opt-in Stalwart Docker service. It is disabled by default and does not replace external SMTP support. See [Optional Stalwart Mail Server](./stalwart-mail-server.md) for private-relay, public-server, disabling, DNS, and backup instructions.
 
@@ -231,7 +239,7 @@ To restore a SQL backup, use an explicit confirmation flag because existing data
 bun run db:restore -- --input /path/to/backup.sql --confirm
 ```
 
-Backups are written to `storage/backups` by default. This directory is excluded from Git. Keep independent copies of `public_html` and uploaded media because PostgreSQL backups contain database records only.
+Backups are written to `storage/backups` by default. This directory is excluded from Git. The Docker application image includes PostgreSQL 18 client tools; non-container installations must provide PostgreSQL 18 or newer `pg_dump` and `psql`. Keep independent copies of `public_html` and uploaded media because PostgreSQL backups contain database records only.
 
 ## Optional two-factor login
 

@@ -144,26 +144,27 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Theme starter kits and reusable public templates
 - `[Done]` Visual layout blocks with responsive previews
 - `[Done]` Local font hosting and privacy-first asset mode
-- `[Next]` Multi-language content, locale routing, and translation metadata
+- `[Done]` Multi-language post and page content, locale routing, translation metadata, linked draft creation, `hreflang`, localized static output, and locale-filtered public APIs
 
 ### API and integrations
 
 - `[Later]` External mail delivery adapter for Next.js Route Handler, Nodemailer, and provider-managed SMTP
-- `[Later]` Local Sendmail-compatible MTA adapter for Nodemailer-based deployments
-- `[Later]` Provider-neutral mail adapter settings, health checks, retry policy, secret management, and safe fallback rules for switching between SMTP, mail APIs, and local MTA delivery
-- `[Later]` Scoped API keys and machine-user management
-- `[Later]` Webhooks for publishing, form submissions, media events, and backup events
+- `[Done]` Local Sendmail-compatible MTA adapter with absolute-path, direct-execution, least-privilege deployment guidance, and failure isolation
+- `[Done]` Provider-neutral mail delivery strategy for SMTP, HTTP mail APIs, and local MTA selection without changing form code
+- `[Done]` Scoped API keys and machine-user authentication with least-privilege scopes, expiration, revocation, audit records, and server-to-server CMS API access
+- `[Done]` Signed outbound webhooks for publishing, content, form-submission, media, and backup events with privacy-safe payloads and failure isolation
 - `[Later]` OAuth or OIDC login integration
 - `[Later]` External object storage adapters such as S3-compatible storage
 - `[Later]` Search adapters for larger installations
 
 ### Operations at scale
 
-- `[Later]` Distributed scheduler locks for multi-instance deployments
-- `[Later]` Queue-backed rendering and media processing
-- `[Later]` Automated off-site backup rotation and restore drills
-- `[Later]` Metrics dashboard for publishing, traffic, forms, storage, and errors
-- `[Later]` Database health, slow-query, and retention management tools
+- `[Done]` PostgreSQL advisory scheduler locks for multi-instance deployments, with safe skip behavior and configurable site-scoped lock names
+- `[Done]` PostgreSQL-backed, coalesced public-artifact rendering queue with row locking, retry backoff, and scheduler processing
+- `[Later]` Queue-backed media derivative processing
+- `[Done]` Automated PostgreSQL SQL backup rotation, optional rclone off-site copies, and rollback-only restore drills against an explicitly separate database
+- `[Done]` Privacy-safe hourly operational metrics dashboard for publishing, public traffic/status trends, forms, media, backups, and errors
+- `[Done]` PostgreSQL health dashboard, active slow-query and transaction diagnostics, table statistics, safe ANALYZE operation, and configurable audit/notification retention
 
 ## Priority order
 
@@ -176,8 +177,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 7. `[Done]` Theme starter kits and reusable public templates
 8. `[Done]` Visual layout blocks with responsive previews
 9. `[Done]` Local font hosting and privacy-first asset mode
-10. `[Next]` Multi-language content, locale routing, and translation metadata
-11. `[Later]` Integrations and scale-out operations
+10. `[Done]` Multi-language content, locale routing, and translation metadata
+11. `[Next]` Integrations and scale-out operations
 
 ## Notes for contributors
 

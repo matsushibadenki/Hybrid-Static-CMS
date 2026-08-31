@@ -55,6 +55,9 @@ export type Permission =
   | "snapshots.restore"
   | "users.manage"
   | "settings.manage"
+  | "api_keys.manage"
+  | "database.manage"
+  | "metrics.read"
   | "publishing.render";
 
 const rolePermissions: Record<UserRole, readonly Permission[]> = {
@@ -62,13 +65,13 @@ const rolePermissions: Record<UserRole, readonly Permission[]> = {
     "admin.access", "posts.read", "posts.write", "posts.publish", "posts.delete", "posts.restore", "posts.review",
     "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "pages.review", "forms.read", "forms.submissions.read", "forms.write", "forms.delete", "series.read", "series.write", "series.delete", "comments.read", "comments.manage", "page_groups.read", "page_groups.write", "page_groups.delete",
     "media.read", "media.write", "media.delete", "menus.read", "menus.write", "menus.delete", "blocks.read", "blocks.write", "blocks.delete", "maps.read", "maps.write", "maps.delete", "content.export", "content.import", "redirects.read", "redirects.write", "redirects.delete", "search.read", "search.manage",
-    "ai.review", "ai.propose", "audit.read", "snapshots.read", "snapshots.write", "snapshots.restore", "users.manage", "settings.manage", "publishing.render",
+    "ai.review", "ai.propose", "audit.read", "snapshots.read", "snapshots.write", "snapshots.restore", "users.manage", "settings.manage", "api_keys.manage", "database.manage", "metrics.read", "publishing.render",
   ],
   admin: [
     "admin.access", "posts.read", "posts.write", "posts.publish", "posts.delete", "posts.restore", "posts.review",
     "pages.read", "pages.write", "pages.publish", "pages.delete", "pages.restore", "pages.review", "forms.read", "forms.submissions.read", "forms.write", "forms.delete", "series.read", "series.write", "series.delete", "comments.read", "comments.manage", "page_groups.read", "page_groups.write", "page_groups.delete",
     "media.read", "media.write", "media.delete", "menus.read", "menus.write", "menus.delete", "blocks.read", "blocks.write", "blocks.delete", "maps.read", "maps.write", "maps.delete", "content.export", "content.import", "redirects.read", "redirects.write", "redirects.delete", "search.read", "search.manage",
-    "ai.review", "ai.propose", "audit.read", "snapshots.read", "snapshots.write", "snapshots.restore", "users.manage", "settings.manage", "publishing.render",
+    "ai.review", "ai.propose", "audit.read", "snapshots.read", "snapshots.write", "snapshots.restore", "users.manage", "settings.manage", "api_keys.manage", "database.manage", "metrics.read", "publishing.render",
   ],
   editor: [
     "admin.access", "posts.read", "posts.write", "posts.publish", "posts.review", "pages.read", "pages.write", "pages.publish", "pages.review",
@@ -83,6 +86,12 @@ export function hasPermission(user: { roles: ReadonlyArray<UserRole> } | null | 
   return Boolean(user?.roles.some((role) => rolePermissions[role]?.includes(permission)));
 }
 
+export function hasRequestPermission(c: Context, permission: Permission) {
+  const apiKey = c.get("apiKey");
+  if (apiKey) return apiKey.permissions.includes(permission) && hasPermission(apiKey.user, permission);
+  return hasPermission(c.get("sessionUser"), permission);
+}
+
 function relativePath(c: Context) {
   const prefix = config.controlPanelPath.replace(/\/$/, "");
   return c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) || "/" : c.req.path;
@@ -93,6 +102,9 @@ function adminPermissionForRequest(c: Context): Permission {
   const method = c.req.method;
   if (path === "/" || path.startsWith("/notifications/")) return "admin.access";
   if (path.startsWith("/users")) return "users.manage";
+  if (path.startsWith("/api-keys")) return "api_keys.manage";
+  if (path.startsWith("/database")) return "database.manage";
+  if (path.startsWith("/metrics")) return "metrics.read";
   if (path.startsWith("/settings")) return "settings.manage";
   if (path.startsWith("/logs")) return "audit.read";
   if (path.startsWith("/snapshots")) return path.endsWith("/restore") && method === "POST" ? "snapshots.restore" : method === "POST" ? "snapshots.write" : "snapshots.read";
@@ -173,11 +185,11 @@ export function apiPermissionForRequest(c: Context): Permission | null {
 
 export function requireApiPermission(): MiddlewareHandler {
   return async (c, next) => {
+    if (c.get("apiKeyError")) return c.json({ error: "Invalid or expired API key" }, 401);
     const permission = apiPermissionForRequest(c);
     if (!permission) return next();
-    const user = c.get("sessionUser");
-    if (!user) return c.json({ error: "Unauthorized" }, 401);
-    if (!hasPermission(user, permission)) return c.json({ error: "Forbidden" }, 403);
+    if (!c.get("sessionUser")) return c.json({ error: "Unauthorized" }, 401);
+    if (!hasRequestPermission(c, permission)) return c.json({ error: "Forbidden" }, 403);
     await next();
   };
 }

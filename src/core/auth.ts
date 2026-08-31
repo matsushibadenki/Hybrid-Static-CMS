@@ -6,12 +6,15 @@ import { hashPassword, randomToken, verifyPassword, verifyTotpCode } from "./sec
 import { config } from "./config";
 import type { SessionUser, UserRole } from "./types";
 import { verifyAndConsumeSecondFactor } from "./accountSecurity";
+import type { ApiKeyAuthentication } from "./apiKeys";
 
 const SESSION_COOKIE = "hybrid_static_cms_session";
 
 declare module "hono" {
   interface ContextVariableMap {
     sessionUser: SessionUser | null;
+    apiKey: ApiKeyAuthentication | null;
+    apiKeyError: boolean;
   }
 }
 

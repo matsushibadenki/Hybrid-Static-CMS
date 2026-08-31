@@ -18,7 +18,7 @@ import { renderPublishedArtifacts } from "../../core/renderer";
 import { getMenuBySlug, listMenus } from "../../core/menus";
 import { getPublishedBlockBySlug, listBlocks } from "../../core/blocks";
 import { createAiFileProposal } from "../../core/aiProposals";
-import { hasPermission, requireApiPermission } from "../../core/permissions";
+import { hasRequestPermission, requireApiPermission } from "../../core/permissions";
 import { consumeFormSubmissionRateLimit, consumeSubmissionRateLimit } from "../../core/formRateLimit";
 import { config } from "../../core/config";
 import { sendFormSubmissionEmail } from "../../core/email";
@@ -33,6 +33,7 @@ import { getPublishedMapBySlug, listMaps } from "../../core/maps";
 import { syncPageUrlRedirect, syncPostUrlRedirect } from "../../core/redirects";
 import { logError } from "../../core/logger";
 import { searchContent } from "../../core/search";
+import { contentLocaleFrom } from "../../core/locales";
 
 export const apiRoutes = new Hono();
 
@@ -55,17 +56,18 @@ apiRoutes.get("/posts", async (c) => {
   const category = c.req.query("category");
   const requestedStatus = c.req.query("status") ?? "published";
   const status = ["draft", "published", "scheduled", "any"].includes(requestedStatus) &&
-    (requestedStatus === "published" || hasPermission(c.get("sessionUser"), "posts.read"))
+    (requestedStatus === "published" || hasRequestPermission(c, "posts.read"))
     ? requestedStatus
     : "published";
   const search = c.req.query("q");
+  const locale = c.req.query("locale");
 
-  const data = await listPosts({ page, limit, category, status, search });
+  const data = await listPosts({ page, limit, category, status, search, locale });
   return c.json(data);
 });
 
 apiRoutes.get("/posts/:slug", async (c) => {
-  const post = await getPostBySlug(c.req.param("slug"));
+  const post = await getPostBySlug(c.req.param("slug"), "published", c.req.query("locale") ?? "en");
   if (!post) {
     return c.json({ error: "Not found" }, 404);
   }
@@ -77,17 +79,18 @@ apiRoutes.get("/pages", async (c) => {
   const limit = Number(c.req.query("limit") ?? 10);
   const requestedStatus = c.req.query("status") ?? "published";
   const status = ["draft", "published", "scheduled", "any"].includes(requestedStatus) &&
-    (requestedStatus === "published" || hasPermission(c.get("sessionUser"), "pages.read"))
+    (requestedStatus === "published" || hasRequestPermission(c, "pages.read"))
     ? requestedStatus
     : "published";
   const search = c.req.query("q");
+  const locale = c.req.query("locale");
 
-  const data = await listPages({ page, limit, status, search });
+  const data = await listPages({ page, limit, status, search, locale });
   return c.json(data);
 });
 
 apiRoutes.get("/pages/:slug", async (c) => {
-  const page = await getPageBySlug(c.req.param("slug"));
+  const page = await getPageBySlug(c.req.param("slug"), "published", c.req.query("locale") ?? "en");
   if (!page) {
     return c.json({ error: "Not found" }, 404);
   }
@@ -111,7 +114,7 @@ apiRoutes.get("/media", async (c) => {
 apiRoutes.get("/forms", async (c) => {
   const requestedStatus = c.req.query("status") ?? "published";
   const status = (["draft", "published", "any"].includes(requestedStatus) &&
-    (requestedStatus === "published" || hasPermission(c.get("sessionUser"), "forms.read"))
+    (requestedStatus === "published" || hasRequestPermission(c, "forms.read"))
     ? requestedStatus
     : "published") as "published" | "draft" | "any";
   const items = await listForms(status);
@@ -168,7 +171,7 @@ apiRoutes.post("/posts", async (c) => {
 
   const payload = await c.req.json();
   const status = payload.status ?? "draft";
-  if (status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
+  if (status !== "draft" && !hasRequestPermission(c, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
   const post = await createPost(
     {
       title: payload.title,
@@ -188,6 +191,8 @@ apiRoutes.post("/posts", async (c) => {
       categorySlugs: payload.categorySlugs ?? [],
       tagSlugs: payload.tagSlugs ?? [],
       seriesId: optionalRelationId(payload, "seriesId"),
+      locale: contentLocaleFrom(payload.locale),
+      translationGroup: typeof payload.translationGroup === "string" ? payload.translationGroup : undefined,
     },
     user.id,
   );
@@ -212,7 +217,7 @@ apiRoutes.put("/posts/:id", async (c) => {
 
   const payload = await c.req.json();
   const status = payload.status ?? "draft";
-  if (status !== "draft" && !hasPermission(user, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
+  if (status !== "draft" && !hasRequestPermission(c, "posts.publish")) return c.json({ error: "Publishing posts is not permitted for this user." }, 403);
   const existing = await getPostById(Number(c.req.param("id")));
   if (!existing) return c.json({ error: "Not found" }, 404);
   const input = {
@@ -233,6 +238,8 @@ apiRoutes.put("/posts/:id", async (c) => {
     categorySlugs: payload.categorySlugs ?? [],
     tagSlugs: payload.tagSlugs ?? [],
     seriesId: optionalRelationId(payload, "seriesId"),
+    locale: contentLocaleFrom(payload.locale, existing.locale),
+    translationGroup: typeof payload.translationGroup === "string" ? payload.translationGroup : existing.translationGroup,
   } as const;
   let post;
   try {
@@ -288,7 +295,7 @@ apiRoutes.post("/pages", async (c) => {
 
   const payload = await c.req.json();
   const status = payload.status ?? "draft";
-  if (status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
+  if (status !== "draft" && !hasRequestPermission(c, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
   const page = await createPage(
     {
       title: payload.title,
@@ -306,6 +313,8 @@ apiRoutes.post("/pages", async (c) => {
       seoNofollow: Boolean(payload.seoNofollow),
       pageGroupId: optionalRelationId(payload, "pageGroupId"),
       stylesheetPath: payload.stylesheetPath,
+      locale: contentLocaleFrom(payload.locale),
+      translationGroup: typeof payload.translationGroup === "string" ? payload.translationGroup : undefined,
       publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
     },
     user.id,
@@ -331,7 +340,7 @@ apiRoutes.put("/pages/:id", async (c) => {
 
   const payload = await c.req.json();
   const status = payload.status ?? "draft";
-  if (status !== "draft" && !hasPermission(user, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
+  if (status !== "draft" && !hasRequestPermission(c, "pages.publish")) return c.json({ error: "Publishing pages is not permitted for this user." }, 403);
   const pageId = Number(c.req.param("id"));
   const currentPage = await getPageById(pageId);
   if (!currentPage) return c.json({ error: "Not found" }, 404);
@@ -351,6 +360,8 @@ apiRoutes.put("/pages/:id", async (c) => {
     seoNofollow: Boolean(payload.seoNofollow),
     pageGroupId: optionalRelationId(payload, "pageGroupId"),
     stylesheetPath: payload.stylesheetPath,
+    locale: contentLocaleFrom(payload.locale, currentPage.locale),
+    translationGroup: typeof payload.translationGroup === "string" ? payload.translationGroup : currentPage.translationGroup,
     publishedAt: scheduleTimestampForStorage(payload.publishedAt, config.scheduleTimeZone),
   } as const;
   let page;

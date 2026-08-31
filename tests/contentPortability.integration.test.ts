@@ -30,6 +30,7 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("content portab
       const archive: ContentArchive = {
         format: contentArchiveFormat, version: contentArchiveVersion, exportedAt: new Date().toISOString(),
         posts: [{
+          locale: "en", translationGroup: "00000000-0000-4000-8000-000000000011",
           title: "Imported post", slug: postSlug, excerpt: null, bodyMd: null,
           bodyHtml: "<p>Safe</p><script>alert(1)</script>", sourceStatus: "published", publishedAt: new Date().toISOString(),
           seoTitle: null, seoDescription: null, seoCanonicalUrl: null, seoOgImage: null, seoKeywords: null,
@@ -37,6 +38,7 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("content portab
           commentsPolicy: "disabled", seriesSlug,
         }],
         pages: [{
+          locale: "ja", translationGroup: "00000000-0000-4000-8000-000000000012",
           title: "Imported page", slug: pageSlug, excerpt: null, bodyMd: "Page", bodyHtml: "<p>Page</p>",
           sourceStatus: "scheduled", publishedAt: new Date().toISOString(),
           seoTitle: null, seoDescription: null, seoCanonicalUrl: null, seoOgImage: null, seoKeywords: null,

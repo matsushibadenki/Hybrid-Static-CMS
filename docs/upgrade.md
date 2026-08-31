@@ -103,6 +103,11 @@ Migration `031_content_block_layouts.sql` adds the allowlisted visual layout to
 reusable blocks. Run `bun run migrate`; existing blocks receive the backward-
 compatible `plain` layout. See [Visual layout blocks](./visual-layout-blocks.md).
 
+Migration `032_multilingual_content.sql` adds a content language and translation
+group to posts and fixed pages. Existing content becomes English without changing
+its URLs. Run `bun run migrate`, regenerate public output, and see
+[Multilingual content](./multilingual-content.md) before creating translations.
+
 Local font delivery settings require no migration. Existing themes retain
 remote Google Fonts behavior. The application creates `public_html/assets/fonts`
 automatically; see [Local fonts](./local-fonts.md) before deploying font files.
@@ -112,3 +117,34 @@ automatically; see [Local fonts](./local-fonts.md) before deploying font files.
 New deployments use PostgreSQL 18. Do not attach a PostgreSQL 17 data volume directly to the PostgreSQL 18 container. Create a logical backup with `bun run db:backup`, start PostgreSQL 18 with a new volume, restore the backup, and then run `bun run migrate`.
 
 The official PostgreSQL 18 Docker image uses a version-specific data directory under `/var/lib/postgresql`. The repository Compose files use the PostgreSQL 18 volume layout. Existing installations should verify their volume mapping before changing the image tag.
+## API keys migration
+
+Version `033_api_keys.sql` adds hashed, revocable, scope-limited API keys for
+server-to-server `/cms-api` access. Run `bun run migrate`; no existing user,
+session, or public endpoint changes are required. See [Scoped API keys](./api-keys.md)
+before creating an integration credential.
+## Operational metrics migration
+
+Version `034_operational_metrics.sql` adds hourly, privacy-safe operational
+metric buckets. Run `bun run migrate` after upgrading. See
+[Operational metrics](./operational-metrics.md) for retained fields and
+retention settings.
+
+## Distributed scheduler locks
+
+No database migration is required. Add the following settings to every application instance that shares a PostgreSQL database, then restart the applications:
+
+```env
+SCHEDULER_LOCK_ENABLED=true
+SCHEDULER_LOCK_NAME=hybrid-static-cms:scheduler
+```
+
+All instances for one site must use the same lock name. See [scheduled publishing](./scheduled-publishing.md#multiple-application-instances) for operation and safety guidance.
+
+## Automated backups
+
+No database migration is required. Copy the `BACKUP_*` settings from `.env.example`, then restart the application. Automated backups remain disabled until `BACKUP_AUTOMATION_ENABLED=true` is set. Review [Automated off-site backups](./automated-backups.md) before configuring an rclone remote or restore-drill database.
+
+## Background rendering jobs
+
+Run `bun run migrate` to apply `035_background_jobs.sql`. The control-panel regeneration action now queues work; the built-in scheduler processes it within one minute and retries failures automatically.

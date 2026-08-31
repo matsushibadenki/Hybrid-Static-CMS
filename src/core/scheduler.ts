@@ -8,6 +8,12 @@ import { logInfo } from "./logger";
 import { deleteExpiredEditorAutosaves } from "./autosaves";
 import { enableAutomaticRedirectsForPublishedContent } from "./redirects";
 import { getPostPermalinkPattern } from "./settings";
+import { deleteExpiredDatabaseRecords } from "./databaseHealth";
+import { deleteExpiredOperationalMetrics } from "./metrics";
+import { config } from "./config";
+import { tryAcquireSchedulerLock } from "./schedulerLock";
+import { runAutomatedBackupIfDue } from "./backupAutomation";
+import { processBackgroundJobs } from "./backgroundJobs";
 
 type ScheduledItem = { id: number; attempts: number };
 
@@ -68,6 +74,8 @@ async function runHousekeeping() {
     clearExpiredFormRateLimits(),
     deleteExpiredFormSubmissions(),
     deleteExpiredEditorAutosaves(),
+    deleteExpiredDatabaseRecords(),
+    deleteExpiredOperationalMetrics(),
   ]);
   const failures = results.filter((result) => result.status === "rejected");
   if (failures.length > 0) {
@@ -79,7 +87,16 @@ async function runHousekeeping() {
   }
 }
 
-export async function runScheduledJobs(renderer: () => Promise<unknown> = renderPublishedArtifacts) {
+export type ScheduledJobResult = {
+  publishedPosts: number;
+  publishedPages: number;
+  failedPosts: number;
+  failedPages: number;
+  retryQueued: boolean;
+  skippedByLock: boolean;
+};
+
+async function runScheduledJobsUnlocked(renderer: () => Promise<unknown>): Promise<ScheduledJobResult> {
   const [posts, pages] = await Promise.all([dueItems("posts"), dueItems("pages")]);
   const publishedPosts = posts.length;
   const publishedPages = pages.length;
@@ -122,10 +139,29 @@ export async function runScheduledJobs(renderer: () => Promise<unknown> = render
         message: `Scheduled publishing failed and will retry automatically: ${message.slice(0, 240)}`,
       }).catch(() => undefined);
       await runHousekeeping();
-      return { publishedPosts: 0, publishedPages: 0, failedPosts: publishedPosts, failedPages: publishedPages, retryQueued: true };
+      await runAutomatedBackupIfDue();
+      return { publishedPosts: 0, publishedPages: 0, failedPosts: publishedPosts, failedPages: publishedPages, retryQueued: true, skippedByLock: false };
     }
   }
 
   await runHousekeeping();
-  return { publishedPosts, publishedPages, failedPosts: 0, failedPages: 0, retryQueued: false };
+  await processBackgroundJobs();
+  await runAutomatedBackupIfDue();
+  return { publishedPosts, publishedPages, failedPosts: 0, failedPages: 0, retryQueued: false, skippedByLock: false };
+}
+
+export async function runScheduledJobs(renderer: () => Promise<unknown> = renderPublishedArtifacts): Promise<ScheduledJobResult> {
+  if (!config.schedulerLockEnabled) return runScheduledJobsUnlocked(renderer);
+
+  const lock = await tryAcquireSchedulerLock();
+  if (!lock) {
+    logInfo("scheduler.lock_unavailable", "Scheduled work is already running on another application instance.");
+    return { publishedPosts: 0, publishedPages: 0, failedPosts: 0, failedPages: 0, retryQueued: false, skippedByLock: true };
+  }
+
+  try {
+    return await runScheduledJobsUnlocked(renderer);
+  } finally {
+    await lock.release();
+  }
 }

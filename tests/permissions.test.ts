@@ -28,6 +28,25 @@ describe("permissions", () => {
     expect(hasPermission({ roles: ["editor"] }, "settings.manage")).toBe(false);
   });
 
+  test("limits API key management to owners and administrators", () => {
+    expect(hasPermission({ roles: ["owner"] }, "api_keys.manage")).toBe(true);
+    expect(hasPermission({ roles: ["admin"] }, "api_keys.manage")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "api_keys.manage")).toBe(false);
+    expect(hasPermission({ roles: ["author"] }, "api_keys.manage")).toBe(false);
+  });
+
+  test("limits database maintenance to owners and administrators", () => {
+    expect(hasPermission({ roles: ["owner"] }, "database.manage")).toBe(true);
+    expect(hasPermission({ roles: ["admin"] }, "database.manage")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "database.manage")).toBe(false);
+  });
+
+  test("limits operational metrics to owners and administrators", () => {
+    expect(hasPermission({ roles: ["owner"] }, "metrics.read")).toBe(true);
+    expect(hasPermission({ roles: ["admin"] }, "metrics.read")).toBe(true);
+    expect(hasPermission({ roles: ["editor"] }, "metrics.read")).toBe(false);
+  });
+
   test("allows editors to moderate comments without granting access to viewers", () => {
     expect(hasPermission({ roles: ["editor"] }, "comments.manage")).toBe(true);
     expect(hasPermission({ roles: ["viewer"] }, "comments.read")).toBe(false);

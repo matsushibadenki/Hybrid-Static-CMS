@@ -19,12 +19,17 @@ import { listApprovedCommentsForPosts, type PostCommentRecord } from "./comments
 import { ensurePublicAssetDirectories, stylesheetPublicUrl } from "./assets";
 import { expandPublishedMaps, listMaps, renderMapsClientScript } from "./maps";
 import { writePublicRedirectManifest } from "./redirects";
+import { cmsLocaleDirectory, cmsLocalePath, contentLocales, localeHtmlLang, type ContentLocale } from "./locales";
+import { notifyPublishingWebhook } from "./webhooks";
+import { incrementOperationalMetric } from "./metrics";
 
-const publicCopy = publicTranslations[config.publicLocale];
-const publicDateLocale = config.publicLocale === "zh" ? "zh-CN" : config.publicLocale === "ja" ? "ja-JP" : "en-US";
+function publicCopyFor(locale: ContentLocale) {
+  return publicTranslations[locale];
+}
 
-function publicDate(value: string, options: Intl.DateTimeFormatOptions = { dateStyle: "medium" }) {
-  return new Date(value).toLocaleDateString(publicDateLocale, options);
+function publicDate(value: string, locale: ContentLocale, options: Intl.DateTimeFormatOptions = { dateStyle: "medium" }) {
+  const dateLocale = locale === "zh" ? "zh-CN" : locale === "ja" ? "ja-JP" : "en-US";
+  return new Date(value).toLocaleDateString(dateLocale, options);
 }
 
 type SeoMeta = {
@@ -35,14 +40,15 @@ type SeoMeta = {
   robots?: string;
   ogImage?: string;
   keywords?: string;
+  alternates?: Array<{ locale: ContentLocale; url: string }>;
 };
 
 function safeJsonLd(value: string) {
   return value.replaceAll("</script>", "<\\/script>");
 }
 
-function pagePublicPath(slug: string) {
-  return `/cms/pages/${slug}.html`;
+function pagePublicPath(slug: string, locale: ContentLocale = "en") {
+  return `${cmsLocalePath(locale)}/pages/${slug}.html`;
 }
 
 async function writeArtifact(filePath: string, content: string) {
@@ -58,21 +64,23 @@ async function writeArtifact(filePath: string, content: string) {
 }
 
 function card(post: PostRecord, variant: "lead" | "compact" = "compact", permalinkPattern: PostPermalinkPattern = "post_name") {
+  const copy = publicCopyFor(post.locale);
   const href = postPermalinkPath(post, permalinkPattern);
   return `
     <article class="hybrid-static-cms-card magazine-card magazine-card--${variant}">
       <div class="hybrid-static-cms-card__meta">
-        <span>${escapeHtml(post.publishedAt ? publicDate(post.publishedAt) : publicCopy.draft)}</span>
+        <span>${escapeHtml(post.publishedAt ? publicDate(post.publishedAt, post.locale) : copy.draft)}</span>
         ${post.categories[0] ? `<span>${escapeHtml(post.categories[0])}</span>` : ""}
       </div>
       <h3 class="magazine-card__title"><a href="${href}">${escapeHtml(post.title)}</a></h3>
       ${post.excerpt ? `<p>${escapeHtml(post.excerpt)}</p>` : ""}
-      <a class="magazine-card__read" href="${href}">${publicCopy.readStory} <span aria-hidden="true">↗</span></a>
+      <a class="magazine-card__read" href="${href}">${copy.readStory} <span aria-hidden="true">↗</span></a>
     </article>
   `;
 }
 
-function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []) {
+function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = [], locale: ContentLocale = "en") {
+  const copy = publicCopyFor(locale);
   const description = meta.description ? `<meta name="description" content="${escapeHtml(meta.description)}" />` : "";
   const canonical = meta.canonicalUrl ? `<link rel="canonical" href="${escapeHtml(meta.canonicalUrl)}" />` : "";
   const ogTitle = `<meta property="og:title" content="${escapeHtml(meta.title)}" />`;
@@ -83,6 +91,9 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
   const ogUrl = meta.canonicalUrl ? `<meta property="og:url" content="${escapeHtml(meta.canonicalUrl)}" />` : "";
   const ogImage = meta.ogImage ? `<meta property="og:image" content="${escapeHtml(meta.ogImage)}" />` : "";
   const keywords = meta.keywords ? `<meta name="keywords" content="${escapeHtml(meta.keywords)}" />` : "";
+  const alternates = meta.alternates
+    ?.map((alternate) => `<link rel="alternate" hreflang="${localeHtmlLang(alternate.locale)}" href="${escapeHtml(alternate.url)}" />`)
+    .join("\n    ") ?? "";
   const jsonLd = meta.jsonLd ? `<script type="application/ld+json">${safeJsonLd(meta.jsonLd)}</script>` : "";
   const robots = meta.robots ? `<meta name="robots" content="${escapeHtml(meta.robots)}" />` : "";
   const stylesheets = [...new Set(stylesheetUrls)]
@@ -90,7 +101,7 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
     .join("\n    ");
   const themeStylesheet = `<link rel="stylesheet" href="/cms/theme.css" />`;
   const fallback = `<!doctype html>
-<html lang="${config.publicLocale === "zh" ? "zh-CN" : config.publicLocale}">
+<html lang="${localeHtmlLang(locale)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -103,6 +114,7 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
     ${ogUrl}
     ${ogImage}
     ${keywords}
+    ${alternates}
     ${robots}
     ${jsonLd}
     <script>
@@ -621,6 +633,9 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
       .post-comment-form textarea { min-height: 120px; resize: vertical; }
       .post-comment-form button { background: var(--ink); border: 0; color: var(--on-ink); cursor: pointer; font: inherit; justify-self: start; padding: 10px 18px; }
       .post-comments__closed, .post-comments__empty, .post-comment-form__note { color: var(--muted); font-size: .82rem; }
+      .content-language-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 32px; }
+      .content-language-links a { border: 1px solid var(--line); color: var(--ink-secondary); font-size: .78rem; padding: 4px 9px; text-decoration: none; }
+      .content-language-links a:hover { border-color: var(--accent); color: var(--accent-hover); }
       .material-symbols-outlined { font-family: "Material Symbols Outlined"; font-weight: normal; font-style: normal; font-size: 1.2em; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; word-wrap: normal; direction: ltr; font-feature-settings: "liga"; -webkit-font-feature-settings: "liga"; -webkit-font-smoothing: antialiased; }
       .magazine-empty { border-top: 1px solid var(--line); color: var(--muted); padding-top: 20px; }
 
@@ -651,7 +666,7 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
       </header>
       <div class="magazine-rule"></div>
       ${body}
-      <footer class="magazine-footer">${escapeHtml(config.appName)} · ${publicCopy.builtWith}</footer>
+      <footer class="magazine-footer">${escapeHtml(config.appName)} · ${copy.builtWith}</footer>
     </main>
   </body>
 </html>`;
@@ -659,8 +674,9 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
     const template = readFileSync(path.join(config.templateDir, "page.html"), "utf8");
     const hasStylesheetSlot = template.includes("{{stylesheets}}");
     const hasThemeSlot = template.includes("{{theme}}");
+    const hasAlternatesSlot = template.includes("{{alternates}}");
     let rendered = template
-      .replaceAll("{{lang}}", config.publicLocale === "zh" ? "zh-CN" : config.publicLocale)
+      .replaceAll("{{lang}}", localeHtmlLang(locale))
       .replaceAll("{{siteName}}", escapeHtml(config.appName))
       .replaceAll("{{siteUrl}}", escapeHtml(config.appUrl))
       .replaceAll("{{year}}", String(new Date().getFullYear()))
@@ -673,6 +689,7 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
       .replaceAll("{{ogUrl}}", ogUrl)
       .replaceAll("{{ogImage}}", ogImage)
       .replaceAll("{{keywords}}", keywords)
+      .replaceAll("{{alternates}}", alternates)
       .replaceAll("{{robots}}", robots)
       .replaceAll("{{jsonLd}}", jsonLd)
       .replaceAll("{{theme}}", themeStylesheet)
@@ -680,47 +697,60 @@ function pageTemplate(meta: SeoMeta, body: string, stylesheetUrls: string[] = []
       .replaceAll("{{body}}", body);
     if (!hasThemeSlot) rendered = rendered.replace(/<head([^>]*)>/i, (head) => `${head}\n    ${themeStylesheet}`);
     if (!hasStylesheetSlot && stylesheets) rendered = rendered.replace("</head>", `    ${stylesheets}\n  </head>`);
+    if (!hasAlternatesSlot && alternates) rendered = rendered.replace("</head>", `    ${alternates}\n  </head>`);
     return rendered;
   } catch {
     return fallback;
   }
 }
 
-function renderList(title: string, posts: PostRecord[], pagination?: { page: number; totalPages: number }, permalinkPattern: PostPermalinkPattern = "post_name") {
+function renderList(title: string, posts: PostRecord[], pagination?: { page: number; totalPages: number }, permalinkPattern: PostPermalinkPattern = "post_name", locale: ContentLocale = "en") {
+  const copy = publicCopyFor(locale);
   const cards = posts.map((post, index) => card(post, index === 0 ? "lead" : "compact", permalinkPattern)).join("");
   const pager =
     pagination && pagination.totalPages > 1
-      ? `<nav class="magazine-pagination" aria-label="${publicCopy.postPages}">${Array.from({ length: pagination.totalPages }, (_, index) => {
+      ? `<nav class="magazine-pagination" aria-label="${copy.postPages}">${Array.from({ length: pagination.totalPages }, (_, index) => {
           const page = index + 1;
-          return `<a href="/cms/posts/page/${page}.html">${publicCopy.page} ${page}</a>`;
+          return `<a href="${cmsLocalePath(locale)}/posts/page/${page}.html">${copy.page} ${page}</a>`;
         }).join("")}</nav>`
       : "";
 
   return pageTemplate(
     {
       title,
-      description: `${publicCopy.posts} - ${config.appName}`,
-      canonicalUrl: `${config.appUrl}/cms/posts/list.html`,
+      description: `${copy.posts} - ${config.appName}`,
+      canonicalUrl: `${config.appUrl}${cmsLocalePath(locale)}/posts/list.html`,
     },
     `<header class="magazine-page-header">
-      <div><p class="magazine-page-header__eyebrow">${publicCopy.editorialIndex}</p></div>
-      <div><h1 class="magazine-page-header__title">${escapeHtml(title)}</h1><p class="magazine-page-header__deck">${publicCopy.postIndexDescription} · ${escapeHtml(config.appName)}</p></div>
+      <div><p class="magazine-page-header__eyebrow">${copy.editorialIndex}</p></div>
+      <div><h1 class="magazine-page-header__title">${escapeHtml(title)}</h1><p class="magazine-page-header__deck">${copy.postIndexDescription} · ${escapeHtml(config.appName)}</p></div>
     </header>
-    <section class="hybrid-static-cms-list magazine-index">${cards || `<p class="magazine-empty">${publicCopy.noPosts}</p>`}</section>${pager}`,
+    <section class="hybrid-static-cms-list magazine-index">${cards || `<p class="magazine-empty">${copy.noPosts}</p>`}</section>${pager}`,
+    [],
+    locale,
   );
 }
 
-function renderFragment(posts: PostRecord[], permalinkPattern: PostPermalinkPattern = "post_name") {
+function renderFragment(posts: PostRecord[], permalinkPattern: PostPermalinkPattern = "post_name", locale: ContentLocale = "en") {
+  const copy = publicCopyFor(locale);
   if (posts.length === 0) {
-    return `<div class="hybrid-static-cms-fragment"><p>${publicCopy.noPosts}</p></div>`;
+    return `<div class="hybrid-static-cms-fragment"><p>${copy.noPosts}</p></div>`;
   }
 
   return `<div class="hybrid-static-cms-fragment magazine-index">${posts.map((post) => card(post, "compact", permalinkPattern)).join("")}</div>`;
 }
 
-export async function renderPage(page: PageRecord) {
+type TranslationLink = { locale: ContentLocale; title: string; url: string };
+
+function renderTranslationLinks(links: TranslationLink[], currentLocale: ContentLocale) {
+  if (links.length < 2) return "";
+  return `<nav class="content-language-links" aria-label="Available languages">${links.map((link) => `<a href="${escapeHtml(link.url)}" lang="${localeHtmlLang(link.locale)}"${link.locale === currentLocale ? " aria-current=\"page\"" : ""}>${escapeHtml(localeHtmlLang(link.locale))}</a>`).join("")}</nav>`;
+}
+
+export async function renderPage(page: PageRecord, translations: TranslationLink[] = []) {
+  const copy = publicCopyFor(page.locale);
   const expandedBody = await expandPublishedMaps(await expandPublishedBlocks(page.bodyHtml));
-  const canonicalUrl = page.seoCanonicalUrl || `${config.appUrl}${pagePublicPath(page.slug)}`;
+  const canonicalUrl = page.seoCanonicalUrl || `${config.appUrl}${pagePublicPath(page.slug, page.locale)}`;
   const robots = [page.seoNoindex ? "noindex" : "index", page.seoNofollow ? "nofollow" : "follow"].join(", ");
   const stylesheetUrl = stylesheetPublicUrl(page.stylesheetPath, "pages");
   return pageTemplate(
@@ -731,6 +761,7 @@ export async function renderPage(page: PageRecord) {
       ogImage: page.seoOgImage || undefined,
       keywords: page.seoKeywords || undefined,
       robots,
+      alternates: translations.map((translation) => ({ locale: translation.locale, url: translation.url })),
       jsonLd: JSON.stringify({
         "@context": "https://schema.org",
         "@type": "WebPage",
@@ -744,28 +775,31 @@ export async function renderPage(page: PageRecord) {
     `
       <article class="hybrid-static-cms-page magazine-prose">
         <header class="magazine-prose__header">
-          <p class="magazine-kicker">${publicCopy.managedPage}</p>
+          <p class="magazine-kicker">${copy.managedPage}</p>
           <h1 class="magazine-prose__title">${escapeHtml(page.title)}</h1>
           ${page.excerpt ? `<p class="magazine-prose__deck">${escapeHtml(page.excerpt)}</p>` : ""}
         </header>
         <div class="magazine-prose__body">${expandedBody}</div>
+        ${renderTranslationLinks(translations, page.locale)}
       </article>
     `,
     stylesheetUrl ? [stylesheetUrl] : [],
+    page.locale,
   );
 }
 
-function renderPageIndex(pages: PageRecord[]) {
+function renderPageIndex(pages: PageRecord[], locale: ContentLocale = "en") {
+  const copy = publicCopyFor(locale);
   const cards = pages
     .map(
       (page) => `
         <article class="hybrid-static-cms-card magazine-card magazine-card--compact">
           <div class="hybrid-static-cms-card__meta">
-            <span>${escapeHtml(page.publishedAt ? publicDate(page.publishedAt) : publicCopy.draft)}</span>
+            <span>${escapeHtml(page.publishedAt ? publicDate(page.publishedAt, page.locale) : copy.draft)}</span>
           </div>
-          <h3 class="magazine-card__title"><a href="${pagePublicPath(page.slug)}">${escapeHtml(page.title)}</a></h3>
+          <h3 class="magazine-card__title"><a href="${pagePublicPath(page.slug, page.locale)}">${escapeHtml(page.title)}</a></h3>
           ${page.excerpt ? `<p>${escapeHtml(page.excerpt)}</p>` : ""}
-          <a class="magazine-card__read" href="${pagePublicPath(page.slug)}">${publicCopy.openPage} <span aria-hidden="true">↗</span></a>
+          <a class="magazine-card__read" href="${pagePublicPath(page.slug, page.locale)}">${copy.openPage} <span aria-hidden="true">↗</span></a>
         </article>
       `,
     )
@@ -773,20 +807,23 @@ function renderPageIndex(pages: PageRecord[]) {
 
   return pageTemplate(
     {
-      title: publicCopy.pages,
-      description: `${publicCopy.pages} - ${config.appName}`,
-      canonicalUrl: `${config.appUrl}/cms/pages/index.html`,
+      title: copy.pages,
+      description: `${copy.pages} - ${config.appName}`,
+      canonicalUrl: `${config.appUrl}${cmsLocalePath(locale)}/pages/index.html`,
     },
     `<header class="magazine-page-header">
-      <div><p class="magazine-page-header__eyebrow">${publicCopy.staticDesk}</p></div>
-      <div><h1 class="magazine-page-header__title">${publicCopy.pages}</h1><p class="magazine-page-header__deck">${publicCopy.pageIndexDescription} ${escapeHtml(config.appName)}</p></div>
+      <div><p class="magazine-page-header__eyebrow">${copy.staticDesk}</p></div>
+      <div><h1 class="magazine-page-header__title">${copy.pages}</h1><p class="magazine-page-header__deck">${copy.pageIndexDescription} ${escapeHtml(config.appName)}</p></div>
     </header>
-    <section class="hybrid-static-cms-list magazine-index">${cards || `<p class="magazine-empty">${publicCopy.noPages}</p>`}</section>`,
+    <section class="hybrid-static-cms-list magazine-index">${cards || `<p class="magazine-empty">${copy.noPages}</p>`}</section>`,
+    [],
+    locale,
   );
 }
 
 function renderSeriesPagination(post: PostRecord, series: SeriesNavigation | null, permalinkPattern: PostPermalinkPattern) {
   if (!series || series.posts.length < 2) return "";
+  const copy = publicCopyFor(post.locale);
   const currentIndex = series.posts.findIndex((item) => item.id === post.id);
   if (currentIndex < 0) return "";
   const previous = series.posts[currentIndex - 1];
@@ -803,20 +840,20 @@ function renderSeriesPagination(post: PostRecord, series: SeriesNavigation | nul
     const item = series.posts[index];
     const page = index + 1;
     const control = index === currentIndex
-      ? `<span aria-current="page" aria-label="${publicCopy.currentArticle}: ${escapeHtml(item.title)}">${page}</span>`
-      : `<a href="${postPermalinkPath(item, permalinkPattern)}" aria-label="${publicCopy.openArticle} ${page}: ${escapeHtml(item.title)}" title="${escapeHtml(item.title)}">${page}</a>`;
+      ? `<span aria-current="page" aria-label="${copy.currentArticle}: ${escapeHtml(item.title)}">${page}</span>`
+      : `<a href="${postPermalinkPath(item, permalinkPattern)}" aria-label="${copy.openArticle} ${page}: ${escapeHtml(item.title)}" title="${escapeHtml(item.title)}">${page}</a>`;
     return `${gap}<li>${control}</li>`;
   }).join("");
   const previousControl = previous
-    ? `<a class="series-pager__direction" href="${postPermalinkPath(previous, permalinkPattern)}"><span class="series-pager__direction-label">← ${publicCopy.previous}</span><span class="series-pager__direction-title">${escapeHtml(previous.title)}</span></a>`
+    ? `<a class="series-pager__direction" href="${postPermalinkPath(previous, permalinkPattern)}"><span class="series-pager__direction-label">← ${copy.previous}</span><span class="series-pager__direction-title">${escapeHtml(previous.title)}</span></a>`
     : `<span class="series-pager__direction series-pager__direction--disabled" aria-hidden="true"></span>`;
   const nextControl = next
-    ? `<a class="series-pager__direction series-pager__direction--next" href="${postPermalinkPath(next, permalinkPattern)}"><span class="series-pager__direction-label">${publicCopy.next} →</span><span class="series-pager__direction-title">${escapeHtml(next.title)}</span></a>`
+    ? `<a class="series-pager__direction series-pager__direction--next" href="${postPermalinkPath(next, permalinkPattern)}"><span class="series-pager__direction-label">${copy.next} →</span><span class="series-pager__direction-title">${escapeHtml(next.title)}</span></a>`
     : `<span class="series-pager__direction series-pager__direction--disabled" aria-hidden="true"></span>`;
   return `
-    <nav class="series-pager" aria-label="${publicCopy.seriesNavigation}">
+    <nav class="series-pager" aria-label="${copy.seriesNavigation}">
       <header class="series-pager__header">
-        <div><p class="series-pager__label">${publicCopy.series}</p><h2 class="series-pager__title">${escapeHtml(series.title)}</h2></div>
+        <div><p class="series-pager__label">${copy.series}</p><h2 class="series-pager__title">${escapeHtml(series.title)}</h2></div>
         <span class="series-pager__position">${currentIndex + 1} / ${series.posts.length}</span>
       </header>
       <div class="series-pager__steps">
@@ -828,11 +865,12 @@ function renderSeriesPagination(post: PostRecord, series: SeriesNavigation | nul
 }
 
 function renderCommentSection(post: PostRecord, comments: PostCommentRecord[]) {
+  const copy = publicCopyFor(post.locale);
   const commentsHtml = comments.length > 0
-    ? `<ol class="post-comments__list">${comments.map((comment) => `<li class="post-comment"><p class="post-comment__meta"><strong>${escapeHtml(comment.authorName)}</strong> · ${escapeHtml(publicDate(comment.createdAt))}</p><p class="post-comment__body">${escapeHtml(comment.body)}</p></li>`).join("")}</ol>`
-    : `<p class="post-comments__empty">${escapeHtml(publicCopy.noComments)}</p>`;
+    ? `<ol class="post-comments__list">${comments.map((comment) => `<li class="post-comment"><p class="post-comment__meta"><strong>${escapeHtml(comment.authorName)}</strong> · ${escapeHtml(publicDate(comment.createdAt, post.locale))}</p><p class="post-comment__body">${escapeHtml(comment.body)}</p></li>`).join("")}</ol>`
+    : `<p class="post-comments__empty">${escapeHtml(copy.noComments)}</p>`;
   if (!post.commentsEnabled) {
-    return `<section class="post-comments" id="comments"><h2 class="post-comments__title">${escapeHtml(publicCopy.comments)}</h2>${commentsHtml}<p class="post-comments__closed">${escapeHtml(publicCopy.commentsClosed)}</p></section>`;
+    return `<section class="post-comments" id="comments"><h2 class="post-comments__title">${escapeHtml(copy.comments)}</h2>${commentsHtml}<p class="post-comments__closed">${escapeHtml(copy.commentsClosed)}</p></section>`;
   }
   const recaptchaAction = `comment_submit_${post.id}`;
   const recaptchaMarkup = config.recaptchaSiteKey && config.recaptchaSecretKey
@@ -840,10 +878,11 @@ function renderCommentSection(post: PostRecord, comments: PostCommentRecord[]) {
       <script src="https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(config.recaptchaSiteKey)}"></script>
       <script>(()=>{const form=document.currentScript?.closest(".post-comments")?.querySelector("form");if(!form||!window.grecaptcha)return;const field=form.querySelector('input[name="recaptchaToken"]');let submitting=false;form.addEventListener("submit",async(event)=>{if(submitting)return;event.preventDefault();submitting=true;const button=form.querySelector('button[type="submit"]');if(button)button.disabled=true;try{const token=await new Promise((resolve,reject)=>window.grecaptcha.ready(()=>window.grecaptcha.execute(${JSON.stringify(config.recaptchaSiteKey)},{action:${JSON.stringify(recaptchaAction)}}).then(resolve).catch(reject)));if(field)field.value=token;form.submit();}catch{ submitting=false;if(button)button.disabled=false;}});})();</script>`
     : "";
-  return `<section class="post-comments" id="comments"><h2 class="post-comments__title">${escapeHtml(publicCopy.comments)}</h2>${commentsHtml}<form class="post-comment-form" method="post" action="${config.cmsApiPrefix}/comments/${post.id}/submit"><label>${escapeHtml(publicCopy.commentName)}<input name="authorName" maxlength="80" autocomplete="name" required /></label><label>${escapeHtml(publicCopy.commentEmail)}<input type="email" name="authorEmail" maxlength="254" autocomplete="email" required /></label><label>${escapeHtml(publicCopy.commentBody)}<textarea name="body" maxlength="4000" required></textarea></label>${recaptchaMarkup}<p class="post-comment-form__note">${escapeHtml(publicCopy.commentModerationNote)}</p><button type="submit">${escapeHtml(publicCopy.submitComment)}</button></form></section>`;
+  return `<section class="post-comments" id="comments"><h2 class="post-comments__title">${escapeHtml(copy.comments)}</h2>${commentsHtml}<form class="post-comment-form" method="post" action="${config.cmsApiPrefix}/comments/${post.id}/submit"><label>${escapeHtml(copy.commentName)}<input name="authorName" maxlength="80" autocomplete="name" required /></label><label>${escapeHtml(copy.commentEmail)}<input type="email" name="authorEmail" maxlength="254" autocomplete="email" required /></label><label>${escapeHtml(copy.commentBody)}<textarea name="body" maxlength="4000" required></textarea></label>${recaptchaMarkup}<p class="post-comment-form__note">${escapeHtml(copy.commentModerationNote)}</p><button type="submit">${escapeHtml(copy.submitComment)}</button></form></section>`;
 }
 
-export function renderPost(post: PostRecord, series: SeriesNavigation | null = null, permalinkPattern: PostPermalinkPattern = "post_name", comments: PostCommentRecord[] = [], expandedBodyHtml = post.bodyHtml) {
+export function renderPost(post: PostRecord, series: SeriesNavigation | null = null, permalinkPattern: PostPermalinkPattern = "post_name", comments: PostCommentRecord[] = [], expandedBodyHtml = post.bodyHtml, translations: TranslationLink[] = []) {
+  const copy = publicCopyFor(post.locale);
   const canonicalUrl = post.seoCanonicalUrl || `${config.appUrl}${postPermalinkPath(post, permalinkPattern)}`;
   const robots = [post.seoNoindex ? "noindex" : "index", post.seoNofollow ? "nofollow" : "follow"].join(", ");
   const stylesheetUrls = post.categoryStylesheets
@@ -857,6 +896,7 @@ export function renderPost(post: PostRecord, series: SeriesNavigation | null = n
       ogImage: post.seoOgImage || undefined,
       keywords: post.seoKeywords || undefined,
       robots,
+      alternates: translations.map((translation) => ({ locale: translation.locale, url: translation.url })),
       jsonLd: JSON.stringify({
         "@context": "https://schema.org",
         "@type": "Article",
@@ -873,18 +913,20 @@ export function renderPost(post: PostRecord, series: SeriesNavigation | null = n
       <article class="hybrid-static-cms-prose magazine-prose">
         <header class="magazine-prose__header">
         <p class="magazine-kicker">
-          ${escapeHtml(post.publishedAt ? publicDate(post.publishedAt) : publicCopy.draft)}
-          ${post.authorName ? ` · ${publicCopy.by} ${escapeHtml(post.authorName)}` : ""}
+          ${escapeHtml(post.publishedAt ? publicDate(post.publishedAt, post.locale) : copy.draft)}
+          ${post.authorName ? ` · ${copy.by} ${escapeHtml(post.authorName)}` : ""}
         </p>
         <h1 class="magazine-prose__title">${escapeHtml(post.title)}</h1>
         ${post.excerpt ? `<p class="magazine-prose__deck">${escapeHtml(post.excerpt)}</p>` : ""}
         </header>
         <div class="magazine-prose__body">${expandedBodyHtml}</div>
+        ${renderTranslationLinks(translations, post.locale)}
         ${renderSeriesPagination(post, series, permalinkPattern)}
         ${renderCommentSection(post, comments)}
       </article>
     `,
     stylesheetUrls,
+    post.locale,
   );
 }
 
@@ -1107,22 +1149,22 @@ export function renderEmbedScript(permalinkPattern: PostPermalinkPattern = "post
 })();`;
 }
 
-async function listAllPublishedPosts() {
-  const first = await listPosts({ page: 1, limit: 50, status: "published" });
+async function listAllPublishedPosts(locale: ContentLocale = "en") {
+  const first = await listPosts({ page: 1, limit: 50, status: "published", locale });
   const items = [...first.items];
   for (let page = 2; items.length < first.total; page += 1) {
-    const result = await listPosts({ page, limit: 50, status: "published" });
+    const result = await listPosts({ page, limit: 50, status: "published", locale });
     if (result.items.length === 0) break;
     items.push(...result.items);
   }
   return { ...first, items };
 }
 
-async function listAllPublishedPages() {
-  const first = await listPages({ page: 1, limit: 50, status: "published" });
+async function listAllPublishedPages(locale: ContentLocale = "en") {
+  const first = await listPages({ page: 1, limit: 50, status: "published", locale });
   const items = [...first.items];
   for (let page = 2; items.length < first.total; page += 1) {
-    const result = await listPages({ page, limit: 50, status: "published" });
+    const result = await listPages({ page, limit: 50, status: "published", locale });
     if (result.items.length === 0) break;
     items.push(...result.items);
   }
@@ -1142,7 +1184,7 @@ async function readPostArtifactManifest() {
 
 function isManagedPostArtifact(relativePath: string) {
   const normalized = path.posix.normalize(relativePath);
-  return normalized === relativePath && normalized.startsWith("posts/") && normalized.endsWith(".html") && !normalized.includes("../");
+  return normalized === relativePath && /^(?:(?:ja|zh)\/)?posts\/.+\.html$/.test(normalized) && !normalized.includes("../");
 }
 
 async function removeObsoletePostArtifacts(currentPaths: string[], legacyPaths: string[]) {
@@ -1163,44 +1205,52 @@ export async function renderPublishedArtifacts() {
   await emitHook("beforeRender", { outputDir: config.cmsOutputDir });
   const permalinkPattern = await getPostPermalinkPattern();
   const theme = await getPublicThemeSettings(config.googleFontsCssUrls);
-  const latest = await listPosts({ page: 1, limit: 5, status: "published" });
-  const full = await listAllPublishedPosts();
-  const pages = await listAllPublishedPages();
-  const totalPages = Math.max(1, Math.ceil(full.total / config.defaultPageSize));
-  const pageDir = path.join(config.cmsOutputDir, "posts", "page");
-  const cmsPageDir = path.join(config.cmsOutputDir, "pages");
-
-  await mkdir(path.join(config.cmsOutputDir, "posts"), { recursive: true });
-  await mkdir(pageDir, { recursive: true });
-  await mkdir(cmsPageDir, { recursive: true });
   await writeArtifact(path.join(config.cmsOutputDir, "theme.css"), publicThemeCss(theme));
-
-  await writeArtifact(path.join(config.cmsOutputDir, "posts", "latest.html"), renderFragment(latest.items, permalinkPattern));
-  await writeArtifact(path.join(config.cmsOutputDir, "posts", "list.html"), renderList("All Posts", full.items, undefined, permalinkPattern));
-
-  for (let page = 1; page <= totalPages; page += 1) {
-    const paged = await listPosts({ page, limit: config.defaultPageSize, status: "published" });
-    const html = renderList("Published Posts", paged.items, { page, totalPages }, permalinkPattern);
-    await writeArtifact(path.join(pageDir, `${page}.html`), html);
-  }
-
-  await writeArtifact(path.join(config.cmsOutputDir, "posts", "rss.xml"), renderRss(full.items, permalinkPattern));
-  const seriesNavigation = await listPostSeriesNavigation(full.items.map((post) => post.id));
-  const commentsByPost = await listApprovedCommentsForPosts(full.items.map((post) => post.id));
   const currentPostArtifacts: string[] = [];
-  for (const post of full.items) {
-    const relativePath = postArtifactRelativePath(post, permalinkPattern);
-    currentPostArtifacts.push(relativePath);
-    const expandedBody = await expandPublishedMaps(await expandPublishedBlocks(post.bodyHtml));
-    await writeArtifact(path.join(config.cmsOutputDir, ...relativePath.split("/")), renderPost(post, seriesNavigation.get(post.id) ?? null, permalinkPattern, commentsByPost.get(post.id) ?? [], expandedBody));
+  const allPosts: PostRecord[] = [];
+  const allPages: PageRecord[] = [];
+
+  for (const locale of contentLocales) {
+    const outputDir = path.join(config.cmsOutputDir, cmsLocaleDirectory(locale));
+    const latest = await listPosts({ page: 1, limit: 5, status: "published", locale });
+    const full = await listAllPublishedPosts(locale);
+    const pages = await listAllPublishedPages(locale);
+    const totalPages = Math.max(1, Math.ceil(full.total / config.defaultPageSize));
+    const pageDir = path.join(outputDir, "posts", "page");
+    const cmsPageDir = path.join(outputDir, "pages");
+    await mkdir(path.join(outputDir, "posts"), { recursive: true });
+    await mkdir(pageDir, { recursive: true });
+    await mkdir(cmsPageDir, { recursive: true });
+    const copy = publicCopyFor(locale);
+    await writeArtifact(path.join(outputDir, "posts", "latest.html"), renderFragment(latest.items, permalinkPattern, locale));
+    await writeArtifact(path.join(outputDir, "posts", "list.html"), renderList(copy.posts, full.items, undefined, permalinkPattern, locale));
+    for (let page = 1; page <= totalPages; page += 1) {
+      const paged = await listPosts({ page, limit: config.defaultPageSize, status: "published", locale });
+      await writeArtifact(path.join(pageDir, `${page}.html`), renderList(copy.posts, paged.items, { page, totalPages }, permalinkPattern, locale));
+    }
+    await writeArtifact(path.join(outputDir, "posts", "rss.xml"), renderRss(full.items, permalinkPattern));
+    const seriesNavigation = await listPostSeriesNavigation(full.items.map((post) => post.id), locale);
+    const commentsByPost = await listApprovedCommentsForPosts(full.items.map((post) => post.id));
+    for (const post of full.items) {
+      const relativePath = postArtifactRelativePath(post, permalinkPattern);
+      currentPostArtifacts.push(relativePath);
+      const expandedBody = await expandPublishedMaps(await expandPublishedBlocks(post.bodyHtml));
+      const translations = await listPosts({ page: 1, limit: 50, status: "published", translationGroup: post.translationGroup });
+      const links = translations.items.map((item) => ({ locale: item.locale, title: item.title, url: `${config.appUrl}${postPermalinkPath(item, permalinkPattern)}` }));
+      await writeArtifact(path.join(config.cmsOutputDir, ...relativePath.split("/")), renderPost(post, seriesNavigation.get(post.id) ?? null, permalinkPattern, commentsByPost.get(post.id) ?? [], expandedBody, links));
+    }
+    await writeArtifact(path.join(cmsPageDir, "index.html"), renderPageIndex(pages.items, locale));
+    for (const page of pages.items) {
+      const translations = await listPages({ page: 1, limit: 50, status: "published", translationGroup: page.translationGroup });
+      const links = translations.items.map((item) => ({ locale: item.locale, title: item.title, url: `${config.appUrl}${pagePublicPath(item.slug, item.locale)}` }));
+      await writeArtifact(path.join(cmsPageDir, `${page.slug}.html`), await renderPage(page, links));
+    }
+    allPosts.push(...full.items);
+    allPages.push(...pages.items);
   }
-  await writeArtifact(path.join(cmsPageDir, "index.html"), renderPageIndex(pages.items));
-  for (const page of pages.items) {
-    await writeArtifact(path.join(cmsPageDir, `${page.slug}.html`), await renderPage(page));
-  }
-  await writeArtifact(path.join(config.publicHtmlDir, "sitemap.xml"), renderSitemap(full.items, pages.items, permalinkPattern));
+  await writeArtifact(path.join(config.publicHtmlDir, "sitemap.xml"), renderSitemap(allPosts, allPages, permalinkPattern));
   await writeArtifact(path.join(config.publicHtmlDir, "robots.txt"), renderRobotsTxt());
-  await writeArtifact(path.join(config.publicHtmlDir, "llms.txt"), renderLlmsTxt(full.items, pages.items, permalinkPattern));
+  await writeArtifact(path.join(config.publicHtmlDir, "llms.txt"), renderLlmsTxt(allPosts, allPages, permalinkPattern));
   await writeArtifact(path.join(config.cmsOutputDir, "embed.js"), renderEmbedScript(permalinkPattern));
   await writeArtifact(path.join(config.cmsOutputDir, "maps.js"), renderMapsClientScript(await listMaps("published")));
   await writePublicRedirectManifest();
@@ -1208,7 +1258,9 @@ export async function renderPublishedArtifacts() {
   await renderMenuArtifacts();
   const legacyPostArtifacts = permalinkPattern === "post_name"
     ? []
-    : full.items.map((post) => postArtifactRelativePath(post, "post_name"));
+    : allPosts.filter((post) => post.locale === "en").map((post) => postArtifactRelativePath(post, "post_name"));
   await removeObsoletePostArtifacts(currentPostArtifacts, legacyPostArtifacts);
   await emitHook("afterRender", { outputDir: config.cmsOutputDir });
+  notifyPublishingWebhook();
+  void incrementOperationalMetric("publishing.completed").catch(() => undefined);
 }

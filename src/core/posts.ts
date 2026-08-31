@@ -11,10 +11,13 @@ import type { PostInput, PostRecord } from "./types";
 import { createContentRevision } from "./revisions";
 import { assertEditorialFingerprintPublishAllowed, postEditorialFingerprint } from "./editorialFingerprint";
 import { buildSearchCondition } from "./search";
+import { contentLocaleFrom, isContentLocale } from "./locales";
 
 function normalizePost(row: Record<string, unknown>): PostRecord {
   return {
     id: Number(row.id),
+    locale: contentLocaleFrom(row.content_locale),
+    translationGroup: String(row.translation_group),
     title: String(row.title),
     slug: String(row.slug),
     excerpt: (row.excerpt as string | null) ?? null,
@@ -58,6 +61,7 @@ function validatePostInput(input: PostInput) {
   requireNonEmpty(input.title, "Title");
   validateSlug(input.slug);
   validateScheduledState(input.status, input.publishedAt);
+  if (input.locale !== undefined && !isContentLocale(input.locale)) throw new AppValidationError("Select a valid content language.");
 }
 
 async function ensureTerms(type: "category" | "tag", slugs: string[], trx: typeof sql) {
@@ -115,6 +119,8 @@ async function syncSeries(postId: number, seriesId: number | null, trx: typeof s
 const basePostQuery = `
   select
     p.id,
+    p.content_locale,
+    p.translation_group,
     p.title,
     p.slug,
     p.excerpt,
@@ -164,6 +170,8 @@ export async function listPosts(options: {
   category?: string;
   search?: string;
   workflow?: string;
+  locale?: string;
+  translationGroup?: string;
 }) {
   const page = Math.max(1, options.page ?? 1);
   const limit = Math.max(1, Math.min(50, options.limit ?? 10));
@@ -171,6 +179,7 @@ export async function listPosts(options: {
   const status = options.status ?? "published";
   const search = options.search?.trim();
   const workflow = options.workflow;
+  const locale = options.locale;
 
   const filters: string[] = [];
   const params: (string | number)[] = [];
@@ -190,6 +199,16 @@ export async function listPosts(options: {
   if (options.category) {
     params.push(options.category);
     filters.push(`exists (select 1 from post_categories xpc join categories xc on xc.id = xpc.category_id where xpc.post_id = p.id and xc.slug = $${params.length})`);
+  }
+
+  if (locale && isContentLocale(locale)) {
+    params.push(locale);
+    filters.push(`p.content_locale = $${params.length}`);
+  }
+
+  if (options.translationGroup) {
+    params.push(options.translationGroup);
+    filters.push(`p.translation_group = $${params.length}`);
   }
 
   if (search) {
@@ -228,15 +247,15 @@ export async function listPosts(options: {
   };
 }
 
-export async function getPostBySlug(slug: string, status: string = "published") {
+export async function getPostBySlug(slug: string, status: string = "published", locale: string = "en") {
   const rows = await sql.unsafe(
     `
       ${basePostQuery}
-      where p.slug = $1 and ($2 = 'any' or p.status = $2)
+      where p.slug = $1 and ($2 = 'any' or p.status = $2) and p.content_locale = $3
       group by p.id, u.id
       limit 1
     `,
-    [slug, status],
+    [slug, status, contentLocaleFrom(locale)],
   );
 
   if (!rows[0]) {
@@ -276,6 +295,8 @@ export async function createPost(input: PostInput, authorId: number) {
       const rows = await trx`
         insert into posts (
           title,
+          content_locale,
+          translation_group,
           slug,
           excerpt,
           body_md,
@@ -292,6 +313,8 @@ export async function createPost(input: PostInput, authorId: number) {
           seo_nofollow
         ) values (
           ${input.title},
+          ${contentLocaleFrom(input.locale)},
+          ${input.translationGroup ?? crypto.randomUUID()},
           ${input.slug},
           ${input.excerpt ?? null},
           ${input.bodyMd ?? null},
@@ -342,6 +365,8 @@ export async function updatePost(id: number, input: PostInput, actorUserId?: num
         update posts
         set
           title = ${input.title},
+          content_locale = ${contentLocaleFrom(input.locale, previous?.locale ?? "en")},
+          translation_group = ${input.translationGroup ?? previous?.translationGroup ?? crypto.randomUUID()},
           slug = ${input.slug},
           excerpt = ${input.excerpt ?? null},
           body_md = ${input.bodyMd ?? null},

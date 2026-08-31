@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseConfigNumber, parseLogLevel, parsePublicLocale, parseRoleByteLimits, parseRoleSet } from "../src/core/config";
+import { parseCommandArguments, parseConfigNumber, parseLogLevel, parseMailDeliveryMode, parsePublicLocale, parseRoleByteLimits, parseRoleSet } from "../src/core/config";
 
 describe("configuration parsing", () => {
   test("falls back for non-numeric values and clamps unsafe ranges", () => {
@@ -17,6 +17,13 @@ describe("configuration parsing", () => {
     expect(parseLogLevel("error")).toBe("error");
     expect(parseLogLevel("verbose")).toBe("info");
     expect(parseLogLevel(undefined, "error")).toBe("error");
+  });
+
+  test("accepts supported mail delivery modes and safe process arguments", () => {
+    expect(parseMailDeliveryMode("sendmail")).toBe("sendmail");
+    expect(parseMailDeliveryMode("http")).toBe("http");
+    expect(parseMailDeliveryMode("unknown")).toBe("smtp");
+    expect(parseCommandArguments("-i -f", ["-i"])).toEqual(["-i", "-f"]);
   });
 
   test("parses upload roles and ignores unknown values", () => {

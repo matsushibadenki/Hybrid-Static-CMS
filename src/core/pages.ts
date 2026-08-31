@@ -12,10 +12,13 @@ import { createContentRevision } from "./revisions";
 import { requireExistingStylesheet } from "./assets";
 import { assertEditorialFingerprintPublishAllowed, pageEditorialFingerprint } from "./editorialFingerprint";
 import { buildSearchCondition } from "./search";
+import { contentLocaleFrom, isContentLocale } from "./locales";
 
 function normalizePage(row: Record<string, unknown>): PageRecord {
   return {
     id: Number(row.id),
+    locale: contentLocaleFrom(row.content_locale),
+    translationGroup: String(row.translation_group),
     title: String(row.title),
     slug: String(row.slug),
     excerpt: (row.excerpt as string | null) ?? null,
@@ -55,6 +58,7 @@ function validatePageInput(input: PageInput) {
   requireNonEmpty(input.title, "Title");
   validateSlug(input.slug);
   validateScheduledState(input.status, input.publishedAt);
+  if (input.locale !== undefined && !isContentLocale(input.locale)) throw new AppValidationError("Select a valid content language.");
 }
 
 async function syncPageGroup(pageId: number, groupId: number | null, trx: typeof sql) {
@@ -75,6 +79,8 @@ async function syncPageGroup(pageId: number, groupId: number | null, trx: typeof
 const basePageQuery = `
   select
     p.id,
+    p.content_locale,
+    p.translation_group,
     p.title,
     p.slug,
     p.excerpt,
@@ -104,13 +110,14 @@ const basePageQuery = `
   left join users u on u.id = p.author_id
 `;
 
-export async function listPages(options: { page?: number; limit?: number; status?: string; search?: string; workflow?: string }) {
+export async function listPages(options: { page?: number; limit?: number; status?: string; search?: string; workflow?: string; locale?: string; translationGroup?: string }) {
   const page = Math.max(1, options.page ?? 1);
   const limit = Math.max(1, Math.min(50, options.limit ?? 10));
   const offset = (page - 1) * limit;
   const status = options.status ?? "published";
   const search = options.search?.trim();
   const workflow = options.workflow;
+  const locale = options.locale;
 
   const filters: string[] = [];
   const params: (string | number)[] = [];
@@ -125,6 +132,16 @@ export async function listPages(options: { page?: number; limit?: number; status
   if (workflow && workflow !== "any" && ["draft", "in_review", "changes_requested", "approved"].includes(workflow)) {
     params.push(workflow);
     filters.push(`p.workflow_state = $${params.length}`);
+  }
+
+  if (locale && isContentLocale(locale)) {
+    params.push(locale);
+    filters.push(`p.content_locale = $${params.length}`);
+  }
+
+  if (options.translationGroup) {
+    params.push(options.translationGroup);
+    filters.push(`p.translation_group = $${params.length}`);
   }
 
   if (search) {
@@ -167,10 +184,10 @@ export async function getPageById(id: number) {
   return rows[0] ? normalizePage(rows[0] as Record<string, unknown>) : null;
 }
 
-export async function getPageBySlug(slug: string, status = "published") {
+export async function getPageBySlug(slug: string, status = "published", locale: string = "en") {
   const rows = await sql.unsafe(
-    `${basePageQuery} where p.slug = $1 and ($2 = 'any' or p.status = $2) limit 1`,
-    [slug, status],
+    `${basePageQuery} where p.slug = $1 and ($2 = 'any' or p.status = $2) and p.content_locale = $3 limit 1`,
+    [slug, status, contentLocaleFrom(locale)],
   );
   return rows[0] ? normalizePage(rows[0] as Record<string, unknown>) : null;
 }
@@ -185,6 +202,8 @@ export async function createPage(input: PageInput, authorId: number) {
       const rows = await trx`
         insert into pages (
         title,
+        content_locale,
+        translation_group,
         slug,
         excerpt,
         body_md,
@@ -202,6 +221,8 @@ export async function createPage(input: PageInput, authorId: number) {
         stylesheet_path
       ) values (
         ${input.title},
+        ${contentLocaleFrom(input.locale)},
+        ${input.translationGroup ?? crypto.randomUUID()},
         ${input.slug},
         ${input.excerpt ?? null},
         ${input.bodyMd ?? null},
@@ -249,6 +270,8 @@ export async function updatePage(id: number, input: PageInput, actorUserId?: num
         update pages
       set
         title = ${input.title},
+        content_locale = ${contentLocaleFrom(input.locale, previous?.locale ?? "en")},
+        translation_group = ${input.translationGroup ?? previous?.translationGroup ?? crypto.randomUUID()},
         slug = ${input.slug},
         excerpt = ${input.excerpt ?? null},
         body_md = ${input.bodyMd ?? null},

@@ -38,6 +38,7 @@ import {
 import { createPage, deletePage, getPageById, listPages, updatePage } from "../../core/pages";
 import { createPost, deletePost, getPostById, listPosts, setPostCommentsPolicy, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
+import { enqueuePublicRender } from "../../core/backgroundJobs";
 import { buildScopedSlug, slugify, escapeHtml } from "../../core/content";
 import { createManagedUser, getUserById, listUsers, managedRoles, resetUserPassword, resetUserTwoFactor, revokeUserSessions, setUserActive, updateUserProfile } from "../../core/users";
 import { hasPermission, requireAdminPermission } from "../../core/permissions";
@@ -116,6 +117,10 @@ import type { EditorialWorkflowState, PageRecord, PostRecord } from "../../core/
 import { createMap, deleteMap, getMapById, listMaps, updateMap, type MapEmbedInput } from "../../core/maps";
 import { getSearchDiagnostics, rebuildSearchIndexes, searchContent } from "../../core/search";
 import { isPublicThemeKitId, publicThemeKits, themeSettingsForKit } from "../../core/themeKits";
+import { contentLocales, localeLabels } from "../../core/locales";
+import { apiKeyScopeOptions, createApiKey, listApiKeys, revokeApiKey } from "../../core/apiKeys";
+import { getDatabaseHealth, runDatabaseAnalyze } from "../../core/databaseHealth";
+import { getOperationalMetrics, operationalMetricNames } from "../../core/metrics";
 
 function splitCsv(value: FormDataEntryValue | null) {
   return String(value ?? "")
@@ -360,6 +365,8 @@ function postValuesFromForm(form: FormData) {
     categories: String(form.get("categories") ?? ""),
     tags: String(form.get("tags") ?? ""),
     seriesId: String(form.get("seriesId") ?? ""),
+    locale: String(form.get("locale") ?? "en"),
+    translationGroup: String(form.get("translationGroup") ?? ""),
     seoTitle: String(form.get("seoTitle") ?? ""),
     seoDescription: String(form.get("seoDescription") ?? ""),
     seoCanonicalUrl: String(form.get("seoCanonicalUrl") ?? ""),
@@ -383,6 +390,8 @@ function pageValuesFromForm(form: FormData) {
     publishedAt: String(form.get("publishedAt") ?? ""),
     pageGroupId: String(form.get("pageGroupId") ?? ""),
     stylesheetPath: String(form.get("stylesheetPath") ?? ""),
+    locale: String(form.get("locale") ?? "en"),
+    translationGroup: String(form.get("translationGroup") ?? ""),
     seoTitle: String(form.get("seoTitle") ?? ""),
     seoDescription: String(form.get("seoDescription") ?? ""),
     seoCanonicalUrl: String(form.get("seoCanonicalUrl") ?? ""),
@@ -974,6 +983,8 @@ function postForm(action: string, values?: Record<string, string>, series: Await
         <h2 class="editor-section-title">Basic information</h2>
         <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
         <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
+        <label><span data-i18n="Content language">Content language</span> <select name="locale">${contentLocales.map((locale) => `<option value="${locale}" ${values?.locale === locale || (!values?.locale && locale === "en") ? "selected" : ""}>${localeLabels[locale]}</option>`).join("")}</select></label>
+        <input type="hidden" name="translationGroup" value="${escapeHtml(values?.translationGroup ?? "")}" />
         ${seriesSelect(series, values?.seriesId)}
         <details class="editor-inline-details">
           <summary>Additional article information</summary>
@@ -1042,6 +1053,8 @@ function pageForm(
         <h2 class="editor-section-title">Basic information</h2>
         <label>Title <input name="title" value="${escapeHtml(values?.title ?? "")}" required /></label>
         <label>Slug <input name="slug" value="${escapeHtml(values?.slug ?? "")}" placeholder="auto-generated if empty" /></label>
+        <label><span data-i18n="Content language">Content language</span> <select name="locale">${contentLocales.map((locale) => `<option value="${locale}" ${values?.locale === locale || (!values?.locale && locale === "en") ? "selected" : ""}>${localeLabels[locale]}</option>`).join("")}</select></label>
+        <input type="hidden" name="translationGroup" value="${escapeHtml(values?.translationGroup ?? "")}" />
         ${pageGroupSelect(groups, values?.pageGroupId)}
         <details class="editor-inline-details">
           <summary>Additional page information</summary>
@@ -1095,6 +1108,25 @@ function pageForm(
     ${slugAutomationScript()}
     ${editorAutosaveScript()}
   `;
+}
+
+function translationPanel(
+  contentType: "posts" | "pages",
+  content: PostRecord | PageRecord,
+  translations: Array<PostRecord | PageRecord>,
+) {
+  const byLocale = new Map(translations.map((item) => [item.locale, item]));
+  return `<section class="editor-section editor-section-compact">
+    <p class="editor-section-kicker" data-i18n="Localization">Localization</p>
+    <h2 class="editor-section-title" data-i18n="Translations">Translations</h2>
+    <p class="meta" data-i18n="Translations share a content group but are independently drafted, reviewed, and published.">Translations share a content group but are independently drafted, reviewed, and published.</p>
+    <div class="row">${contentLocales.map((locale) => {
+      const item = byLocale.get(locale);
+      return item
+        ? `<a class="button ${item.id === content.id ? "button-primary" : ""}" href="${config.controlPanelPath}/${contentType}/${item.id}/edit">${localeLabels[locale]}</a>`
+        : `<form method="post" action="${config.controlPanelPath}/${contentType}/${content.id}/translations"><input type="hidden" name="locale" value="${locale}" /><button class="button" type="submit">Create ${localeLabels[locale]}</button></form>`;
+    }).join("")}</div>
+  </section>`;
 }
 
 function formBuilderForm(action: string, values?: Record<string, string>) {
@@ -2194,6 +2226,102 @@ adminRoutes.get("/users", async (c) => {
   return c.html(adminLayout("Users", user, body));
 });
 
+function apiKeyForm(values: { name?: string; permissions?: string[]; expiresAt?: string } = {}) {
+  const selected = new Set(values.permissions ?? []);
+  return `<form method="post" action="${config.controlPanelPath}/api-keys" class="form-grid">
+    <label><span data-i18n="Key name">Key name</span><input name="name" maxlength="100" required value="${escapeHtml(values.name ?? "")}" placeholder="Deployment integration" /></label>
+    <label><span data-i18n="Expires at">Expires at</span><input type="datetime-local" name="expiresAt" value="${escapeHtml(values.expiresAt ?? "")}" /><span class="meta" data-i18n="Leave blank for no expiration">Leave blank for no expiration</span></label>
+    <fieldset class="editor-section"><legend data-i18n="API permissions">API permissions</legend><p class="meta" data-i18n="Grant only the permissions required by this integration.">Grant only the permissions required by this integration.</p><div class="check-grid">${apiKeyScopeOptions.map((scope) => `<label><input type="checkbox" name="permissions" value="${scope.permission}" ${selected.has(scope.permission) ? "checked" : ""} /> <span data-i18n="${scope.label}">${scope.label}</span></label>`).join("")}</div></fieldset>
+    <button class="button button-primary" type="submit" data-i18n="Create API key">Create API key</button>
+  </form>`;
+}
+
+adminRoutes.get("/api-keys", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const keys = await listApiKeys(user.id);
+  const body = `${queryNotice(c)}
+    <section class="editor-section"><h1 data-i18n="API keys">API keys</h1><p class="meta" data-i18n="Create scoped credentials for server-to-server CMS API access. API keys inherit the active permissions of your user account and can only narrow them.">Create scoped credentials for server-to-server CMS API access. API keys inherit the active permissions of your user account and can only narrow them.</p>${apiKeyForm()}</section>
+    <section class="editor-section"><h2 data-i18n="Active API keys">Active API keys</h2><table><thead><tr><th data-i18n="Name">Name</th><th data-i18n="Key prefix">Key prefix</th><th data-i18n="API permissions">API permissions</th><th data-i18n="Last used">Last used</th><th data-i18n="Expires at">Expires at</th><th data-i18n="Actions">Actions</th></tr></thead><tbody>${keys.map((key) => `<tr><td>${escapeHtml(key.name)}</td><td><code>${escapeHtml(`hsc_${key.keyPrefix}_...`)}</code></td><td class="cell-long">${key.permissions.map((permission) => `<code>${escapeHtml(permission)}</code>`).join(" ")}</td><td>${key.lastUsedAt ? adminDate(key.lastUsedAt) : "-"}</td><td>${key.expiresAt ? adminDate(key.expiresAt) : "-"}</td><td><form method="post" action="${config.controlPanelPath}/api-keys/${key.id}/revoke"><button class="button" type="submit" data-i18n="Revoke">Revoke</button></form></td></tr>`).join("") || `<tr><td colspan="6" data-i18n="No API keys created.">No API keys created.</td></tr>`}</tbody></table></section>`;
+  return c.html(adminLayout("API keys", user, body, "wide-list"));
+});
+
+adminRoutes.post("/api-keys", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const form = await c.req.formData();
+  const values = {
+    name: String(form.get("name") ?? ""),
+    permissions: form.getAll("permissions").map(String),
+    expiresAt: String(form.get("expiresAt") ?? ""),
+  };
+  try {
+    const created = await createApiKey(user.id, values);
+    await writeAuditLog({ actorUserId: user.id, action: "api_key.create", targetType: "api_key", targetId: created.record.id, summary: `Created API key "${created.record.name}".`, ipAddress: requestIp(c) });
+    const body = `<section class="editor-section"><h1 data-i18n="Copy this API key now">Copy this API key now</h1><p class="meta" data-i18n="It is shown only once and cannot be recovered later.">It is shown only once and cannot be recovered later.</p><code style="display:block; overflow-wrap:anywhere; padding:12px; background:var(--line-light);">${escapeHtml(created.token)}</code><p style="margin-top:16px;"><a class="button button-primary" href="${config.controlPanelPath}/api-keys" data-i18n="Back to API keys">Back to API keys</a></p></section>`;
+    return c.html(adminLayout("API keys", user, body), 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to create API key.";
+    return c.html(adminLayout("API keys", user, noticeCard(message, "error") + apiKeyForm(values)), 400);
+  }
+});
+
+adminRoutes.post("/api-keys/:id/revoke", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || !(await revokeApiKey(id, user.id))) return c.redirect(`${config.controlPanelPath}/api-keys?error=${encodeURIComponent("API key was not found or already revoked.")}`);
+  await writeAuditLog({ actorUserId: user.id, action: "api_key.revoke", targetType: "api_key", targetId: id, summary: `Revoked API key #${id}.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/api-keys?success=${encodeURIComponent("API key revoked.")}`);
+});
+
+adminRoutes.get("/database", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const health = await getDatabaseHealth();
+  const retention = (days: number) => days > 0 ? `${days} days` : "Disabled";
+  const body = `${queryNotice(c)}
+    <section class="editor-section"><div class="section-heading-row"><div><p class="editor-section-kicker" data-i18n="Operations">Operations</p><h1 class="editor-section-title" data-i18n="Database health">Database health</h1></div><span class="badge">PostgreSQL</span></div><p class="meta" data-i18n="Review database capacity, active work, and automatic retention without exposing SQL text or application data.">Review database capacity, active work, and automatic retention without exposing SQL text or application data.</p><div class="stats"><div class="stat"><p class="meta" data-i18n="Database size">Database size</p><h2>${formatByteSize(health.databaseSizeBytes)}</h2></div><div class="stat"><p class="meta" data-i18n="Connections">Connections</p><h2>${health.activeConnections} / ${health.maxConnections}</h2></div><div class="stat"><p class="meta" data-i18n="Slow active queries">Slow active queries</p><h2>${health.slowActiveQueries}</h2></div><div class="stat"><p class="meta" data-i18n="Longest transaction">Longest transaction</p><h2>${health.longestTransactionSeconds == null ? "-" : `${Math.round(health.longestTransactionSeconds)}s`}</h2></div></div><p class="meta" style="margin-top:16px;">${escapeHtml(health.version)}</p></section>
+    <section class="editor-section"><h2 data-i18n="Retention policy">Retention policy</h2><p class="meta" data-i18n="Zero means automatic deletion is disabled. Changes are configured with environment variables and applied by scheduled housekeeping.">Zero means automatic deletion is disabled. Changes are configured with environment variables and applied by scheduled housekeeping.</p><table><thead><tr><th data-i18n="Data">Data</th><th data-i18n="Retention">Retention</th></tr></thead><tbody><tr><td data-i18n="Audit logs">Audit logs</td><td>${retention(health.retention.auditLogDays)}</td></tr><tr><td data-i18n="Read notifications">Read notifications</td><td>${retention(health.retention.readNotificationDays)}</td></tr></tbody></table></section>
+    <section class="editor-section"><h2 data-i18n="Table statistics">Table statistics</h2><table><thead><tr><th data-i18n="Table">Table</th><th data-i18n="Estimated live rows">Estimated live rows</th><th data-i18n="Estimated dead rows">Estimated dead rows</th></tr></thead><tbody>${health.tables.map((table) => `<tr><td><code>${escapeHtml(table.name)}</code></td><td>${table.liveRows.toLocaleString()}</td><td>${table.deadRows.toLocaleString()}</td></tr>`).join("") || `<tr><td colspan="3" data-i18n="No table statistics available.">No table statistics available.</td></tr>`}</tbody></table></section>
+    <section class="editor-section"><h2 data-i18n="Maintenance">Maintenance</h2><p class="meta" data-i18n="ANALYZE refreshes PostgreSQL planner statistics without changing content. Schedule VACUUM through your database platform for larger installations.">ANALYZE refreshes PostgreSQL planner statistics without changing content. Schedule VACUUM through your database platform for larger installations.</p><form method="post" action="${config.controlPanelPath}/database/analyze"><label><input type="checkbox" name="confirm" value="yes" required /> <span data-i18n="I understand that ANALYZE uses database resources.">I understand that ANALYZE uses database resources.</span></label><p style="margin-top:12px;"><button class="button" type="submit" data-i18n="Run ANALYZE">Run ANALYZE</button></p></form></section>`;
+  return c.html(adminLayout("Database health", user, body, "wide-list"));
+});
+
+adminRoutes.post("/database/analyze", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const form = await c.req.formData();
+  if (form.get("confirm") !== "yes") return c.redirect(`${config.controlPanelPath}/database?error=${encodeURIComponent("Confirm database maintenance before continuing.")}`);
+  try {
+    await runDatabaseAnalyze();
+    await writeAuditLog({ actorUserId: user.id, action: "database.analyze", targetType: "database", summary: "Refreshed PostgreSQL planner statistics with ANALYZE.", ipAddress: requestIp(c) });
+    return c.redirect(`${config.controlPanelPath}/database?success=${encodeURIComponent("Database statistics refreshed.")}`);
+  } catch (error) {
+    return c.redirect(`${config.controlPanelPath}/database?error=${encodeURIComponent(error instanceof Error ? error.message : "Unable to run ANALYZE.")}`);
+  }
+});
+
+adminRoutes.get("/metrics", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const requestedHours = Number(c.req.query("hours") ?? 24);
+  const metrics = await getOperationalMetrics([24, 168, 720].includes(requestedHours) ? requestedHours : 24);
+  const labels: Record<(typeof operationalMetricNames)[number], string> = {
+    "http.public_request": "Public requests",
+    "http.public_4xx": "Public 4xx responses",
+    "http.public_5xx": "Public 5xx responses",
+    "publishing.completed": "Public regenerations",
+    "form.submitted": "Form submissions",
+    "media.changed": "Media changes",
+    "backup.created": "Backups created",
+  };
+  const body = `${queryNotice(c)}
+    <section class="editor-section"><div class="section-heading-row"><div><p class="editor-section-kicker" data-i18n="Operations">Operations</p><h1 class="editor-section-title" data-i18n="Operational metrics">Operational metrics</h1></div><form method="get" action="${config.controlPanelPath}/metrics"><select name="hours" aria-label="Metric window"><option value="24" ${metrics.hours === 24 ? "selected" : ""}>24 hours</option><option value="168" ${metrics.hours === 168 ? "selected" : ""}>7 days</option><option value="720" ${metrics.hours === 720 ? "selected" : ""}>30 days</option></select><button class="button" type="submit" data-i18n="Update">Update</button></form></div><p class="meta" data-i18n="Hourly aggregate counts only. No IP addresses, visitor identifiers, URLs, search terms, or form values are stored.">Hourly aggregate counts only. No IP addresses, visitor identifiers, URLs, search terms, or form values are stored.</p><div class="stats">${operationalMetricNames.map((metric) => `<div class="stat"><p class="meta" data-i18n="${labels[metric]}">${labels[metric]}</p><h2>${metrics.totals[metric].toLocaleString()}</h2></div>`).join("")}</div></section>
+    <section class="editor-section"><h2 data-i18n="Hourly activity">Hourly activity</h2><table><thead><tr><th data-i18n="Hour">Hour</th><th data-i18n="Metric">Metric</th><th data-i18n="Count">Count</th></tr></thead><tbody>${metrics.rows.map((row) => `<tr><td>${adminDate(row.bucketStart)}</td><td data-i18n="${labels[row.metric as keyof typeof labels] ?? row.metric}">${labels[row.metric as keyof typeof labels] ?? escapeHtml(row.metric)}</td><td>${row.value.toLocaleString()}</td></tr>`).join("") || `<tr><td colspan="3" data-i18n="No metrics collected yet.">No metrics collected yet.</td></tr>`}</tbody></table></section>`;
+  return c.html(adminLayout("Operational metrics", user, body, "wide-list"));
+});
+
 adminRoutes.get("/users/new", (c) => {
   return c.html(adminLayout("New User", c.get("sessionUser"), queryNotice(c) + userForm(`${config.controlPanelPath}/users`)));
 });
@@ -2554,7 +2682,8 @@ adminRoutes.get("/posts", async (c) => {
   const status = c.req.query("status") ?? "any";
   const workflow = c.req.query("workflow") ?? "any";
   const category = c.req.query("category") ?? "";
-  const posts = await listPosts({ page: 1, limit: 50, status, workflow, category: category || undefined, search: q || undefined });
+  const locale = c.req.query("locale") ?? "any";
+  const posts = await listPosts({ page: 1, limit: 50, status, workflow, category: category || undefined, search: q || undefined, locale: locale === "any" ? undefined : locale });
   const series = await listSeries();
   const permalinkPattern = await getPostPermalinkPattern();
   const seriesById = new Map(series.map((item) => [item.id, item.title]));
@@ -2581,17 +2710,19 @@ adminRoutes.get("/posts", async (c) => {
           <option value="approved" ${workflow === "approved" ? "selected" : ""}>Approved</option>
         </select>
         <input name="category" value="${escapeHtml(category)}" placeholder="Category slug" />
+        <select name="locale"><option value="any">All languages</option>${contentLocales.map((item) => `<option value="${item}" ${locale === item ? "selected" : ""}>${localeLabels[item]}</option>`).join("")}</select>
         <button class="button" type="submit">Filter</button>
       </div>
     </form>
     <table class="data-table">
-      <thead><tr><th>Title</th><th>Status</th><th>Review state</th><th>Series</th><th>Comments</th><th>Categories</th><th>Generated page</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Title</th><th>Language</th><th>Status</th><th>Review state</th><th>Series</th><th>Comments</th><th>Categories</th><th>Generated page</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${posts.items
           .map(
             (post) => `
               <tr>
                 <td class="cell-long"><a href="${config.controlPanelPath}/posts/${post.id}/edit">${escapeHtml(post.title)}</a></td>
+                <td>${escapeHtml(localeLabels[post.locale])}</td>
                 <td>${escapeHtml(post.status)}</td>
                 <td>${workflowBadge(post.workflowState)}</td>
                 <td>${escapeHtml(seriesById.get(postSeriesIds.get(post.id) ?? 0) ?? "No series")}</td>
@@ -2752,6 +2883,8 @@ adminRoutes.post("/posts", async (c) => {
         seoNoindex: values.seoNoindex === "true",
         seoNofollow: values.seoNofollow === "true",
         seriesId: selectedSeries?.id ?? null,
+        locale: values.locale as "en" | "ja" | "zh",
+        translationGroup: values.translationGroup || undefined,
       },
       user.id,
     );
@@ -2797,7 +2930,10 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
   const post = await getPostById(Number(c.req.param("id")));
   const mediaItems = await listMedia();
   const series = await listSeries();
-  const seriesId = await getPostSeriesId(Number(c.req.param("id")));
+  const [seriesId, translations] = await Promise.all([
+    getPostSeriesId(Number(c.req.param("id"))),
+    listPosts({ page: 1, limit: 50, status: "any", translationGroup: post?.translationGroup }),
+  ]);
   if (!post) {
     return c.text("Not found", 404);
   }
@@ -2807,7 +2943,7 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
     adminLayout(
       "Edit Post",
       user,
-      queryNotice(c) + `<p class="meta"><a href="/preview/post/${encodeURIComponent(post.slug)}?token=${encodeURIComponent(await createPreviewToken("post", post.slug))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + editorialWorkflowPanel("post", post, user, workflowEvents) + postForm(`${config.controlPanelPath}/posts/${post.id}`, {
+      queryNotice(c) + `<p class="meta"><a href="/preview/post/${encodeURIComponent(post.slug)}?locale=${post.locale}&token=${encodeURIComponent(await createPreviewToken("post", post.slug, post.locale))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + translationPanel("posts", post, translations.items) + editorialWorkflowPanel("post", post, user, workflowEvents) + postForm(`${config.controlPanelPath}/posts/${post.id}`, {
         title: post.title,
         slug: post.slug,
         excerpt: post.excerpt ?? "",
@@ -2817,6 +2953,8 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
         publishedAt: scheduleTimestampForInput(post.publishedAt, config.scheduleTimeZone),
         categories: post.categories.join(", "),
         tags: post.tags.join(", "),
+        locale: post.locale,
+        translationGroup: post.translationGroup,
         seoTitle: post.seoTitle ?? "",
         seoDescription: post.seoDescription ?? "",
         seoCanonicalUrl: post.seoCanonicalUrl ?? "",
@@ -2837,6 +2975,30 @@ adminRoutes.get("/posts/:id/edit", async (c) => {
         revisionLinkCard(`${config.controlPanelPath}/posts/${post.id}/revisions`),
     ),
   );
+});
+
+adminRoutes.post("/posts/:id/translations", async (c) => {
+  const user = c.get("sessionUser");
+  const source = await getPostById(Number(c.req.param("id")));
+  const locale = String((await c.req.formData()).get("locale") ?? "");
+  if (!user || !source) return c.redirect(`${config.controlPanelPath}/posts`);
+  if (!contentLocales.includes(locale as (typeof contentLocales)[number])) return c.redirect(`${config.controlPanelPath}/posts/${source.id}/edit?error=${encodeURIComponent("Select a valid content language.")}`);
+  const existing = await listPosts({ page: 1, limit: 1, status: "any", locale, translationGroup: source.translationGroup });
+  if (existing.items[0]) return c.redirect(`${config.controlPanelPath}/posts/${existing.items[0].id}/edit`);
+  const created = await createPost({
+    title: source.title,
+    slug: source.slug,
+    excerpt: source.excerpt ?? "",
+    bodyMd: source.bodyMd ?? "",
+    bodyHtml: source.bodyHtml,
+    status: "draft",
+    categorySlugs: source.categories,
+    tagSlugs: source.tags,
+    locale: locale as "en" | "ja" | "zh",
+    translationGroup: source.translationGroup,
+  }, user.id);
+  await writeAuditLog({ actorUserId: user.id, action: "post.translation.create", targetType: "post", targetId: created?.id ?? null, summary: `Created ${locale} translation draft from post #${source.id}.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/posts/${created?.id ?? source.id}/edit?success=${encodeURIComponent("Translation draft created.")}`);
 });
 
 adminRoutes.post("/posts/:id", async (c) => {
@@ -2868,7 +3030,9 @@ adminRoutes.post("/posts/:id", async (c) => {
       seoKeywords: values.seoKeywords,
       seoNoindex: values.seoNoindex === "true",
       seoNofollow: values.seoNofollow === "true",
-      seriesId: Number(form.get("seriesId")) > 0 ? Number(form.get("seriesId")) : null,
+        seriesId: Number(form.get("seriesId")) > 0 ? Number(form.get("seriesId")) : null,
+      locale: values.locale as "en" | "ja" | "zh",
+      translationGroup: values.translationGroup || existing.translationGroup,
     } as const;
     const updated = await updatePost(Number(c.req.param("id")), input, user?.id);
     if (updated) postUrlChange = { previous: existing, current: updated };
@@ -3005,21 +3169,16 @@ adminRoutes.post("/posts/:id/revisions/:revisionId/restore", async (c) => {
 });
 
 adminRoutes.post("/render", async (c) => {
-  try {
-    await renderPublishedArtifacts();
-  } catch (error) {
-    logError("renderer.regeneration_failed", "Published artifact regeneration failed.", { error });
-    return c.redirect(`${config.controlPanelPath}?error=${encodeURIComponent("Page generation failed. Check the application logs and output-directory permissions.")}`);
-  }
+  const job = await enqueuePublicRender();
   await writeAuditLog({
     actorUserId: c.get("sessionUser")?.id ?? null,
     action: "renderer.regenerate",
     targetType: "system",
     targetId: "cms",
-    summary: "Regenerated published CMS artifacts.",
+    summary: `Queued public CMS artifact regeneration (job #${job.id}).`,
     ipAddress: requestIp(c),
   });
-  return c.redirect(`${config.controlPanelPath}?success=${encodeURIComponent("Published pages regenerated successfully.")}`);
+  return c.redirect(`${config.controlPanelPath}?success=${encodeURIComponent("Public page regeneration was queued and will run shortly.")}`);
 });
 
 adminRoutes.get("/pages", async (c) => {
@@ -3027,7 +3186,8 @@ adminRoutes.get("/pages", async (c) => {
   const q = c.req.query("q") ?? "";
   const status = c.req.query("status") ?? "any";
   const workflow = c.req.query("workflow") ?? "any";
-  const pages = await listPages({ page: 1, limit: 50, status, workflow, search: q || undefined });
+  const locale = c.req.query("locale") ?? "any";
+  const pages = await listPages({ page: 1, limit: 50, status, workflow, search: q || undefined, locale: locale === "any" ? undefined : locale });
   const groups = await listPageGroups();
   const groupById = new Map(groups.map((item) => [item.id, item.title]));
   const pageGroupIds = await listPageGroupAssignments(pages.items.map((page) => page.id));
@@ -3052,17 +3212,19 @@ adminRoutes.get("/pages", async (c) => {
           <option value="changes_requested" ${workflow === "changes_requested" ? "selected" : ""}>Changes requested</option>
           <option value="approved" ${workflow === "approved" ? "selected" : ""}>Approved</option>
         </select>
+        <select name="locale"><option value="any">All languages</option>${contentLocales.map((item) => `<option value="${item}" ${locale === item ? "selected" : ""}>${localeLabels[item]}</option>`).join("")}</select>
         <button class="button" type="submit">Filter</button>
       </div>
     </form>
     <table class="data-table">
-      <thead><tr><th>Title</th><th>Status</th><th>Review state</th><th>Page group</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Title</th><th>Language</th><th>Status</th><th>Review state</th><th>Page group</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         ${pages.items
           .map(
             (page) => `
               <tr>
                 <td class="cell-long"><a href="${config.controlPanelPath}/pages/${page.id}/edit">${escapeHtml(page.title)}</a></td>
+                <td>${escapeHtml(localeLabels[page.locale])}</td>
                 <td>${escapeHtml(page.status)}</td>
                 <td>${workflowBadge(page.workflowState)}</td>
                 <td>${escapeHtml(groupById.get(pageGroupIds.get(page.id) ?? 0) ?? "No page group")}</td>
@@ -3070,7 +3232,7 @@ adminRoutes.get("/pages", async (c) => {
                 <td class="cell-actions">
                   <div class="row">
                     <a class="button" href="${config.controlPanelPath}/pages/${page.id}/edit">Edit</a>
-                    <a class="button" href="/cms/pages/${page.slug}.html">View output</a>
+                    <a class="button" href="${page.locale === "en" ? "/cms" : `/cms/${page.locale}`}/pages/${page.slug}.html">View output</a>
                     <form method="post" action="${config.controlPanelPath}/pages/${page.id}/delete">
                       <button class="button" type="submit">Delete</button>
                     </form>
@@ -3361,6 +3523,8 @@ adminRoutes.post("/pages", async (c) => {
         seoNofollow: values.seoNofollow === "true",
         pageGroupId: selectedGroup?.id ?? null,
         stylesheetPath: values.stylesheetPath,
+        locale: values.locale as "en" | "ja" | "zh",
+        translationGroup: values.translationGroup || undefined,
       },
       user.id,
     );
@@ -3391,7 +3555,10 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
   const mediaItems = await listMedia();
   const groups = await listPageGroups();
   const stylesheets = await listStylesheets("pages");
-  const groupId = await getPageGroupId(Number(c.req.param("id")));
+  const [groupId, translations] = await Promise.all([
+    getPageGroupId(Number(c.req.param("id"))),
+    listPages({ page: 1, limit: 50, status: "any", translationGroup: page?.translationGroup }),
+  ]);
   if (!page) {
     return c.text("Not found", 404);
   }
@@ -3401,7 +3568,7 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
     adminLayout(
       "Edit Page",
       user,
-      queryNotice(c) + `<p class="meta"><a href="/preview/page/${encodeURIComponent(page.slug)}?token=${encodeURIComponent(await createPreviewToken("page", page.slug))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + editorialWorkflowPanel("page", page, user, workflowEvents) + pageForm(`${config.controlPanelPath}/pages/${page.id}`, {
+      queryNotice(c) + `<p class="meta"><a href="/preview/page/${encodeURIComponent(page.slug)}?locale=${page.locale}&token=${encodeURIComponent(await createPreviewToken("page", page.slug, page.locale))}" target="_blank" rel="noopener noreferrer">Open 1-hour preview</a></p>` + translationPanel("pages", page, translations.items) + editorialWorkflowPanel("page", page, user, workflowEvents) + pageForm(`${config.controlPanelPath}/pages/${page.id}`, {
         title: page.title,
         slug: page.slug,
         excerpt: page.excerpt ?? "",
@@ -3418,6 +3585,8 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
         seoNofollow: page.seoNofollow ? "true" : "false",
         pageGroupId: groupId ? String(groupId) : "",
         stylesheetPath: page.stylesheetPath ?? "",
+        locale: page.locale,
+        translationGroup: page.translationGroup,
         autosaveKey: `page-${page.id}`,
         autosaveBaseUpdatedAt: page.updatedAt,
       }, groups, stylesheets) +
@@ -3430,6 +3599,29 @@ adminRoutes.get("/pages/:id/edit", async (c) => {
         revisionLinkCard(`${config.controlPanelPath}/pages/${page.id}/revisions`),
     ),
   );
+});
+
+adminRoutes.post("/pages/:id/translations", async (c) => {
+  const user = c.get("sessionUser");
+  const source = await getPageById(Number(c.req.param("id")));
+  const locale = String((await c.req.formData()).get("locale") ?? "");
+  if (!user || !source) return c.redirect(`${config.controlPanelPath}/pages`);
+  if (!contentLocales.includes(locale as (typeof contentLocales)[number])) return c.redirect(`${config.controlPanelPath}/pages/${source.id}/edit?error=${encodeURIComponent("Select a valid content language.")}`);
+  const existing = await listPages({ page: 1, limit: 1, status: "any", locale, translationGroup: source.translationGroup });
+  if (existing.items[0]) return c.redirect(`${config.controlPanelPath}/pages/${existing.items[0].id}/edit`);
+  const created = await createPage({
+    title: source.title,
+    slug: source.slug,
+    excerpt: source.excerpt ?? "",
+    bodyMd: source.bodyMd ?? "",
+    bodyHtml: source.bodyHtml,
+    status: "draft",
+    stylesheetPath: source.stylesheetPath,
+    locale: locale as "en" | "ja" | "zh",
+    translationGroup: source.translationGroup,
+  }, user.id);
+  await writeAuditLog({ actorUserId: user.id, action: "page.translation.create", targetType: "page", targetId: created?.id ?? null, summary: `Created ${locale} translation draft from page #${source.id}.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/pages/${created?.id ?? source.id}/edit?success=${encodeURIComponent("Translation draft created.")}`);
 });
 
 adminRoutes.post("/pages/:id", async (c) => {
@@ -3462,6 +3654,8 @@ adminRoutes.post("/pages/:id", async (c) => {
       seoNofollow: values.seoNofollow === "true",
       pageGroupId: Number(form.get("pageGroupId")) > 0 ? Number(form.get("pageGroupId")) : null,
       stylesheetPath: values.stylesheetPath,
+      locale: values.locale as "en" | "ja" | "zh",
+      translationGroup: values.translationGroup || existing.translationGroup,
     } as const;
     const updated = await updatePage(Number(c.req.param("id")), input, user?.id);
     if (updated) pageUrlChange = { previous: existing, current: updated };

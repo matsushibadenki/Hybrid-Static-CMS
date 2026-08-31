@@ -4,6 +4,7 @@ import { createPost, listPosts, setPostCommentsPolicy } from "./posts";
 import { listSeries } from "./series";
 import { sql } from "./db";
 import { AppValidationError, validateSlug } from "./validation";
+import { contentLocaleFrom, isContentLocale, type ContentLocale } from "./locales";
 
 export const contentArchiveFormat = "hybrid-static-cms-content";
 export const contentArchiveVersion = 1;
@@ -13,6 +14,8 @@ export const contentArchiveMaxItems = 1_000;
 type OptionalText = string | null;
 
 export type PortablePost = {
+  locale: ContentLocale;
+  translationGroup: OptionalText;
   title: string;
   slug: string;
   excerpt: OptionalText;
@@ -34,6 +37,8 @@ export type PortablePost = {
 };
 
 export type PortablePage = {
+  locale: ContentLocale;
+  translationGroup: OptionalText;
   title: string;
   slug: string;
   excerpt: OptionalText;
@@ -105,6 +110,7 @@ export async function createContentArchive(): Promise<ContentArchive> {
     version: contentArchiveVersion,
     exportedAt: new Date().toISOString(),
     posts: posts.map((post) => ({
+      locale: post.locale, translationGroup: post.translationGroup,
       title: post.title, slug: post.slug, excerpt: post.excerpt, bodyMd: post.bodyMd, bodyHtml: post.bodyHtml,
       sourceStatus: post.status, publishedAt: post.publishedAt,
       seoTitle: post.seoTitle, seoDescription: post.seoDescription, seoCanonicalUrl: post.seoCanonicalUrl,
@@ -113,6 +119,7 @@ export async function createContentArchive(): Promise<ContentArchive> {
       seriesSlug: seriesSlugById.get(seriesIdByPost.get(post.id) ?? -1) ?? null,
     })),
     pages: pages.map((page) => ({
+      locale: page.locale, translationGroup: page.translationGroup,
       title: page.title, slug: page.slug, excerpt: page.excerpt, bodyMd: page.bodyMd, bodyHtml: page.bodyHtml,
       sourceStatus: page.status, publishedAt: page.publishedAt,
       seoTitle: page.seoTitle, seoDescription: page.seoDescription, seoCanonicalUrl: page.seoCanonicalUrl,
@@ -168,9 +175,23 @@ function slugList(value: unknown, label: string) {
   return [...new Set(value.map((item, index) => slug(item, `${label} #${index + 1}`)))];
 }
 
+function portableLocale(value: unknown, label: string): ContentLocale {
+  if (value == null) return "en";
+  if (!isContentLocale(value)) throw new AppValidationError(`${label} is invalid.`);
+  return value;
+}
+
+function translationGroup(value: unknown, label: string): OptionalText {
+  const result = optionalText(value, label, 64);
+  if (result && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(result)) throw new AppValidationError(`${label} is invalid.`);
+  return result;
+}
+
 function parsePost(value: unknown, index: number): PortablePost {
   const item = record(value, `Post #${index + 1}`);
   return {
+    locale: portableLocale(item.locale, `Post #${index + 1} locale`),
+    translationGroup: translationGroup(item.translationGroup, `Post #${index + 1} translationGroup`),
     title: requiredText(item.title, `Post #${index + 1} title`, 300),
     slug: slug(item.slug, `Post #${index + 1} slug`),
     excerpt: optionalText(item.excerpt, `Post #${index + 1} excerpt`, 20_000),
@@ -195,6 +216,8 @@ function parsePost(value: unknown, index: number): PortablePost {
 function parsePage(value: unknown, index: number): PortablePage {
   const item = record(value, `Page #${index + 1}`);
   return {
+    locale: portableLocale(item.locale, `Page #${index + 1} locale`),
+    translationGroup: translationGroup(item.translationGroup, `Page #${index + 1} translationGroup`),
     title: requiredText(item.title, `Page #${index + 1} title`, 300),
     slug: slug(item.slug, `Page #${index + 1} slug`),
     excerpt: optionalText(item.excerpt, `Page #${index + 1} excerpt`, 20_000),
@@ -230,8 +253,8 @@ export function parseContentArchive(json: string): ContentArchive {
   if (archive.posts.length + archive.pages.length > contentArchiveMaxItems) throw new AppValidationError("The import file contains more than 1000 content items.");
   const posts = archive.posts.map(parsePost);
   const pages = archive.pages.map(parsePage);
-  for (const [label, slugs] of [["post", posts.map((item) => item.slug)], ["page", pages.map((item) => item.slug)]] as const) {
-    if (new Set(slugs).size !== slugs.length) throw new AppValidationError(`The import file contains duplicate ${label} slugs.`);
+  for (const [label, slugs] of [["post", posts.map((item) => `${item.locale}:${item.slug}`)], ["page", pages.map((item) => `${item.locale}:${item.slug}`)]] as const) {
+    if (new Set(slugs).size !== slugs.length) throw new AppValidationError(`The import file contains duplicate ${label} locale and slug pairs.`);
   }
   return {
     format: contentArchiveFormat,
@@ -244,19 +267,20 @@ export function parseContentArchive(json: string): ContentArchive {
 
 export async function importContentArchive(archive: ContentArchive, authorId: number): Promise<ContentImportResult> {
   const [existingPostRows, existingPageRows, series, pageGroups] = await Promise.all([
-    sql`select slug from posts`,
-    sql`select slug from pages`,
+    sql`select content_locale, slug from posts`,
+    sql`select content_locale, slug from pages`,
     listSeries(),
     listPageGroups(),
   ]);
-  const existingPostSlugs = new Set(existingPostRows.map((row) => String(row.slug)));
-  const existingPageSlugs = new Set(existingPageRows.map((row) => String(row.slug)));
+  const existingPostSlugs = new Set(existingPostRows.map((row) => `${contentLocaleFrom(row.content_locale)}:${String(row.slug)}`));
+  const existingPageSlugs = new Set(existingPageRows.map((row) => `${contentLocaleFrom(row.content_locale)}:${String(row.slug)}`));
   const seriesBySlug = new Map(series.map((item) => [item.slug, item.id]));
   const pageGroupBySlug = new Map(pageGroups.map((item) => [item.slug, item.id]));
   const result: ContentImportResult = { importedPosts: 0, importedPages: 0, skippedPosts: 0, skippedPages: 0, warnings: [] };
 
   for (const post of archive.posts) {
-    if (existingPostSlugs.has(post.slug)) {
+    const uniqueSlug = `${post.locale}:${post.slug}`;
+    if (existingPostSlugs.has(uniqueSlug)) {
       result.skippedPosts += 1;
       result.warnings.push(`Skipped post "${post.slug}" because its slug already exists.`);
       continue;
@@ -269,15 +293,16 @@ export async function importContentArchive(archive: ContentArchive, authorId: nu
       seoTitle: post.seoTitle ?? undefined, seoDescription: post.seoDescription ?? undefined,
       seoCanonicalUrl: post.seoCanonicalUrl ?? undefined, seoOgImage: post.seoOgImage ?? undefined,
       seoKeywords: post.seoKeywords ?? undefined, seoNoindex: post.seoNoindex, seoNofollow: post.seoNofollow,
-      categorySlugs: post.categories, tagSlugs: post.tags, seriesId,
+      categorySlugs: post.categories, tagSlugs: post.tags, seriesId, locale: post.locale, translationGroup: post.translationGroup ?? undefined,
     }, authorId);
     if (created) await setPostCommentsPolicy(created.id, post.commentsPolicy);
-    existingPostSlugs.add(post.slug);
+    existingPostSlugs.add(uniqueSlug);
     result.importedPosts += 1;
   }
 
   for (const page of archive.pages) {
-    if (existingPageSlugs.has(page.slug)) {
+    const uniqueSlug = `${page.locale}:${page.slug}`;
+    if (existingPageSlugs.has(uniqueSlug)) {
       result.skippedPages += 1;
       result.warnings.push(`Skipped page "${page.slug}" because its slug already exists.`);
       continue;
@@ -291,9 +316,9 @@ export async function importContentArchive(archive: ContentArchive, authorId: nu
       seoTitle: page.seoTitle ?? undefined, seoDescription: page.seoDescription ?? undefined,
       seoCanonicalUrl: page.seoCanonicalUrl ?? undefined, seoOgImage: page.seoOgImage ?? undefined,
       seoKeywords: page.seoKeywords ?? undefined, seoNoindex: page.seoNoindex, seoNofollow: page.seoNofollow,
-      pageGroupId, stylesheetPath: null,
+      pageGroupId, stylesheetPath: null, locale: page.locale, translationGroup: page.translationGroup ?? undefined,
     }, authorId);
-    existingPageSlugs.add(page.slug);
+    existingPageSlugs.add(uniqueSlug);
     result.importedPages += 1;
   }
   return result;
