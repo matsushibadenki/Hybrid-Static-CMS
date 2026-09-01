@@ -19,6 +19,7 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("scoped API key
         roles: ["owner"],
       });
       const key = await createApiKey(userId, { name: "Draft deployment", permissions: ["posts.write"] });
+      expect(key.token).toMatch(/^hsc_[A-Za-z0-9_-]{12}_[A-Za-z0-9_-]{40,128}$/);
       const stored = await sql`select secret_hash from api_keys where id = ${key.record.id}`;
       expect(String(stored[0]?.secret_hash)).not.toContain(key.token);
 

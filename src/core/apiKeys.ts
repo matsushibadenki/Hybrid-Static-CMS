@@ -6,7 +6,7 @@ import type { Permission } from "./permissions";
 import type { SessionUser, UserRole } from "./types";
 
 const keyPrefix = "hsc";
-const keyPattern = /^hsc_([A-Za-z0-9]{12})_([A-Za-z0-9_-]{40,128})$/;
+const keyPattern = /^hsc_([A-Za-z0-9_-]{12})_([A-Za-z0-9_-]{40,128})$/;
 
 export const apiKeyScopeOptions: Array<{ permission: Permission; label: string }> = [
   { permission: "posts.read", label: "Read posts" },
