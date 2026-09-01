@@ -159,6 +159,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 ### Operations at scale
 
+- `[Done]` XServer VPS Cloud reference topology with Cloud-bound CMS data and storage plus API/job-queue-connected ordinary VPS Workers
+
 - `[Done]` PostgreSQL advisory scheduler locks for multi-instance deployments, with safe skip behavior and configurable site-scoped lock names
 - `[Done]` PostgreSQL-backed, coalesced public-artifact rendering queue with row locking, retry backoff, and scheduler processing
 - `[Later]` Queue-backed media derivative processing
