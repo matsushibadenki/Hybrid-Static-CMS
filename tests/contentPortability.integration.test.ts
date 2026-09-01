@@ -51,7 +51,7 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("content portab
       expect(result.warnings).toHaveLength(1);
 
       const post = await getPostBySlug(postSlug, "any");
-      const page = await getPageBySlug(pageSlug, "any");
+      const page = await getPageBySlug(pageSlug, "any", "ja");
       expect(post?.status).toBe("draft");
       expect(post?.bodyHtml).not.toContain("<script");
       expect(post?.commentsPolicy).toBe("disabled");
