@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createUser } from "../src/core/auth";
 import { sql } from "../src/core/db";
 import { config } from "../src/core/config";
-import { deleteMedia, getMediaStorageUsage, uploadMedia } from "../src/core/media";
+import { deleteMedia, getMediaById, regenerateMediaVariants, getMediaStorageUsage, uploadMedia } from "../src/core/media";
 import { createBlock, deleteBlock } from "../src/core/blocks";
 import path from "node:path";
 
@@ -24,9 +24,23 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("media integrat
         displayName: "Media User",
         roles: ["owner"],
       });
-      const media = await uploadMedia(new File([pngFile], "integration.html", { type: "image/png" }), "Integration image", userId);
+      let media = await uploadMedia(new File([pngFile], "integration.html", { type: "image/png" }), "Integration image", userId);
       expect(media).not.toBeNull();
       mediaId = media?.id ?? null;
+      expect(media?.variants).toEqual([]);
+      const jobs = await sql`select id from background_jobs where job_type = 'regenerate_media_variants' and payload->>'mediaId' = ${String(mediaId)}`;
+      expect(jobs).toHaveLength(1);
+      const oldQuota = config.mediaSiteQuotaBytes;
+      try {
+        config.mediaSiteQuotaBytes = 1;
+        await expect(regenerateMediaVariants(mediaId!)).rejects.toThrow("site media storage quota");
+        expect((await getMediaById(mediaId!))?.variants).toEqual([]);
+        expect(await Bun.file(path.join(config.cmsUploadDir, media!.storedName)).exists()).toBe(true);
+      } finally {
+        config.mediaSiteQuotaBytes = oldQuota;
+      }
+      await regenerateMediaVariants(mediaId!);
+      media = await getMediaById(mediaId!);
       storedName = media?.storedName ?? null;
       expect(media?.mimeType).toBe("image/png");
       expect(media?.storedName.endsWith(".png")).toBe(true);
@@ -48,6 +62,8 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("media integrat
       const expectedUsage = pngFile.byteLength + (media?.variants.reduce((total, variant) => total + variant.sizeBytes, 0) ?? 0);
       expect(usage.userUsedBytes).toBe(expectedUsage);
       expect(usage.uploadAllowed).toBe(true);
+      await regenerateMediaVariants(mediaId!);
+      expect((await getMediaStorageUsage(userId)).userUsedBytes).toBe(expectedUsage);
 
       await deleteMedia(mediaId ?? 0);
       expect(await Bun.file(path.join(config.cmsUploadDir, storedName ?? "")).exists()).toBe(false);
@@ -55,6 +71,7 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("media integrat
         expect(await Bun.file(path.join(config.cmsUploadDir, variantName)).exists()).toBe(false);
       }
     } finally {
+      if (mediaId) await sql`delete from background_jobs where job_type = 'regenerate_media_variants' and payload->>'mediaId' = ${String(mediaId)}`;
       if (mediaId) await deleteMedia(mediaId);
       if (userId) await sql`delete from users where id = ${userId}`;
     }

@@ -128,6 +128,7 @@ export async function processImageUpload(
   mimeType: string,
   storedName: string,
   settings: ImageProcessingSettings = settingsFromConfig(),
+  metadataOnly = false,
 ): Promise<ImageProcessingResult | null> {
   if (!mimeType.startsWith("image/")) return null;
 
@@ -135,7 +136,7 @@ export async function processImageUpload(
     const input = Buffer.from(await content.arrayBuffer());
     const metadata = await sharpInput(input, settings).metadata();
     const dimensions = orientedDimensions(metadata);
-    if (!settings.derivativesEnabled || !derivativeMimeTypes.has(mimeType) || !dimensions.width || !dimensions.height) {
+    if (metadataOnly || !settings.derivativesEnabled || !derivativeMimeTypes.has(mimeType) || !dimensions.width || !dimensions.height) {
       return { ...dimensions, metadata: safeMetadata(metadata), variants: [] };
     }
 

@@ -164,7 +164,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` PostgreSQL advisory scheduler locks for multi-instance deployments, with safe skip behavior and configurable site-scoped lock names
 - `[Done]` PostgreSQL-backed, coalesced public-artifact rendering queue with row locking, retry backoff, and scheduler processing
 - `[Done]` Queue-backed, coalesced on-demand media variant regeneration for JPEG, PNG, and WebP assets, with independent queues per media item
-- `[Next]` Media regeneration storage-quota enforcement, atomic file replacement, and queued initial derivative generation
+- `[Done]` Media regeneration storage-quota enforcement, atomic per-file replacement, and queued initial derivative generation
 - `[Done]` Automated PostgreSQL SQL backup rotation, optional rclone off-site copies, and rollback-only restore drills against an explicitly separate database
 - `[Done]` Privacy-safe hourly operational metrics dashboard for publishing, public traffic/status trends, forms, media, backups, and errors
 - `[Done]` PostgreSQL health dashboard, active slow-query and transaction diagnostics, table statistics, safe ANALYZE operation, and configurable audit/notification retention

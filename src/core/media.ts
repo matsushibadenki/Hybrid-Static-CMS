@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mkdir, readdir, readFile, stat, unlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, unlink } from "node:fs/promises";
 import sanitizeHtml from "sanitize-html";
 import { config } from "./config";
 import { escapeHtml, slugify } from "./content";
@@ -634,7 +634,7 @@ export async function uploadMedia(file: File, altText: string, userId: number) {
   const storedName = safeMediaStoredName(file.name, file.type);
   const destination = path.join(config.cmsUploadDir, storedName);
   const publicUrl = `/cms/uploads/${storedName}`;
-  const imageResult = await processImageUpload(content, file.type, storedName);
+  const imageResult = await processImageUpload(content, file.type, storedName, undefined, true);
   const derivativeBytes = imageResult?.variants.reduce((total, variant) => total + variant.sizeBytes, 0) ?? 0;
   const requiredStorageBytes = content.size + derivativeBytes;
   const writtenFiles: string[] = [];
@@ -714,6 +714,9 @@ export async function uploadMedia(file: File, altText: string, userId: number) {
         returning id
       `;
       const mediaId = Number(rows[0].id);
+      if (config.mediaImageDerivativesEnabled && ["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        await trx`insert into background_jobs (job_type, payload) values ('regenerate_media_variants', ${trx.json({ mediaId })})`;
+      }
       for (const variant of imageResult?.variants ?? []) {
         await trx`
           insert into media_variants (
@@ -776,12 +779,39 @@ export async function regenerateMediaVariants(id: number) {
   const source = await readFile(path.join(config.cmsUploadDir, media.storedName));
   const result = await processImageUpload(new Blob([source], { type: media.mimeType }), media.mimeType, media.storedName);
   if (!result) return;
-  // Variant names are deterministic, so overwriting them leaves the prior database
-  // records usable if the following transaction cannot complete.
-  for (const variant of result.variants) {
-    await Bun.write(path.join(config.cmsUploadDir, variant.storedName), variant.content);
-  }
   await sql.begin(async (trx) => {
+    await trx`select pg_advisory_xact_lock(861724501)`;
+    const owners = await trx`select uploaded_by from media_files where id = ${id} for update`;
+    if (!owners[0]) return;
+    const ownerId = owners[0].uploaded_by ?? null;
+    const roles = await trx`select r.name from user_roles ur join roles r on r.id = ur.role_id where ur.user_id = ${ownerId}`;
+    const policy = resolveMediaUploadPolicy(roles.map((row) => String(row.name) as UserRole));
+    const usage = await trx`
+      select
+        (coalesce((select sum(size_bytes) from media_files), 0) +
+         coalesce((select sum(size_bytes) from media_variants where media_id <> ${id}), 0)) as site_bytes,
+        (coalesce((select sum(size_bytes) from media_files where uploaded_by = ${ownerId}), 0) +
+         coalesce((select sum(v.size_bytes) from media_variants v join media_files m on m.id = v.media_id
+                   where m.uploaded_by = ${ownerId} and v.media_id <> ${id}), 0)) as user_bytes
+    `;
+    const bytes = result.variants.reduce((sum, variant) => sum + variant.sizeBytes, 0);
+    if (policy.siteQuotaBytes > 0 && Number(usage[0].site_bytes) + bytes > policy.siteQuotaBytes) {
+      throw new AppValidationError("The site media storage quota would be exceeded.");
+    }
+    if (ownerId !== null && policy.userQuotaBytes > 0 && Number(usage[0].user_bytes) + bytes > policy.userQuotaBytes) {
+      throw new AppValidationError("Your media storage quota would be exceeded.");
+    }
+    // Rename within the upload filesystem makes each published file replacement atomic.
+    for (const variant of result.variants) {
+      const destination = path.join(config.cmsUploadDir, variant.storedName);
+      const temporary = path.join(config.cmsUploadDir, `.${crypto.randomUUID()}.tmp`);
+      try {
+        await Bun.write(temporary, variant.content);
+        await rename(temporary, destination);
+      } finally {
+        await unlink(temporary).catch(() => undefined);
+      }
+    }
     await trx`delete from media_variants where media_id = ${id}`;
     await trx`update media_files set width = ${result.width}, height = ${result.height}, metadata = ${trx.json(result.metadata)} where id = ${id}`;
     for (const variant of result.variants) {
