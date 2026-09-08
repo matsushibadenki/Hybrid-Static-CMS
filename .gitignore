@@ -19,6 +19,7 @@ dist/
 build/
 coverage/
 .turbo/
+.next/
 .cache/
 
 # OS / editor noise

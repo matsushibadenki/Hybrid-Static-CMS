@@ -148,7 +148,7 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 
 ### API and integrations
 
-- `[Later]` External mail delivery adapter for Next.js Route Handler, Nodemailer, and provider-managed SMTP
+- `[Done]` External mail delivery adapter for Next.js Route Handler, Nodemailer, and provider-managed SMTP, with bearer authentication and fixed sender/recipient restrictions
 - `[Done]` Local Sendmail-compatible MTA adapter with absolute-path, direct-execution, least-privilege deployment guidance, and failure isolation
 - `[Done]` Provider-neutral mail delivery strategy for SMTP, HTTP mail APIs, and local MTA selection without changing form code
 - `[Done]` Scoped API keys and machine-user authentication with least-privilege scopes, expiration, revocation, audit records, and server-to-server CMS API access
