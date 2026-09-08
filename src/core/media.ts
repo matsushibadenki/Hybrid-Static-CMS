@@ -770,6 +770,26 @@ export async function deleteMedia(id: number) {
   return true;
 }
 
+export async function regenerateMediaVariants(id: number) {
+  const media = await getMediaById(id);
+  if (!media || !["image/jpeg", "image/png", "image/webp"].includes(media.mimeType)) return;
+  const source = await readFile(path.join(config.cmsUploadDir, media.storedName));
+  const result = await processImageUpload(new Blob([source], { type: media.mimeType }), media.mimeType, media.storedName);
+  if (!result) return;
+  // Variant names are deterministic, so overwriting them leaves the prior database
+  // records usable if the following transaction cannot complete.
+  for (const variant of result.variants) {
+    await Bun.write(path.join(config.cmsUploadDir, variant.storedName), variant.content);
+  }
+  await sql.begin(async (trx) => {
+    await trx`delete from media_variants where media_id = ${id}`;
+    await trx`update media_files set width = ${result.width}, height = ${result.height}, metadata = ${trx.json(result.metadata)} where id = ${id}`;
+    for (const variant of result.variants) {
+      await trx`insert into media_variants (media_id, kind, format, mime_type, width, height, size_bytes, stored_name, public_url) values (${id}, ${variant.kind}, ${variant.format}, ${variant.mimeType}, ${variant.width}, ${variant.height}, ${variant.sizeBytes}, ${variant.storedName}, ${variant.publicUrl})`;
+    }
+  });
+}
+
 export async function deleteUnusedMedia(ids: readonly number[]) {
   const uniqueIds = [...new Set(ids.filter((id) => Number.isSafeInteger(id) && id > 0))];
   const deleted: number[] = [];

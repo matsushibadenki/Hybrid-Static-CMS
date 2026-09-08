@@ -147,4 +147,4 @@ No database migration is required. Copy the `BACKUP_*` settings from `.env.examp
 
 ## Background rendering jobs
 
-Run `bun run migrate` to apply `035_background_jobs.sql`. The control-panel regeneration action now queues work; the built-in scheduler processes it within one minute and retries failures automatically.
+Run `bun run migrate` through `037_background_job_uniqueness.sql`. This also fixes independent media job queuing after migration 036. The control-panel regeneration action queues work; the built-in scheduler processes one job per interval and retries failures automatically.

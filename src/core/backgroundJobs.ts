@@ -1,17 +1,23 @@
 import { sql } from "./db";
 import { renderPublishedArtifacts } from "./renderer";
+import { regenerateMediaVariants } from "./media";
 import { logInfo, logWarn } from "./logger";
 
-export type BackgroundJob = { id: number; jobType: "render_public_artifacts"; status: "queued" | "running" | "completed" | "failed"; attempts: number; runAfter: string; lastError: string | null; createdAt: string; completedAt: string | null };
+export type BackgroundJob = { id: number; jobType: "render_public_artifacts" | "regenerate_media_variants"; status: "queued" | "running" | "completed" | "failed"; attempts: number; runAfter: string; lastError: string | null; createdAt: string; completedAt: string | null; payload: Record<string, unknown> };
 
 function normalize(row: Record<string, unknown>): BackgroundJob {
-  return { id: Number(row.id), jobType: row.job_type as BackgroundJob["jobType"], status: row.status as BackgroundJob["status"], attempts: Number(row.attempts), runAfter: String(row.run_after), lastError: row.last_error ? String(row.last_error) : null, createdAt: String(row.created_at), completedAt: row.completed_at ? String(row.completed_at) : null };
+  return { id: Number(row.id), jobType: row.job_type as BackgroundJob["jobType"], status: row.status as BackgroundJob["status"], attempts: Number(row.attempts), runAfter: String(row.run_after), lastError: row.last_error ? String(row.last_error) : null, createdAt: String(row.created_at), completedAt: row.completed_at ? String(row.completed_at) : null, payload: (row.payload as Record<string, unknown>) ?? {} };
+}
+
+export async function enqueueMediaVariantRegeneration(mediaId: number) {
+  const rows = await sql`insert into background_jobs (job_type, payload) values ('regenerate_media_variants', ${sql.json({ mediaId })}) on conflict ((payload->>'mediaId')) where job_type = 'regenerate_media_variants' and status in ('queued', 'running') do update set updated_at = now() returning *`;
+  return normalize(rows[0] as Record<string, unknown>);
 }
 
 export async function enqueuePublicRender() {
   const rows = await sql`
     insert into background_jobs (job_type) values ('render_public_artifacts')
-    on conflict (job_type) where status in ('queued', 'running') do update set updated_at = now()
+    on conflict (job_type) where job_type = 'render_public_artifacts' and status in ('queued', 'running') do update set updated_at = now()
     returning *
   `;
   return normalize(rows[0] as Record<string, unknown>);
@@ -33,14 +39,15 @@ export async function processBackgroundJobs() {
   if (!claimed[0]) return { processed: false };
   const job = normalize(claimed[0] as Record<string, unknown>);
   try {
-    await renderPublishedArtifacts();
+    if (job.jobType === "render_public_artifacts") await renderPublishedArtifacts();
+    else await regenerateMediaVariants(Number(job.payload.mediaId));
     await sql`update background_jobs set status = 'completed', completed_at = now(), updated_at = now(), last_error = null where id = ${job.id}`;
-    logInfo("jobs.render_completed", "Queued public artifact generation completed.", { jobId: job.id });
+    logInfo("jobs.completed", "Background job completed.", { jobId: job.id, jobType: job.jobType });
     return { processed: true, succeeded: true, jobId: job.id };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown rendering error";
+    const message = error instanceof Error ? error.message : "Unknown background job error";
     await sql`update background_jobs set status = case when attempts >= 6 then 'failed' else 'queued' end, run_after = now() + make_interval(secs => least(3600, 60 * power(2, least(attempts, 6))::integer)), last_error = ${message.slice(0, 1000)}, updated_at = now() where id = ${job.id}`;
-    logWarn("jobs.render_failed", "Queued public artifact generation failed.", { jobId: job.id, error });
+    logWarn("jobs.failed", "Background job failed.", { jobId: job.id, jobType: job.jobType, error });
     return { processed: true, succeeded: false, jobId: job.id };
   }
 }

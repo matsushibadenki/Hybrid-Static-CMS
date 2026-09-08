@@ -22,6 +22,7 @@ import {
   deleteMedia,
   deleteUnusedMedia,
   formatByteSize,
+  getMediaById,
   getMediaStorageUsage,
   isAudioMedia,
   isImageMedia,
@@ -38,7 +39,7 @@ import {
 import { createPage, deletePage, getPageById, listPages, updatePage } from "../../core/pages";
 import { createPost, deletePost, getPostById, listPosts, setPostCommentsPolicy, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
-import { enqueuePublicRender } from "../../core/backgroundJobs";
+import { enqueueMediaVariantRegeneration, enqueuePublicRender, listBackgroundJobs } from "../../core/backgroundJobs";
 import { buildScopedSlug, slugify, escapeHtml } from "../../core/content";
 import { createManagedUser, getUserById, listUsers, managedRoles, resetUserPassword, resetUserTwoFactor, revokeUserSessions, setUserActive, updateUserProfile } from "../../core/users";
 import { hasPermission, requireAdminPermission } from "../../core/permissions";
@@ -2322,6 +2323,18 @@ adminRoutes.get("/metrics", async (c) => {
   return c.html(adminLayout("Operational metrics", user, body, "wide-list"));
 });
 
+adminRoutes.get("/jobs", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const jobs = await listBackgroundJobs();
+  const labels = { queued: "Queued", running: "Running", completed: "Completed", failed: "Failed" } as const;
+  const jobLabels = { render_public_artifacts: "Public artifact rendering", regenerate_media_variants: "Media variant regeneration" } as const;
+  const body = `${queryNotice(c)}
+    <section class="editor-section"><div class="section-heading-row"><div><p class="editor-section-kicker" data-i18n="Operations">Operations</p><h1 class="editor-section-title" data-i18n="Background jobs">Background jobs</h1></div></div><p class="meta" data-i18n="Queued work is processed by the scheduler. Failed jobs retry with bounded exponential backoff.">Queued work is processed by the scheduler. Failed jobs retry with bounded exponential backoff.</p></section>
+    <section class="editor-section"><table><thead><tr><th data-i18n="Job">Job</th><th data-i18n="Status">Status</th><th data-i18n="Attempts">Attempts</th><th data-i18n="Next run">Next run</th><th data-i18n="Created">Created</th><th data-i18n="Error">Error</th></tr></thead><tbody>${jobs.map((job) => `<tr><td data-i18n="${jobLabels[job.jobType]}">${jobLabels[job.jobType]}</td><td data-i18n="${labels[job.status]}">${labels[job.status]}</td><td>${job.attempts}</td><td>${adminDate(job.runAfter)}</td><td>${adminDate(job.createdAt)}</td><td class="cell-long">${job.lastError ? escapeHtml(job.lastError) : "-"}</td></tr>`).join("") || `<tr><td colspan="6" data-i18n="No background jobs yet.">No background jobs yet.</td></tr>`}</tbody></table></section>`;
+  return c.html(adminLayout("Background jobs", user, body, "wide-list"));
+});
+
 adminRoutes.get("/users/new", (c) => {
   return c.html(adminLayout("New User", c.get("sessionUser"), queryNotice(c) + userForm(`${config.controlPanelPath}/users`)));
 });
@@ -4284,6 +4297,7 @@ adminRoutes.get("/media", async (c) => {
         : true);
   const unusedCount = allItems.filter((item) => item.references.length === 0).length;
   const canDeleteMedia = hasPermission(user, "media.delete");
+  const canWriteMedia = hasPermission(user, "media.write");
   const usage = await getMediaStorageUsage(user.id);
   const storage = mediaStorageState(usage);
   const quotaLabel = (usedBytes: number, quotaBytes: number) =>
@@ -4369,6 +4383,7 @@ adminRoutes.get("/media", async (c) => {
                   <td class="cell-actions">
                     <div class="row">
                       <a class="button" href="${item.publicUrl}">Open</a>
+                      ${canWriteMedia && ["image/jpeg", "image/png", "image/webp"].includes(item.mimeType) ? `<form method="post" action="${config.controlPanelPath}/media/${item.id}/regenerate-variants"><button class="button" data-i18n="Regenerate variants" type="submit">Regenerate variants</button></form>` : ""}
                       ${canDeleteMedia ? isUnused ? `<form method="post" action="${config.controlPanelPath}/media/${item.id}/delete"><button class="button" type="submit">Delete</button></form>` : `<button class="button" type="button" disabled title="Remove references before deleting this media.">Delete</button>` : ""}
                     </div>
                   </td>
@@ -4419,6 +4434,20 @@ adminRoutes.post("/media", async (c) => {
     const message = error instanceof AppValidationError ? error.message : "Unable to upload media.";
     return c.redirect(`${config.controlPanelPath}/media?error=${encodeURIComponent(message)}`);
   }
+});
+
+adminRoutes.post("/media/:id/regenerate-variants", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id < 1) return c.redirect(`${config.controlPanelPath}/media?error=${encodeURIComponent("Invalid media item.")}`);
+  const media = await getMediaById(id);
+  if (!media || !["image/jpeg", "image/png", "image/webp"].includes(media.mimeType)) {
+    return c.redirect(`${config.controlPanelPath}/media?error=${encodeURIComponent("This media item cannot regenerate variants.")}`);
+  }
+  await enqueueMediaVariantRegeneration(id);
+  await writeAuditLog({ actorUserId: user.id, action: "media.variants_regenerate", targetType: "media", targetId: id, summary: `Queued media variant regeneration for #${id}.`, ipAddress: requestIp(c) });
+  return c.redirect(`${config.controlPanelPath}/media?success=${encodeURIComponent("Media variant regeneration was queued.")}`);
 });
 
 adminRoutes.post("/media/:id/delete", async (c) => {

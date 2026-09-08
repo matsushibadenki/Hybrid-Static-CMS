@@ -122,6 +122,15 @@ const zh: Record<string, string> = {
 };
 
 Object.assign(ja, {
+  "Background jobs": "バックグラウンドジョブ",
+  "Regenerate variants": "派生画像を再生成",
+  "Public artifact rendering": "公開ページの生成",
+  "Media variant regeneration": "派生画像の再生成",
+  "Media variant regeneration was queued.": "派生画像の再生成を予約しました。",
+  "Invalid media item.": "メディアの指定が無効です。",
+  "This media item cannot regenerate variants.": "このメディアでは派生画像を再生成できません。",
+  "Queued work is processed by the scheduler. Failed jobs retry with bounded exponential backoff.": "キューに入れた処理はスケジューラーが実行します。失敗したジョブは回数を制限した指数バックオフで再試行します。",
+  Job: "ジョブ", Attempts: "試行回数", "Next run": "次回実行", Error: "エラー", Queued: "待機中", Running: "実行中", Completed: "完了", Failed: "失敗", "No background jobs yet.": "バックグラウンドジョブはまだありません。",
   files: "ファイル",
   "Import and export": "インポート・エクスポート",
   Portability: "データ移行",
@@ -153,6 +162,15 @@ Object.assign(ja, {
 });
 
 Object.assign(zh, {
+  "Background jobs": "后台任务",
+  "Regenerate variants": "重新生成派生图像",
+  "Public artifact rendering": "公开页面生成",
+  "Media variant regeneration": "派生图像重新生成",
+  "Media variant regeneration was queued.": "已将派生图像重新生成加入队列。",
+  "Invalid media item.": "媒体项目无效。",
+  "This media item cannot regenerate variants.": "此媒体无法重新生成派生图像。",
+  "Queued work is processed by the scheduler. Failed jobs retry with bounded exponential backoff.": "队列任务由调度程序执行。失败任务将采用有限次数的指数退避重试。",
+  Job: "任务", Attempts: "尝试次数", "Next run": "下次执行", Error: "错误", Queued: "排队中", Running: "执行中", Completed: "已完成", Failed: "失败", "No background jobs yet.": "暂无后台任务。",
   files: "个文件",
   "Import and export": "导入与导出",
   Portability: "数据迁移",

@@ -104,6 +104,7 @@ function adminPermissionForRequest(c: Context): Permission {
   if (path.startsWith("/users")) return "users.manage";
   if (path.startsWith("/api-keys")) return "api_keys.manage";
   if (path.startsWith("/database")) return "database.manage";
+  if (path.startsWith("/jobs")) return "database.manage";
   if (path.startsWith("/metrics")) return "metrics.read";
   if (path.startsWith("/settings")) return "settings.manage";
   if (path.startsWith("/logs")) return "audit.read";
