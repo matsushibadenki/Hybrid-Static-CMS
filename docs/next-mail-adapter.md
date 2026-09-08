@@ -38,6 +38,46 @@ mail. The adapter does not provide an idempotent delivery queue.
 
 ## 日本語
 
+### Delivery mode / 配信方式 / 投递方式
+
+`MAIL_ADAPTER_MODE` selects `smtp` (default), `sendmail`, `http`, or `disabled`.
+Restart the Next.js process after changing settings. CMS configuration stays the same.
+All active modes use the same authentication, fixed addresses, and input validation.
+
+For a VPS with a local MTA, set `MAIL_ADAPTER_MODE=sendmail` and
+`MAIL_ADAPTER_SENDMAIL_PATH=/usr/sbin/sendmail` (or its actual absolute path).
+Nodemailer invokes it directly with its standard arguments; no shell command or
+user-supplied arguments are accepted. Run Next.js as an unprivileged service user
+with permission to submit mail. The MTA owns queueing and retries after acceptance.
+Use the MTA's queue and service logs to monitor delivery. This mode needs a local
+executable and is generally unsuitable for serverless hosts. A stalled MTA can
+hold the request open: configure service supervision and a proxy request timeout;
+the adapter does not kill a stalled sendmail process or display its queue.
+
+For HTTP delivery, set `MAIL_ADAPTER_MODE=http`, `MAIL_ADAPTER_API_URL`, and
+`MAIL_ADAPTER_API_TOKEN`. The endpoint must use HTTPS and accept
+`{from,to,subject,text}` with bearer authentication. A successful 2xx response
+means acceptance. Provider-specific APIs with different contracts need their own
+mapping endpoint; this is not a universal provider SDK. Redirects are rejected,
+requests time out after eight seconds, and provider tokens remain on the server.
+Do not point this URL back at the same adapter. `disabled` returns 503 without
+sending, so a deliberately stopped notification is not reported as delivered.
+
+日本語: `MAIL_ADAPTER_MODE` で `smtp`・`sendmail`・`http`・`disabled` を選び、
+変更後にNext.jsを再起動します。sendmailは絶対パスで指定し、一般ユーザー権限で
+実行してください。キューと再送はMTA側で管理します。HTTPは上記JSON形式に対応する
+HTTPSエンドポイントを指定します。サービス固有の形式には変換処理が必要です。
+停止モードは503を返します。sendmailの停止監視と実配信確認は設置環境で行ってください。
+
+简体中文: 使用 `MAIL_ADAPTER_MODE` 选择 `smtp`、`sendmail`、`http` 或 `disabled`，
+修改后重启Next.js。sendmail必须使用绝对路径和非特权服务用户，队列及重试由MTA管理。
+HTTP端点必须支持上述JSON格式并使用HTTPS，供应商专用格式需要转换接口。
+停用模式返回503。请在部署环境监控sendmail进程并验证真实投递。
+
+Reference: [Nodemailer Sendmail transport](https://nodemailer.com/transports/sendmail).
+
+### 設置概要
+
 既存のNext.js App Routerアプリに追加する任意のメール中継機能です。
 CMSから認証付きHTTPSで受信し、Nodemailerから外部SMTPへ送信します。
 上記の2ファイルを配置し、Next.js側に `.env.example` の設定を入れます。

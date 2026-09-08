@@ -1,11 +1,12 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
+import path from "node:path";
 
 type Message = { from: string; to: string; subject: string; text: string };
 type Sender = (message: Message) => Promise<unknown>;
 type Environment = Record<string, string | undefined>;
 
-export function createMailRoute(env: Environment = process.env, sender?: Sender) {
+export function createMailRoute(env: Environment = process.env, sender?: Sender, fetcher: typeof fetch = fetch) {
   const token = env.MAIL_ADAPTER_TOKEN ?? "";
   const from = env.MAIL_ADAPTER_FROM ?? "";
   const to = env.MAIL_ADAPTER_TO ?? "";
@@ -14,7 +15,29 @@ export function createMailRoute(env: Environment = process.env, sender?: Sender)
     throw new Error("Configure MAIL_ADAPTER_TOKEN (at least 32 characters), MAIL_ADAPTER_FROM and MAIL_ADAPTER_TO.");
   }
   let deliver = sender;
-  if (!deliver) {
+  const mode = env.MAIL_ADAPTER_MODE ?? "smtp";
+  if (!["smtp", "sendmail", "http", "disabled"].includes(mode)) throw new Error("Invalid MAIL_ADAPTER_MODE.");
+  if (!deliver && mode === "sendmail") {
+    const executable = env.MAIL_ADAPTER_SENDMAIL_PATH ?? "/usr/sbin/sendmail";
+    if (!path.isAbsolute(executable) || /[\0\r\n]/.test(executable)) throw new Error("An absolute sendmail path is required.");
+    const transport = nodemailer.createTransport({ sendmail: true, path: executable, newline: "unix", disableFileAccess: true, disableUrlAccess: true });
+    deliver = (message) => transport.sendMail(message);
+  }
+  if (!deliver && mode === "http") {
+    const url = new URL(env.MAIL_ADAPTER_API_URL ?? "");
+    const apiToken = env.MAIL_ADAPTER_API_TOKEN;
+    if (url.protocol !== "https:" || url.username || url.password || !apiToken) throw new Error("An HTTPS API URL and API token are required.");
+    deliver = async (message) => {
+      const response = await fetcher(url, {
+        method: "POST", redirect: "error", signal: AbortSignal.timeout(8000),
+        headers: { "content-type": "application/json", authorization: `Bearer ${apiToken}` },
+        body: JSON.stringify(message),
+      });
+      await response.body?.cancel();
+      if (!response.ok) throw new Error("Mail provider rejected the request.");
+    };
+  }
+  if (!deliver && mode === "smtp") {
     const port = Number(env.MAIL_ADAPTER_SMTP_PORT ?? 587);
     if (!env.MAIL_ADAPTER_SMTP_HOST || !Number.isInteger(port) || port < 1 || port > 65535) {
       throw new Error("Configure a valid adapter SMTP host and port.");
@@ -41,6 +64,7 @@ export function createMailRoute(env: Environment = process.env, sender?: Sender)
   return async (request: Request) => {
     if (request.method !== "POST") return respond(405);
     if (!timingSafeEqual(digest(request.headers.get("authorization") ?? ""), digest(`Bearer ${token}`))) return respond(401);
+    if (mode === "disabled") return respond(503);
     if (request.headers.get("content-type")?.split(";")[0].trim() !== "application/json") return respond(415);
     if (!request.body) return respond(400);
     const reader = request.body.getReader();
