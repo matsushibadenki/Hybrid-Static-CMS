@@ -9,11 +9,17 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   app:
     build: .
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       PORT: 3000
       APP_URL: http://localhost:3000
