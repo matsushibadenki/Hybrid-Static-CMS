@@ -125,7 +125,9 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Configurable form-submission retention cleanup and permission-protected CSV export
 - `[Done]` SMTP form submission notifications with operator-visible delivery failures
 - `[Done]` Optional profile-based Stalwart Docker mail server with private-relay and explicit public-port deployment modes
-- `[Later]` Optional Next.js Route Handler + Nodemailer mail gateway using an external SMTP provider, with signed internal requests, secret rotation, retry handling, and a migration path from the built-in SMTP sender
+- `[Done]` Optional Next.js mail gateway with SMTP migration guidance, HMAC-signed internal requests, timestamp validation, and overlapping secret rotation
+- `[Done]` Transactional form-mail outbox, bounded retries, unique submission reservations, stale-worker review status, and private delivery-status dashboard
+- `[Later]` Shared mail gateway idempotency records and operator-reviewed redelivery controls
 - `[Done]` Optional Nodemailer `sendmail` transport with absolute executable-path configuration, least-privilege deployment guidance, and HTTP failure responses
 - `[Later]` Local MTA queue monitoring UI and stalled sendmail process supervision
 - `[Done]` Configurable Next.js mail adapter using SMTP, a contract-compatible HTTPS mail API, local Sendmail, or disabled mode without changing form code

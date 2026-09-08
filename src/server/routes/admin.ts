@@ -40,6 +40,7 @@ import { createPage, deletePage, getPageById, listPages, updatePage } from "../.
 import { createPost, deletePost, getPostById, listPosts, setPostCommentsPolicy, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
 import { enqueueMediaVariantRegeneration, enqueuePublicRender, listBackgroundJobs } from "../../core/backgroundJobs";
+import { listMailOutbox } from "../../core/mailOutbox";
 import { buildScopedSlug, slugify, escapeHtml } from "../../core/content";
 import { createManagedUser, getUserById, listUsers, managedRoles, resetUserPassword, resetUserTwoFactor, revokeUserSessions, setUserActive, updateUserProfile } from "../../core/users";
 import { hasPermission, requireAdminPermission } from "../../core/permissions";
@@ -2332,7 +2333,10 @@ adminRoutes.get("/jobs", async (c) => {
   const body = `${queryNotice(c)}
     <section class="editor-section"><div class="section-heading-row"><div><p class="editor-section-kicker" data-i18n="Operations">Operations</p><h1 class="editor-section-title" data-i18n="Background jobs">Background jobs</h1></div></div><p class="meta" data-i18n="Queued work is processed by the scheduler. Failed jobs retry with bounded exponential backoff.">Queued work is processed by the scheduler. Failed jobs retry with bounded exponential backoff.</p></section>
     <section class="editor-section"><table><thead><tr><th data-i18n="Job">Job</th><th data-i18n="Status">Status</th><th data-i18n="Attempts">Attempts</th><th data-i18n="Next run">Next run</th><th data-i18n="Created">Created</th><th data-i18n="Error">Error</th></tr></thead><tbody>${jobs.map((job) => `<tr><td data-i18n="${jobLabels[job.jobType]}">${jobLabels[job.jobType]}</td><td data-i18n="${labels[job.status]}">${labels[job.status]}</td><td>${job.attempts}</td><td>${adminDate(job.runAfter)}</td><td>${adminDate(job.createdAt)}</td><td class="cell-long">${job.lastError ? escapeHtml(job.lastError) : "-"}</td></tr>`).join("") || `<tr><td colspan="6" data-i18n="No background jobs yet.">No background jobs yet.</td></tr>`}</tbody></table></section>`;
-  return c.html(adminLayout("Background jobs", user, body, "wide-list"));
+  const mail = await listMailOutbox();
+  const mailLabels: Record<string, string> = { queued: "Queued", running: "Running", sent: "Completed", failed: "Failed", uncertain: "Delivery needs review" };
+  const outbox = `<section class="editor-section"><h2 data-i18n="Mail delivery queue">Mail delivery queue</h2><table><thead><tr><th>ID</th><th data-i18n="Status">Status</th><th data-i18n="Attempts">Attempts</th><th data-i18n="Updated">Updated</th></tr></thead><tbody>${mail.map((item) => `<tr><td>${Number(item.id)}</td><td data-i18n="${mailLabels[String(item.status)]}">${mailLabels[String(item.status)]}</td><td>${Number(item.attempts)}</td><td>${adminDate(String(item.updated_at))}</td></tr>`).join("")}</tbody></table></section>`;
+  return c.html(adminLayout("Background jobs", user, body + outbox, "wide-list"));
 });
 
 adminRoutes.get("/users/new", (c) => {

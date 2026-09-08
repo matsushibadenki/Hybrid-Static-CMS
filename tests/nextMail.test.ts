@@ -1,8 +1,29 @@
 import { expect, test } from "bun:test";
 import { createMailRoute } from "../src/adapters/nextMail";
+import { createHmac } from "node:crypto";
 
 const env = { MAIL_ADAPTER_TOKEN: "test-token-".repeat(4), MAIL_ADAPTER_FROM: "cms@example.test", MAIL_ADAPTER_TO: "owner@example.test" };
 const message = { from: env.MAIL_ADAPTER_FROM, to: env.MAIL_ADAPTER_TO, subject: "Notification", text: "Message" };
+
+test("signed mail validates exact bytes, age, and rotating keys", async () => {
+  const secret = "current-secret-".repeat(3);
+  const oldSecret = "previous-secret-".repeat(3);
+  let sent = 0;
+  const route = createMailRoute({ ...env, MAIL_ADAPTER_SIGNING_SECRET: secret, MAIL_ADAPTER_PREVIOUS_SIGNING_SECRET: oldSecret }, async () => { sent++; });
+  const signed = (key: string, seconds = Math.floor(Date.now() / 1000), tamper = false) => {
+    const body = JSON.stringify(message);
+    return new Request("https://mail.example.test", { method: "POST", headers: {
+      authorization: `Bearer ${env.MAIL_ADAPTER_TOKEN}`, "content-type": "application/json",
+      "x-hsc-mail-timestamp": String(seconds), "x-hsc-mail-signature": createHmac("sha256", key).update(`${seconds}.${body}`).digest("hex"),
+    }, body: body + (tamper ? " " : "") });
+  };
+  expect((await route(signed(secret))).status).toBe(204);
+  expect((await route(signed(oldSecret))).status).toBe(204);
+  expect((await route(signed(secret, Math.floor(Date.now() / 1000) - 600))).status).toBe(401);
+  expect((await route(signed(secret, undefined, true))).status).toBe(401);
+  expect((await route(request(message))).status).toBe(401);
+  expect(sent).toBe(2);
+});
 function request(value: unknown, token = env.MAIL_ADAPTER_TOKEN) {
   return new Request("https://mail.example.test/api/cms-mail", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(value) });
 }

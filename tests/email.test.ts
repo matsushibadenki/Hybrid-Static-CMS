@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHmac } from "node:crypto";
 import { isAllowedMailHttpApiUrl, isAllowedSendmailPath, sendMail, type MailDeliverySettings } from "../src/core/email";
 
 const httpSettings: MailDeliverySettings = {
@@ -16,6 +17,16 @@ const httpSettings: MailDeliverySettings = {
 };
 
 describe("mail delivery adapters", () => {
+  test("signs the exact HTTP body and rejects redirects", async () => {
+    const secret = "signing-secret-".repeat(3);
+    const fetcher = (async (_input: unknown, init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      expect(headers.get("x-hsc-mail-signature")).toBe(createHmac("sha256", secret).update(`${headers.get("x-hsc-mail-timestamp")}.${init.body}`).digest("hex"));
+      expect(init.redirect).toBe("error");
+      return new Response(null, { status: 204 });
+    }) as typeof fetch;
+    expect((await sendMail({ from: "cms@example.test", to: "owner@example.test", subject: "署名", text: "通知" }, fetcher, { ...httpSettings, httpSigningSecret: secret })).sent).toBe(true);
+  });
   test("allows HTTPS mail APIs and only local HTTP development endpoints", () => {
     expect(isAllowedMailHttpApiUrl("https://mail.example.test/send")).toBe(true);
     expect(isAllowedMailHttpApiUrl("http://localhost:3001/send")).toBe(true);

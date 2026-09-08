@@ -2,6 +2,38 @@
 
 ## English
 
+### Signed requests and rotation
+
+Set `MAIL_HTTP_SIGNING_SECRET` on the CMS and the same value in
+`MAIL_ADAPTER_SIGNING_SECRET` on Next.js (at least 32 random characters).
+Bearer authentication remains required. With an adapter signing secret set,
+unsigned requests are rejected. Configure the sender first, then enable required
+verification on the receiver. Signatures cover the Unix timestamp, a dot, and the
+exact request bytes using HMAC-SHA256. Requests outside a five-minute clock window
+are rejected; keep both server clocks synchronized.
+
+To rotate, set the receiver's current secret to the new value and its
+`MAIL_ADAPTER_PREVIOUS_SIGNING_SECRET` to the old value, restart it, update the
+CMS secret, and restart the CMS. Remove the previous secret after all senders have
+switched. Bearer tokens use the same process with `MAIL_ADAPTER_TOKEN`,
+`MAIL_ADAPTER_PREVIOUS_TOKEN`, and CMS `MAIL_HTTP_API_TOKEN`.
+Previous values remain accepted until explicitly removed. A timestamp window
+does not prevent replay within that window; this adapter has no shared replay or
+idempotency store and must not be treated as exactly-once delivery.
+
+日本語: CMSの `MAIL_HTTP_SIGNING_SECRET` とNext.jsの
+`MAIL_ADAPTER_SIGNING_SECRET` に同じ32文字以上のランダム鍵を設定します。
+鍵交換は受信側で新鍵と `MAIL_ADAPTER_PREVIOUS_SIGNING_SECRET` の旧鍵を設定し、
+送信側を新鍵に更新後、旧鍵を削除します。Bearerトークンも同様に交換できます。
+各変更後は再起動が必要です。時刻差5分を超える要求は拒否しますが、5分以内の
+同じ要求の再送を排除する機能ではありません。
+
+简体中文: CMS的 `MAIL_HTTP_SIGNING_SECRET` 与Next.js的
+`MAIL_ADAPTER_SIGNING_SECRET` 应使用相同的至少32字符随机密钥。
+轮换时先在接收端配置新密钥及 `MAIL_ADAPTER_PREVIOUS_SIGNING_SECRET` 旧密钥，
+再更新发送端，最后删除旧密钥。Bearer令牌也支持同样的轮换流程。
+修改后需要重启。系统拒绝超过五分钟时间窗口的请求，但不保证窗口内的重放去重。
+
 This optional server-to-server adapter receives the CMS HTTP mail contract and
 sends plain-text notifications through Nodemailer and an external SMTP provider.
 It is integration code for an existing Next.js App Router application, not a

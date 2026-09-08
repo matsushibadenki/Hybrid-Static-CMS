@@ -21,7 +21,6 @@ import { createAiFileProposal } from "../../core/aiProposals";
 import { hasRequestPermission, requireApiPermission } from "../../core/permissions";
 import { consumeFormSubmissionRateLimit, consumeSubmissionRateLimit } from "../../core/formRateLimit";
 import { config } from "../../core/config";
-import { sendFormSubmissionEmail } from "../../core/email";
 import { createOperatorNotification } from "../../core/notifications";
 import { AppValidationError } from "../../core/validation";
 import { publicTranslations } from "../../core/i18n";
@@ -628,31 +627,6 @@ apiRoutes.post("/forms/:slug/submit", async (c) => {
     throw error;
   }
   await createFormSubmission(form.id, payload);
-  try {
-    await sendFormSubmissionEmail(form, payload);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown SMTP error";
-    try {
-      await createOperatorNotification({
-        level: "error",
-        action: "form.submit.email_failed",
-        message: `Email notification failed for form "${form.title}": ${message.slice(0, 240)}`,
-      });
-    } catch {
-      // Delivery failure must not turn a successfully stored submission into a visitor error.
-    }
-    try {
-      await writeAuditLog({
-        action: "form.submit.email_failed",
-        targetType: "form",
-        targetId: form.id,
-        summary: `Email notification failed for form "${form.title}".`,
-        ipAddress: requestIp(c),
-      });
-    } catch {
-      // Keep the public form response available even if the database is temporarily degraded.
-    }
-  }
   await writeAuditLog({
     actorUserId: null,
     action: "form.submit",

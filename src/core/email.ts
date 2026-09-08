@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createHmac } from "node:crypto";
 import { config, type MailDeliveryMode } from "./config";
 import type { FormRecord } from "./types";
 
@@ -6,7 +7,7 @@ type SmtpState = { buffer: string; responseLines: string[]; waiters: Array<(resp
 export type MailMessage = { from: string; to: string; subject: string; text: string };
 export type MailDeliverySettings = {
   mode: MailDeliveryMode; smtpHost: string | null; smtpPort: number; smtpTls: boolean; smtpHostname: string; smtpUsername: string | null; smtpPassword: string | null;
-  httpApiUrl: string | null; httpApiToken: string | null; sendmailPath: string; sendmailArgs: string[];
+  httpApiUrl: string | null; httpApiToken: string | null; httpSigningSecret?: string | null; sendmailPath: string; sendmailArgs: string[];
 };
 
 function encodeBase64(value: string) { return Buffer.from(value, "utf8").toString("base64"); }
@@ -27,7 +28,7 @@ function rfc822Message(message: MailMessage) {
   return [`From: ${headerValue(message.from)}`, `To: ${headerValue(message.to)}`, `Subject: ${headerValue(message.subject)}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", message.text.replace(/\r?\n/g, "\r\n").replace(/^\./gm, ".."), ""].join("\r\n");
 }
 function defaultSettings(): MailDeliverySettings {
-  return { mode: config.mailDeliveryMode, smtpHost: config.smtpHost, smtpPort: config.smtpPort, smtpTls: config.smtpTls, smtpHostname: config.smtpHostname, smtpUsername: config.smtpUsername, smtpPassword: config.smtpPassword, httpApiUrl: config.mailHttpApiUrl, httpApiToken: config.mailHttpApiToken, sendmailPath: config.mailSendmailPath, sendmailArgs: config.mailSendmailArgs };
+  return { mode: config.mailDeliveryMode, smtpHost: config.smtpHost, smtpPort: config.smtpPort, smtpTls: config.smtpTls, smtpHostname: config.smtpHostname, smtpUsername: config.smtpUsername, smtpPassword: config.smtpPassword, httpApiUrl: config.mailHttpApiUrl, httpApiToken: config.mailHttpApiToken, httpSigningSecret: config.mailHttpSigningSecret, sendmailPath: config.mailSendmailPath, sendmailArgs: config.mailSendmailArgs };
 }
 
 export function isAllowedMailHttpApiUrl(value: string | null) {
@@ -82,7 +83,15 @@ async function sendSendmailMessage(message: MailMessage, settings: MailDeliveryS
 }
 async function sendHttpApiMessage(message: MailMessage, settings: MailDeliverySettings, fetcher: typeof fetch) {
   if (!isAllowedMailHttpApiUrl(settings.httpApiUrl) || !settings.httpApiToken) throw new Error("MAIL_HTTP_API_URL and MAIL_HTTP_API_TOKEN are required for HTTP mail delivery.");
-  const response = await fetcher(settings.httpApiUrl!, { method: "POST", headers: { authorization: `Bearer ${settings.httpApiToken}`, "content-type": "application/json", "user-agent": "Hybrid-Static-CMS-Mail/1" }, body: JSON.stringify(message), signal: AbortSignal.timeout(10_000) });
+  const body = JSON.stringify(message);
+  const headers: Record<string, string> = { authorization: `Bearer ${settings.httpApiToken}`, "content-type": "application/json", "user-agent": "Hybrid-Static-CMS-Mail/1" };
+  if (settings.httpSigningSecret) {
+    if (settings.httpSigningSecret.length < 32) throw new Error("Mail signing secret must contain at least 32 characters.");
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    headers["x-hsc-mail-timestamp"] = timestamp;
+    headers["x-hsc-mail-signature"] = createHmac("sha256", settings.httpSigningSecret).update(`${timestamp}.${body}`).digest("hex");
+  }
+  const response = await fetcher(settings.httpApiUrl!, { method: "POST", redirect: "error", headers, body, signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`Mail API returned HTTP ${response.status}.`);
 }
 export async function sendMail(message: MailMessage, fetcher: typeof fetch = fetch, settings: MailDeliverySettings = defaultSettings()) {

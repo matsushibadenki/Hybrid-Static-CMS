@@ -123,6 +123,8 @@ const zh: Record<string, string> = {
 
 Object.assign(ja, {
   "Background jobs": "バックグラウンドジョブ",
+  "Mail delivery queue": "メール配信キュー",
+  "Delivery needs review": "配信結果の確認が必要",
   "Regenerate variants": "派生画像を再生成",
   "Public artifact rendering": "公開ページの生成",
   "Media variant regeneration": "派生画像の再生成",
@@ -163,6 +165,8 @@ Object.assign(ja, {
 
 Object.assign(zh, {
   "Background jobs": "后台任务",
+  "Mail delivery queue": "邮件投递队列",
+  "Delivery needs review": "需要确认投递结果",
   "Regenerate variants": "重新生成派生图像",
   "Public artifact rendering": "公开页面生成",
   "Media variant regeneration": "派生图像重新生成",

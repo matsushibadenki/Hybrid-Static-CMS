@@ -14,6 +14,7 @@ import { config } from "./config";
 import { tryAcquireSchedulerLock } from "./schedulerLock";
 import { runAutomatedBackupIfDue } from "./backupAutomation";
 import { processBackgroundJobs } from "./backgroundJobs";
+import { processMailOutbox } from "./mailOutbox";
 
 type ScheduledItem = { id: number; attempts: number };
 
@@ -146,6 +147,7 @@ async function runScheduledJobsUnlocked(renderer: () => Promise<unknown>): Promi
 
   await runHousekeeping();
   await processBackgroundJobs();
+  await processMailOutbox();
   await runAutomatedBackupIfDue();
   return { publishedPosts, publishedPages, failedPosts: 0, failedPages: 0, retryQueued: false, skippedByLock: false };
 }

@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
 import path from "node:path";
 
@@ -8,6 +8,12 @@ type Environment = Record<string, string | undefined>;
 
 export function createMailRoute(env: Environment = process.env, sender?: Sender, fetcher: typeof fetch = fetch) {
   const token = env.MAIL_ADAPTER_TOKEN ?? "";
+  const previousToken = env.MAIL_ADAPTER_PREVIOUS_TOKEN;
+  const signingSecret = env.MAIL_ADAPTER_SIGNING_SECRET;
+  const previousSecret = env.MAIL_ADAPTER_PREVIOUS_SIGNING_SECRET;
+  if ([previousToken, signingSecret, previousSecret].some((value) => value !== undefined && value !== "" && value.length < 32) || (previousSecret && !signingSecret)) {
+    throw new Error("Rotation and signing secrets must contain at least 32 characters and require an active signing secret.");
+  }
   const from = env.MAIL_ADAPTER_FROM ?? "";
   const to = env.MAIL_ADAPTER_TO ?? "";
   const mailbox = /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/;
@@ -63,7 +69,10 @@ export function createMailRoute(env: Environment = process.env, sender?: Sender,
   const respond = (status: number) => new Response(null, { status, headers: { "cache-control": "no-store" } });
   return async (request: Request) => {
     if (request.method !== "POST") return respond(405);
-    if (!timingSafeEqual(digest(request.headers.get("authorization") ?? ""), digest(`Bearer ${token}`))) return respond(401);
+    const authorization = digest(request.headers.get("authorization") ?? "");
+    const currentMatches = timingSafeEqual(authorization, digest(`Bearer ${token}`));
+    const previousMatches = previousToken ? timingSafeEqual(authorization, digest(`Bearer ${previousToken}`)) : false;
+    if (!currentMatches && !previousMatches) return respond(401);
     if (mode === "disabled") return respond(503);
     if (request.headers.get("content-type")?.split(";")[0].trim() !== "application/json") return respond(415);
     if (!request.body) return respond(400);
@@ -82,7 +91,17 @@ export function createMailRoute(env: Environment = process.env, sender?: Sender,
         }
         chunks.push(chunk.value);
       }
-      value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      const raw = Buffer.concat(chunks);
+      if (signingSecret) {
+        const timestamp = request.headers.get("x-hsc-mail-timestamp") ?? "";
+        const signature = request.headers.get("x-hsc-mail-signature") ?? "";
+        if (!/^\d{10,11}$/.test(timestamp) || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300 || !/^[a-f0-9]{64}$/.test(signature)) return respond(401);
+        const supplied = Buffer.from(signature, "hex");
+        const matches = [signingSecret, previousSecret].filter(Boolean).map((secret) =>
+          timingSafeEqual(supplied, createHmac("sha256", secret!).update(`${timestamp}.`).update(raw).digest()));
+        if (!matches.some(Boolean)) return respond(401);
+      }
+      value = JSON.parse(raw.toString("utf8"));
     } catch {
       return respond(400);
     } finally {

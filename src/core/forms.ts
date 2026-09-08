@@ -6,6 +6,7 @@ import { sql, withTransaction } from "./db";
 import { AppValidationError, isUniqueConstraintError, requireNonEmpty, validateSlug } from "./validation";
 import type { FormFieldRecord, FormInput, FormRecord, FormFieldType } from "./types";
 import { publicTranslations } from "./i18n";
+import { formEmailNotificationsEnabled } from "./email";
 
 type RawFormRow = Record<string, unknown>;
 
@@ -288,10 +289,15 @@ export async function deleteForm(id: number) {
 }
 
 export async function createFormSubmission(formId: number, payload: Record<string, string>) {
-  await sql`
-    insert into form_submissions (form_id, payload_json)
-    values (${formId}, ${sql.json(payload)})
-  `;
+  return sql.begin(async (trx) => {
+    const rows = await trx`insert into form_submissions (form_id, payload_json)
+      values (${formId}, ${trx.json(payload)}) returning id`;
+    const id = Number(rows[0].id);
+    if (formEmailNotificationsEnabled()) {
+      await trx`insert into mail_outbox (submission_id) values (${id})`;
+    }
+    return id;
+  });
 }
 
 export async function listFormSubmissions(formId: number) {
