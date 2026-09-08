@@ -55,4 +55,5 @@ jobs:
           sudo apt-get install --yes postgresql-client-18
           echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
           /usr/lib/postgresql/18/bin/pg_dump --version
-      - run: bun test
+      # Static-generation tests include database work, filesystem writes, and cleanup.
+      - run: bun test --timeout 30000
