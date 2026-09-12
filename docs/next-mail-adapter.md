@@ -1,5 +1,10 @@
 # Next.js mail adapter
 
+For persistent deduplication across gateway instances, follow
+[Shared mail gateway receipts](mail-deduplication.md). The limitations concerning
+missing shared receipts below describe the default configuration without
+`MAIL_ADAPTER_DATABASE_URL`.
+
 ## English
 
 ### Signed requests and rotation

@@ -1,4 +1,15 @@
-import { sql } from "./db";
+import { sql, bigintArray } from "./db";
+import { config } from "./config";
+import { fetchSearchCandidates, type SearchCandidate } from "./externalSearch";
+
+export async function resolveSearchCandidates(candidates: SearchCandidate[], limit: number): Promise<SearchResult[]> {
+  const [posts, pages] = await Promise.all([
+    sql`select 'post' as content_type, id, title, slug, excerpt, status, updated_at from posts where status = 'published' and id = any(${bigintArray(candidates.filter((item) => item.type === "post").map((item) => item.id))})`,
+    sql`select 'page' as content_type, id, title, slug, excerpt, status, updated_at from pages where status = 'published' and id = any(${bigintArray(candidates.filter((item) => item.type === "page").map((item) => item.id))})`,
+  ]);
+  const current = new Map([...posts, ...pages].map((row) => [`${row.content_type}:${row.id}`, normalizeResult(row)]));
+  return candidates.map((item) => current.get(`${item.type}:${item.id}`)).filter((item): item is SearchResult => Boolean(item)).slice(0, limit);
+}
 
 const maxQueryLength = 200;
 const maxSearchTokens = 8;
@@ -70,6 +81,17 @@ function normalizeResult(row: Record<string, unknown>): SearchResult {
 }
 
 export async function searchContent(input: string, options: { status?: "published" | "any"; limit?: number } = {}) {
+  const normalized = normalizeSearchQuery(input);
+  const requestedLimit = Number.isFinite(options.limit) ? Math.max(1, Math.min(100, Math.floor(options.limit!))) : 20;
+  if (normalized.query && options.status !== "any" && config.searchApiUrl && config.searchApiToken) {
+    try {
+      const candidates = await fetchSearchCandidates(normalized.query, requestedLimit, config.searchApiUrl, config.searchApiToken);
+      const items = await resolveSearchCandidates(candidates, requestedLimit);
+      return { query: normalized.query, total: items.length, items };
+    } catch {
+      // Unavailable or malformed external indexes fall back to the local index.
+    }
+  }
   const params: Array<string | number> = [];
   const filters: string[] = [];
   if ((options.status ?? "published") !== "any") {
@@ -79,7 +101,7 @@ export async function searchContent(input: string, options: { status?: "publishe
   const search = buildSearchCondition("c", input, params);
   if (!search) return { query: "", total: 0, items: [] as SearchResult[] };
   filters.push(search.condition);
-  const limit = Math.max(1, Math.min(100, options.limit ?? 20));
+  const limit = requestedLimit;
   const contentUnion = `
     select 'post'::text as content_type, id, title, slug, excerpt, status, updated_at, search_text from posts
     union all

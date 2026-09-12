@@ -1,5 +1,22 @@
 # Form mail outbox
 
+## Operator review
+
+Owners and administrators can review failed or uncertain deliveries in Background
+jobs. Check the provider logs, tick the confirmation box, then choose **Queue
+another attempt** or **Confirm delivered**. Retry resets the six-attempt budget;
+confirmation marks the message sent without sending anything. Queued, running,
+and sent entries cannot be changed this way. Concurrent duplicate clicks change
+the record only once. The state change and operator audit entry commit together.
+
+日本語: 所有者・管理者はバックグラウンドジョブで失敗・要確認の配信を確認できます。
+配信ログの確認欄を選択し「再送を予約」または「配信済みとして確認」を押します。
+再送は試行回数をリセットし、確認はメールを送らず状態のみ変更します。操作は監査ログに残ります。
+
+简体中文: 所有者和管理员可在后台任务中处理失败或待确认的邮件。检查服务商日志后，
+勾选确认框并选择安排重试或确认为已投递。重试重置尝试次数；确认不会发送邮件。
+操作与审计记录在同一事务中保存。
+
 Run `bun run migrate` through `038_mail_outbox.sql` before deploying this version.
 When mail notifications are configured, each form submission and its unique mail
 reservation are committed together. The visitor no longer waits for delivery.
@@ -16,7 +33,9 @@ Running entries older than 15 minutes become `uncertain` and are not automatical
 resent. Check provider/MTA logs before any manual database intervention. A successful
 transport response is acceptance, not guaranteed inbox delivery. A timeout after
 remote acceptance can still duplicate mail on retry: this is not exactly-once
-delivery. Shared gateway deduplication and guided redelivery are still planned.
+delivery. Enable [shared gateway receipts](mail-deduplication.md) to suppress
+repeated HTTP deliveries across gateway instances. Use the operator review controls
+above for guided redelivery; an explicit retry generates a fresh delivery ID.
 
 ## 日本語
 

@@ -1,6 +1,22 @@
 import { sql } from "./db";
 import { getFormById } from "./forms";
-import { sendFormSubmissionEmail } from "./email";
+import { MailDeliveryUncertainError, sendFormSubmissionEmail } from "./email";
+
+export async function reviewMailDelivery(id: number, action: string, actorId: number) {
+  if (!Number.isSafeInteger(id) || id < 1 || !["retry", "confirm"].includes(action)) return false;
+  return sql.begin(async (trx) => {
+    const rows = await trx`update mail_outbox set status = ${action === "retry" ? "queued" : "sent"},
+      attempts = case when ${action === "retry"} then 0 else attempts end,
+      delivery_id = case when ${action === "retry"} then gen_random_uuid() else delivery_id end,
+      run_after = now(), updated_at = now()
+      where id = ${id} and status in ('failed', 'uncertain') returning id`;
+    if (!rows.length) return false;
+    await trx`insert into audit_logs (actor_user_id, action, target_type, target_id, summary)
+      values (${actorId}, ${`mail.review.${action}`}, 'mail_outbox', ${String(id)},
+        ${action === "retry" ? "Operator reviewed delivery and queued another attempt." : "Operator confirmed delivery from provider logs."})`;
+    return true;
+  });
+}
 
 export async function processMailOutbox(deliver = sendFormSubmissionEmail) {
   // A lost worker may have already delivered its message. Never silently resend it.
@@ -10,7 +26,7 @@ export async function processMailOutbox(deliver = sendFormSubmissionEmail) {
     with due as (select id from mail_outbox where status = 'queued' and run_after <= now()
       order by run_after, id for update skip locked limit 1)
     update mail_outbox m set status = 'running', attempts = attempts + 1, updated_at = now()
-      from due where m.id = due.id returning m.id, m.submission_id
+      from due where m.id = due.id returning m.id, m.submission_id, m.delivery_id
   `;
   if (!rows[0]) return false;
   const id = Number(rows[0].id);
@@ -22,12 +38,12 @@ export async function processMailOutbox(deliver = sendFormSubmissionEmail) {
       await sql`update mail_outbox set status = 'failed', updated_at = now() where id = ${id}`;
       return true;
     }
-    const result = await deliver(form, submissions[0].payload_json as Record<string, string>);
+    const result = await deliver(form, submissions[0].payload_json as Record<string, string>, String(rows[0].delivery_id));
     if (!result.sent) throw new Error("Delivery unavailable");
     accepted = true;
     await sql`update mail_outbox set status = 'sent', updated_at = now() where id = ${id}`;
-  } catch {
-    if (accepted) {
+  } catch (error) {
+    if (accepted || error instanceof MailDeliveryUncertainError) {
       await sql`update mail_outbox set status = 'uncertain', updated_at = now() where id = ${id}`;
       return true;
     }

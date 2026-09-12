@@ -127,7 +127,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Optional profile-based Stalwart Docker mail server with private-relay and explicit public-port deployment modes
 - `[Done]` Optional Next.js mail gateway with SMTP migration guidance, HMAC-signed internal requests, timestamp validation, and overlapping secret rotation
 - `[Done]` Transactional form-mail outbox, bounded retries, unique submission reservations, stale-worker review status, and private delivery-status dashboard
-- `[Later]` Shared mail gateway idempotency records and operator-reviewed redelivery controls
+- `[Done]` Operator-reviewed mail redelivery and delivery confirmation, guarded state transitions, and transactional audit records
+- `[Done]` Shared PostgreSQL mail gateway receipts, stable automatic-retry delivery IDs, payload conflict rejection, and fail-closed handling of ambiguous sends
 - `[Done]` Optional Nodemailer `sendmail` transport with absolute executable-path configuration, least-privilege deployment guidance, and HTTP failure responses
 - `[Later]` Local MTA queue monitoring UI and stalled sendmail process supervision
 - `[Done]` Configurable Next.js mail adapter using SMTP, a contract-compatible HTTPS mail API, local Sendmail, or disabled mode without changing form code
@@ -158,7 +159,8 @@ Hybrid-Static-CMS has completed its MVP feature set and is moving into productio
 - `[Done]` Signed outbound webhooks for publishing, content, form-submission, media, and backup events with privacy-safe payloads and failure isolation
 - `[Later]` OAuth or OIDC login integration
 - `[Later]` External object storage adapters such as S3-compatible storage
-- `[Later]` Search adapters for larger installations
+- `[Done]` Optional HTTPS search adapter with bounded candidate responses, current publication-state verification, and PostgreSQL fallback
+- `[Later]` Provider-specific external search indexing and synchronization tools
 
 ### Operations at scale
 

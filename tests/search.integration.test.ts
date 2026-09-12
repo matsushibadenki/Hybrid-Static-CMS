@@ -1,11 +1,34 @@
 import { describe, expect, test } from "bun:test";
 import { sql } from "../src/core/db";
+import { config } from "../src/core/config";
 import { listPages } from "../src/core/pages";
 import { listPosts } from "../src/core/posts";
-import { getSearchDiagnostics, rebuildSearchIndexes, searchContent } from "../src/core/search";
+import { getSearchDiagnostics, rebuildSearchIndexes, resolveSearchCandidates, searchContent } from "../src/core/search";
 import { createApp } from "../src/server/app";
 
 describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("multilingual search integration", () => {
+  test("external candidates use current titles and exclude unpublished content", async () => {
+    const slug = crypto.randomUUID();
+    const rows = await sql`insert into posts (title, slug, body_md, body_html, status) values ('Current title', ${slug}, '', '', 'published') returning id`;
+    const id = Number(rows[0].id);
+    try {
+      expect((await resolveSearchCandidates([{ type: "post", id }], 20))[0]?.title).toBe("Current title");
+      const oldUrl = config.searchApiUrl;
+      const oldToken = config.searchApiToken;
+      try {
+        config.searchApiUrl = "invalid-endpoint";
+        config.searchApiToken = "test-token";
+        expect((await searchContent("Current title")).items.some((item) => item.id === id)).toBe(true);
+      } finally {
+        config.searchApiUrl = oldUrl;
+        config.searchApiToken = oldToken;
+      }
+      await sql`update posts set status = 'draft' where id = ${id}`;
+      expect(await resolveSearchCandidates([{ type: "post", id }], 20)).toEqual([]);
+      await sql`delete from posts where id = ${id}`;
+      expect(await resolveSearchCandidates([{ type: "post", id }], 20)).toEqual([]);
+    } finally { await sql`delete from posts where id = ${id}`; }
+  });
   test("finds normalized Japanese and Simplified Chinese content across posts and pages", async () => {
     const suffix = crypto.randomUUID();
     const postSlug = `search-post-${suffix}`;

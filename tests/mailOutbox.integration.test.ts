@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { sql } from "../src/core/db";
-import { processMailOutbox } from "../src/core/mailOutbox";
+import { processMailOutbox, reviewMailDelivery } from "../src/core/mailOutbox";
+import { createUser } from "../src/core/auth";
 
 describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("mail outbox", () => {
   test("retries failed delivery, records success, and isolates stale claims", async () => {
@@ -24,6 +25,19 @@ describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")("mail outbox", 
       await processMailOutbox(async () => { throw new Error("Must not resend stale claim"); });
       rows = await sql`select status from mail_outbox where id = ${id}`;
       expect(rows[0].status).toBe("uncertain");
+      const actor = await createUser({ email: `mail-review-${crypto.randomUUID()}@example.test`, password: "integration-password-123", displayName: "Mail reviewer", roles: ["owner"] });
+      try {
+        const results = await Promise.all([reviewMailDelivery(id, "retry", actor), reviewMailDelivery(id, "retry", actor)]);
+        expect(results.filter(Boolean)).toHaveLength(1);
+        expect(await reviewMailDelivery(id, "confirm", actor)).toBe(false);
+        const logs = await sql`select id from audit_logs where actor_user_id = ${actor} and action = 'mail.review.retry'`;
+        expect(logs).toHaveLength(1);
+        await sql`update mail_outbox set status = 'failed' where id = ${id}`;
+        expect(await reviewMailDelivery(id, "confirm", actor)).toBe(true);
+        expect(await reviewMailDelivery(id, "retry", actor)).toBe(false);
+      } finally {
+        await sql`delete from users where id = ${actor}`;
+      }
     } finally {
       await sql`delete from forms where id = ${formId}`;
     }

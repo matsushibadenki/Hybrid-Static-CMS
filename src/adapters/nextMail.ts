@@ -1,12 +1,14 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
 import path from "node:path";
+import { createPostgresMailReceiptStore, type MailReceiptStore } from "./mailReceiptStore";
 
 type Message = { from: string; to: string; subject: string; text: string };
 type Sender = (message: Message) => Promise<unknown>;
 type Environment = Record<string, string | undefined>;
 
-export function createMailRoute(env: Environment = process.env, sender?: Sender, fetcher: typeof fetch = fetch) {
+export function createMailRoute(env: Environment = process.env, sender?: Sender, fetcher: typeof fetch = fetch, receipts?: MailReceiptStore) {
+  const receiptStore = receipts ?? (env.MAIL_ADAPTER_DATABASE_URL ? createPostgresMailReceiptStore(env.MAIL_ADAPTER_DATABASE_URL) : undefined);
   const token = env.MAIL_ADAPTER_TOKEN ?? "";
   const previousToken = env.MAIL_ADAPTER_PREVIOUS_TOKEN;
   const signingSecret = env.MAIL_ADAPTER_SIGNING_SECRET;
@@ -112,12 +114,25 @@ export function createMailRoute(env: Environment = process.env, sender?: Sender,
     if (message.from !== from || message.to !== to) return respond(403);
     if (typeof message.subject !== "string" || message.subject.length > 300 || /[\r\n\0]/.test(message.subject) ||
         typeof message.text !== "string" || message.text.length > 60000) return respond(400);
+    const mail = { from, to, subject: message.subject, text: message.text };
+    const deliveryId = message.deliveryId;
+    if (receiptStore) {
+      if (typeof deliveryId !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(deliveryId)) return respond(400);
+      try {
+        const claim = await receiptStore.claim(deliveryId, digest(JSON.stringify(mail)).toString("hex"));
+        if (claim === "sent") return respond(204);
+        if (claim === "blocked") return respond(409);
+      } catch {
+        return respond(503);
+      }
+    }
     try {
       // Pass only the supported fields, never arbitrary Nodemailer options.
-      await deliver!({ from, to, subject: message.subject, text: message.text });
+      await deliver!(mail);
+      if (receiptStore) await receiptStore.complete(deliveryId as string);
       return respond(204);
     } catch {
-      return respond(502);
+      return respond(receiptStore ? 409 : 502);
     }
   };
 }

@@ -4,7 +4,8 @@ import { config, type MailDeliveryMode } from "./config";
 import type { FormRecord } from "./types";
 
 type SmtpState = { buffer: string; responseLines: string[]; waiters: Array<(response: string) => void>; rejecters: Array<(error: Error) => void> };
-export type MailMessage = { from: string; to: string; subject: string; text: string };
+export type MailMessage = { from: string; to: string; subject: string; text: string; deliveryId?: string };
+export class MailDeliveryUncertainError extends Error {}
 export type MailDeliverySettings = {
   mode: MailDeliveryMode; smtpHost: string | null; smtpPort: number; smtpTls: boolean; smtpHostname: string; smtpUsername: string | null; smtpPassword: string | null;
   httpApiUrl: string | null; httpApiToken: string | null; httpSigningSecret?: string | null; sendmailPath: string; sendmailArgs: string[];
@@ -92,6 +93,7 @@ async function sendHttpApiMessage(message: MailMessage, settings: MailDeliverySe
     headers["x-hsc-mail-signature"] = createHmac("sha256", settings.httpSigningSecret).update(`${timestamp}.${body}`).digest("hex");
   }
   const response = await fetcher(settings.httpApiUrl!, { method: "POST", redirect: "error", headers, body, signal: AbortSignal.timeout(10_000) });
+  if (response.status === 409) throw new MailDeliveryUncertainError("Mail gateway requires delivery review.");
   if (!response.ok) throw new Error(`Mail API returned HTTP ${response.status}.`);
 }
 export async function sendMail(message: MailMessage, fetcher: typeof fetch = fetch, settings: MailDeliverySettings = defaultSettings()) {
@@ -101,7 +103,7 @@ export async function sendMail(message: MailMessage, fetcher: typeof fetch = fet
   else if (settings.mode === "http") await sendHttpApiMessage(message, settings, fetcher);
   return { sent: true, skipped: false };
 }
-export async function sendFormSubmissionEmail(form: FormRecord, payload: Record<string, string>) {
+export async function sendFormSubmissionEmail(form: FormRecord, payload: Record<string, string>, deliveryId?: string) {
   if (!config.mailFrom || !config.mailTo) return { sent: false, skipped: true };
-  return sendMail({ from: config.mailFrom, to: config.mailTo, subject: `[${headerValue(config.appName)}] ${headerValue(form.title)}`, text: messageBody(form, payload) });
+  return sendMail({ from: config.mailFrom, to: config.mailTo, subject: `[${headerValue(config.appName)}] ${headerValue(form.title)}`, text: messageBody(form, payload), ...(deliveryId ? { deliveryId } : {}) });
 }

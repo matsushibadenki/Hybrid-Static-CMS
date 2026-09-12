@@ -80,6 +80,8 @@ export type AppConfig = {
   mailHttpApiUrl: string | null;
   mailHttpApiToken: string | null;
   mailHttpSigningSecret: string | null;
+  searchApiUrl: string | null;
+  searchApiToken: string | null;
   mailSendmailPath: string;
   mailSendmailArgs: string[];
   logLevel: LogLevel;
@@ -243,6 +245,8 @@ export const config: AppConfig = {
   mailHttpApiUrl: process.env.MAIL_HTTP_API_URL?.trim() || null,
   mailHttpApiToken: process.env.MAIL_HTTP_API_TOKEN || null,
   mailHttpSigningSecret: process.env.MAIL_HTTP_SIGNING_SECRET || null,
+  searchApiUrl: process.env.SEARCH_API_URL?.trim() || null,
+  searchApiToken: process.env.SEARCH_API_TOKEN || null,
   mailSendmailPath: process.env.MAIL_SENDMAIL_PATH?.trim() || "/usr/sbin/sendmail",
   mailSendmailArgs: parseCommandArguments(process.env.MAIL_SENDMAIL_ARGS, ["-i"]),
   logLevel: parseLogLevel(process.env.LOG_LEVEL),

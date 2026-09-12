@@ -40,7 +40,7 @@ import { createPage, deletePage, getPageById, listPages, updatePage } from "../.
 import { createPost, deletePost, getPostById, listPosts, setPostCommentsPolicy, updatePost } from "../../core/posts";
 import { renderPublishedArtifacts } from "../../core/renderer";
 import { enqueueMediaVariantRegeneration, enqueuePublicRender, listBackgroundJobs } from "../../core/backgroundJobs";
-import { listMailOutbox } from "../../core/mailOutbox";
+import { listMailOutbox, reviewMailDelivery } from "../../core/mailOutbox";
 import { buildScopedSlug, slugify, escapeHtml } from "../../core/content";
 import { createManagedUser, getUserById, listUsers, managedRoles, resetUserPassword, resetUserTwoFactor, revokeUserSessions, setUserActive, updateUserProfile } from "../../core/users";
 import { hasPermission, requireAdminPermission } from "../../core/permissions";
@@ -2336,7 +2336,23 @@ adminRoutes.get("/jobs", async (c) => {
   const mail = await listMailOutbox();
   const mailLabels: Record<string, string> = { queued: "Queued", running: "Running", sent: "Completed", failed: "Failed", uncertain: "Delivery needs review" };
   const outbox = `<section class="editor-section"><h2 data-i18n="Mail delivery queue">Mail delivery queue</h2><table><thead><tr><th>ID</th><th data-i18n="Status">Status</th><th data-i18n="Attempts">Attempts</th><th data-i18n="Updated">Updated</th></tr></thead><tbody>${mail.map((item) => `<tr><td>${Number(item.id)}</td><td data-i18n="${mailLabels[String(item.status)]}">${mailLabels[String(item.status)]}</td><td>${Number(item.attempts)}</td><td>${adminDate(String(item.updated_at))}</td></tr>`).join("")}</tbody></table></section>`;
-  return c.html(adminLayout("Background jobs", user, body + outbox, "wide-list"));
+  const reviews = mail.filter((item) => ["failed", "uncertain"].includes(String(item.status))).map((item) => `
+    <form method="post" action="${config.controlPanelPath}/jobs/mail/${Number(item.id)}/review" class="editor-section">
+      <h3><span data-i18n="Review delivery">Review delivery</span> #${Number(item.id)}</h3>
+      <label><input type="checkbox" name="confirmed" value="yes" required /> <span data-i18n="I checked provider logs. Retrying may send a duplicate.">I checked provider logs. Retrying may send a duplicate.</span></label>
+      <div class="row"><button class="button" name="action" value="retry" data-i18n="Queue another attempt">Queue another attempt</button>
+      <button class="button" name="action" value="confirm" data-i18n="Confirm delivered">Confirm delivered</button></div>
+    </form>`).join("");
+  return c.html(adminLayout("Background jobs", user, body + outbox + reviews, "wide-list"));
+});
+
+adminRoutes.post("/jobs/mail/:id/review", async (c) => {
+  const user = c.get("sessionUser");
+  if (!user) return c.redirect("/login");
+  const data = await c.req.formData();
+  if (data.get("confirmed") !== "yes") return c.text("Confirmation required", 400);
+  const changed = await reviewMailDelivery(Number(c.req.param("id")), String(data.get("action")), user.id);
+  return c.redirect(`${config.controlPanelPath}/jobs?${changed ? "success" : "error"}=${encodeURIComponent(changed ? "Delivery review saved." : "Delivery status changed. Refresh and review again.")}`);
 });
 
 adminRoutes.get("/users/new", (c) => {
